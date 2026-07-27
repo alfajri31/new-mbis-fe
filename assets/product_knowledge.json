@@ -1,0 +1,2250 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "source": "product_knowledge.json (sumber tunggal, diedit manual)",
+    "catatan": "Sumber data tunggal. Konten prosa = markdown ringan; field jenis = array {title, detail}; manfaat/biaya/persyaratan/tataCara/pengecualian = array. skemaUrl = link Drive (tombol).",
+    "catatan_merge": "Dilengkapi dari 'Deskripsi Produk.html' (manfaat, masaPertanggungan, skemaPembayaran; fill-empty). Produk baru id H01+. Field regulasi HTML tidak diikutkan."
+  },
+  "categories": [
+    {
+      "id": "suretyship",
+      "name": "Penjaminan / Suretyship",
+      "icon": "shield-check",
+      "colorHex": "#0D2C54"
+    },
+    {
+      "id": "kredit-perdagangan",
+      "name": "Asuransi Kredit & Perdagangan",
+      "icon": "trending-up",
+      "colorHex": "#F2843A"
+    },
+    {
+      "id": "properti",
+      "name": "Properti & Harta Benda",
+      "icon": "building-2",
+      "colorHex": "#1E8E5A"
+    },
+    {
+      "id": "rekayasa",
+      "name": "Rekayasa / Engineering",
+      "icon": "hard-hat",
+      "colorHex": "#5D6193"
+    },
+    {
+      "id": "kendaraan",
+      "name": "Kendaraan",
+      "icon": "car",
+      "colorHex": "#2E7C8E"
+    },
+    {
+      "id": "liability",
+      "name": "Tanggung Gugat / Liability",
+      "icon": "scale",
+      "colorHex": "#3E6E92"
+    },
+    {
+      "id": "kecelakaan-diri",
+      "name": "Kecelakaan Diri",
+      "icon": "heart-pulse",
+      "colorHex": "#9E6C3E"
+    },
+    {
+      "id": "marine-aviation",
+      "name": "Marine & Aviation",
+      "icon": "ship",
+      "colorHex": "#1A4A7A"
+    },
+    {
+      "id": "mikro",
+      "name": "Asuransi Mikro",
+      "icon": "sprout",
+      "colorHex": "#478062"
+    },
+    {
+      "id": "lainnya",
+      "name": "Lainnya",
+      "icon": "shapes",
+      "colorHex": "#8C97A6"
+    }
+  ],
+  "products": [
+    {
+      "id": "1O18",
+      "slug": "custom-bond",
+      "name": "Custom Bond",
+      "categoryId": "suretyship",
+      "status": "active",
+      "quickFacts": {
+        "premi": "0,15%–4%",
+        "masaPertanggungan": "Sesuai kebutuhan impor",
+        "nilaiPertanggungan": "Sesuai pajak kepabeanan"
+      },
+      "sections": {
+        "deskripsi": "Jaminan dari Askrindo bahwa importir (Principal) akan memenuhi kewajiban bea masuk, pajak impor, dan kewajiban kepabeanan lainnya kepada Bea Cukai.",
+        "jenis": [
+          {
+            "title": "KITE (Kemudahan Impor Tujuan Ekspor)",
+            "detail": "Menjamin impor bahan baku tanpa bea masuk dan pajak selama digunakan untuk memproduksi barang yang diekspor kembali."
+          },
+          {
+            "title": "Impor Sementara (OB23)",
+            "detail": "Menjamin penangguhan bea masuk dan pajak impor untuk barang yang masuk ke gudang atau kawasan berikat."
+          },
+          {
+            "title": "Vooruitslag (Vo)",
+            "detail": "Menjamin pengeluaran barang dari kawasan pabean sebelum administrasi kepabeanan diselesaikan."
+          },
+          {
+            "title": "EPTE/KABER (Kawasan Berikat)",
+            "detail": "Menjamin pemenuhan kewajiban atas fasilitas impor bahan baku untuk produksi tujuan ekspor."
+          },
+          {
+            "title": "Angkut Lanjut (BC12)",
+            "detail": "Menjamin barang yang masuk ke Gudang Berikat diperlakukan sesuai ketentuan kepabeanan."
+          },
+          {
+            "title": "Nota Pembetulan (NOTUL)",
+            "detail": "Menjamin pembayaran kekurangan bea atau pajak yang muncul dari hasil audit Bea Cukai."
+          },
+          {
+            "title": "PPJK",
+            "detail": "Menjamin kewajiban kepabeanan Pengusaha Pengurusan Jasa Kepabeanan."
+          },
+          {
+            "title": "PNBP",
+            "detail": "Menjamin pembayaran Penerimaan Negara Bukan Pajak yang timbul dari kegiatan kepabeanan."
+          }
+        ],
+        "manfaat": [
+          "Mempercepat proses pengeluaran barang dari pelabuhan atau bandara.",
+          "Memberi kepastian kepada Bea Cukai bahwa kewajiban finansial akan dipenuhi.",
+          "Memberi importir fleksibilitas dalam mengelola arus kas.",
+          "Mendorong kepatuhan terhadap peraturan kepabeanan.",
+          "Meningkatkan reputasi bisnis dan mendukung kelancaran impor sementara maupun ekspor."
+        ],
+        "biaya": [
+          "Materai: Rp10.000.",
+          "Administrasi: minimal Rp50.000.",
+          "Komisi agen: maksimal 10% (termasuk PPN)."
+        ],
+        "skemaPembayaran": "Premi dibayar di muka (cash and carry); besarnya = rate premi × nilai jaminan.",
+        "persyaratan": [
+          "Legalitas perusahaan: SIUP atau izin usaha, NPWP, NIB/TDP, dan anggaran dasar.",
+          "Identitas pemohon: KTP atau paspor pemilik/direksi, serta surat kuasa bila diwakilkan.",
+          "Laporan keuangan terbaru (2–3 tahun) dan laporan arus kas.",
+          "Bukti kemampuan finansial: rekening koran 3–6 bulan dan agunan bila diminta.",
+          "Dokumen impor: kontrak impor dan dokumen Bea Cukai (bill of lading, invoice, packing list).",
+          "Informasi barang: deskripsi dan kode HS (Harmonized System).",
+          "Surat pernyataan komitmen kepatuhan dan surat permohonan custom bond.",
+          "Riwayat kepatuhan kepabeanan serta profil perusahaan dan pihak terkait."
+        ],
+        "tataCara": [
+          "Principal mengajukan penjaminan Custom Bond melalui formulir beserta dokumen yang dipersyaratkan ke Kantor Cabang Penjamin.",
+          "Penjamin melakukan analisis terhadap Principal.",
+          "Setelah disetujui, Penjamin menerbitkan draf polis dan tagihan pembayaran.",
+          "Principal menyetujui draf polis dan melakukan pembayaran.",
+          "Penjamin menerbitkan polis."
+        ],
+        "persyaratanKlaim": [
+          "Surat permohonan klaim.",
+          "Surat keputusan pemutusan hubungan kerja dengan Principal.",
+          "Berita acara wanprestasi.",
+          "Sertifikat jaminan asli yang diterbitkan Askrindo."
+        ],
+        "tataCaraKlaim": [
+          "Obligee (Bea Cukai) mengajukan klaim beserta dokumen persyaratan kepada Askrindo.",
+          "Askrindo melakukan analisis dan survei bila diperlukan.",
+          "Setelah disepakati, Askrindo membayarkan nilai klaim kepada Obligee.",
+          "Askrindo menagihkan subrogasi kepada Principal."
+        ],
+        "simulasi": "Importir (PT ABC) mengajukan jaminan KITE untuk impor tujuan ekspor senilai Rp2.000.000.000, jangka waktu 12 bulan, rate premi 0,75%. Premi = 0,75% × Rp2.000.000.000 = Rp15.000.000, ditambah administrasi Rp50.000 dan materai Rp10.000, total Rp15.060.000."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "surety"
+      }
+    },
+    {
+      "id": "1O17",
+      "slug": "kontra-bank-garansi",
+      "name": "Kontra Bank Garansi",
+      "categoryId": "suretyship",
+      "status": "active",
+      "quickFacts": {
+        "premi": "Rate × nilai jaminan",
+        "masaPertanggungan": "Sesuai masa Bank Garansi",
+        "nilaiPertanggungan": "Sesuai fasilitas Bank Garansi"
+      },
+      "sections": {
+        "deskripsi": "Kontra Bank Garansi adalah kontra-jaminan dari Askrindo atas Bank Garansi yang diterbitkan bank untuk kontraktor (Principal). Apabila kontraktor wanprestasi dan bank harus membayar, Askrindo mengganti kerugian bank tersebut.",
+        "jenis": [
+          {
+            "title": "Jaminan Penawaran",
+            "detail": "Memastikan peserta tender memenuhi kewajiban apabila ditetapkan sebagai pemenang."
+          },
+          {
+            "title": "Jaminan Pelaksanaan",
+            "detail": "Memastikan kontraktor melaksanakan proyek sesuai kontrak dengan pemberi kerja."
+          },
+          {
+            "title": "Jaminan Uang Muka",
+            "detail": "Memastikan uang muka digunakan sesuai peruntukan dan ketentuan kontrak."
+          },
+          {
+            "title": "Jaminan Pemeliharaan",
+            "detail": "Memastikan perbaikan dan pemeliharaan pekerjaan selama masa garansi."
+          },
+          {
+            "title": "Jaminan Pembayaran",
+            "detail": "Melindungi subkontraktor atau pemasok atas pembayaran dari kontraktor utama."
+          },
+          {
+            "title": "Jaminan SP2D",
+            "detail": "Menjamin pencairan dana pemerintah melalui Surat Perintah Pencairan Dana."
+          },
+          {
+            "title": "Jaminan Sanggah Banding",
+            "detail": "Menjadi komitmen peserta tender yang mengajukan sanggahan atas hasil lelang."
+          }
+        ],
+        "manfaat": [
+          "Memberi rasa aman bagi bank dalam menerbitkan Bank Garansi.",
+          "Memudahkan kontraktor memperoleh fasilitas Bank Garansi.",
+          "Melindungi pemberi kerja atas wanprestasi kontraktor."
+        ],
+        "biaya": [
+          "Biaya administrasi (di luar premi)."
+        ],
+        "skemaPembayaran": "Premi dan biaya administrasi dibayarkan Principal kepada bank sesuai tarif masing-masing bank.",
+        "persyaratan": [
+          "Dokumen umum: surat permohonan, legalitas usaha, anggaran dasar, akta pendirian beserta perubahannya, dan pengesahan badan hukum dari Kemenkumham.",
+          "Susunan direksi dan komisaris (PT) atau daftar persero aktif (CV) beserta identitasnya, NIB, dan NPWP.",
+          "Laporan keuangan: audited untuk perseroan beraset minimal Rp50 miliar, atau audited/unaudited untuk badan usaha lainnya.",
+          "Khusus skema perusahaan asing q.q. perusahaan lokal: company profile, legalitas, dan identitas pengurus asing, laporan keuangan dua tahun terakhir, pengalaman kerja, serta surat penunjukan agen lokal.",
+          "Dokumen khusus (mandatory): dokumen underlying sesuai jenis jaminan.",
+          "Dokumen pendukung penerbitan baru: SSUK/SSKK, surat dukungan supplier dan pembiayaan, time schedule (kurva S), bukti kepemilikan sarana, dan sertifikasi keahlian.",
+          "Dokumen pendukung perpanjangan: salinan sertifikat/Bank Garansi sebelumnya, progress pekerjaan yang ditandatangani, dan alasan perpanjangan."
+        ],
+        "tataCara": [
+          "Principal mengajukan penjaminan Kontra Bank Garansi melalui bank dengan mengisi Formulir Pengajuan beserta dokumen yang dipersyaratkan oleh bank dan Askrindo.",
+          "Bank mengirimkan permohonan tersebut ke Kantor Cabang Askrindo terdekat.",
+          "Berdasarkan pengajuan, Askrindo melakukan analisis terhadap Principal.",
+          "Setelah permohonan disetujui, Askrindo menerbitkan Persetujuan Prinsip kepada bank.",
+          "Bank menerbitkan Bank Garansi kepada Principal.",
+          "Principal melakukan pembayaran dan pengambilan Bank Garansi di bank.",
+          "Bank mengirimkan salinan bukti pembayaran dan Bank Garansi yang telah diterbitkan.",
+          "Askrindo melakukan realisasi produksi.",
+          "Askrindo mengirimkan Sertifikat Kontra Bank Garansi kepada bank."
+        ],
+        "persyaratanKlaim": [
+          "Surat permohonan klaim.",
+          "Surat keputusan pemutusan hubungan kerja dengan Principal.",
+          "Berita acara wanprestasi.",
+          "Sertifikat jaminan asli yang diterbitkan Askrindo."
+        ],
+        "tataCaraKlaim": [
+          "Obligee menyampaikan dokumen klaim (sesuai persyaratan klaim) ke bank penerbit Bank Garansi.",
+          "Bank meneruskan pengajuan klaim Kontra Bank Garansi kepada Askrindo.",
+          "Tim Askrindo melakukan analisis dan survei bila diperlukan.",
+          "Setelah disepakati, Askrindo membayarkan nilai klaim kepada Obligee melalui bank penerbit Bank Garansi.",
+          "Askrindo menagihkan subrogasi kepada Principal."
+        ],
+        "simulasi": "Kontra Bank Garansi untuk Jaminan Pelaksanaan proyek senilai Rp100.000.000 dengan rate premi 1,5%. Premi = 1,5% × Rp100.000.000 = Rp1.500.000, ditambah biaya administrasi Rp100.000, biaya sertifikat Rp75.000, dan materai Rp10.000, sehingga total Rp1.685.000."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "surety"
+      }
+    },
+    {
+      "id": "1O16",
+      "slug": "surety-bond",
+      "name": "Surety Bond",
+      "categoryId": "suretyship",
+      "status": "active",
+      "quickFacts": {
+        "premi": "Rate × nilai jaminan",
+        "masaPertanggungan": "Sesuai kontrak proyek",
+        "nilaiPertanggungan": "% dari nilai kontrak"
+      },
+      "sections": {
+        "deskripsi": "Surety Bond adalah jaminan dari Askrindo bahwa kontraktor (Principal) akan memenuhi kewajibannya kepada pemberi kerja (Obligee). Apabila kontraktor wanprestasi, Askrindo yang menanggung kerugiannya.",
+        "jenis": [
+          {
+            "title": "Jaminan Penawaran (Bid Bond)",
+            "detail": "Menjamin peserta tender memenuhi persyaratan dan bersedia menandatangani kontrak apabila ditetapkan sebagai pemenang."
+          },
+          {
+            "title": "Jaminan Pelaksanaan",
+            "detail": "Menjamin kontraktor menyelesaikan pekerjaan sesuai dengan kontrak yang disepakati."
+          },
+          {
+            "title": "Jaminan Uang Muka",
+            "detail": "Menjamin pengembalian uang muka apabila kontraktor gagal melaksanakan pekerjaan."
+          },
+          {
+            "title": "Jaminan Pemeliharaan",
+            "detail": "Menjamin perbaikan dan pemeliharaan pekerjaan selama masa garansi setelah proyek selesai."
+          },
+          {
+            "title": "Jaminan Pembayaran",
+            "detail": "Menjamin pemenuhan kewajiban pembayaran kontraktor kepada pihak terkait."
+          },
+          {
+            "title": "Jaminan Sanggah Banding",
+            "detail": "Menjadi syarat bagi peserta untuk mengajukan sanggahan atas hasil tender."
+          },
+          {
+            "title": "Jaminan Progress",
+            "detail": "Menjamin tercapainya setiap tahapan target kemajuan pekerjaan."
+          }
+        ],
+        "manfaat": [
+          "Melindungi pemberi kerja apabila kontraktor gagal atau wanprestasi.",
+          "Memungkinkan kontraktor mengikuti tender tanpa menahan jaminan tunai.",
+          "Meningkatkan kepercayaan dan kelancaran proses proyek."
+        ],
+        "biaya": [
+          "Biaya administrasi.",
+          "Biaya materai."
+        ],
+        "skemaPembayaran": "1. Pembayaran di awal sebelum masa pertanggungan/cash and carry.\n2. Skema pembayaran premi adalah rate premi x nilai jaminan",
+        "persyaratan": [
+          "Dokumen identitas dan legalitas: KTP, NPWP, akta pendirian, SIUP, TDP, NIB, dan dokumen legal lainnya.",
+          "Informasi keuangan: laporan keuangan dua tahun terakhir.",
+          "Dokumen underlying sesuai jenis jaminan, misalnya pengumuman/undangan lelang (Jaminan Penawaran), surat penunjukan/SPK/kontrak (Jaminan Pelaksanaan), atau kontrak/PO (Jaminan Uang Muka).",
+          "Pengalaman dan kredibilitas: daftar pengalaman pekerjaan untuk proyek sejenis sesuai jaminan yang diajukan."
+        ],
+        "tataCara": [
+          "Principal mengajukan penjaminan Surety Bond melalui Formulir Pengajuan beserta dokumen yang dipersyaratkan ke Unit Pemasaran di Kantor Cabang Penjamin.",
+          "Penjamin melakukan analisis terhadap Principal.",
+          "Setelah permohonan disetujui, Penjamin menerbitkan draf polis dan tagihan pembayaran.",
+          "Principal menyetujui draf polis dan melakukan pembayaran.",
+          "Penjamin menerbitkan polis."
+        ],
+        "persyaratanKlaim": [
+          "Surat permohonan klaim.",
+          "Surat keputusan pemutusan hubungan kerja dengan Principal.",
+          "Berita acara wanprestasi.",
+          "Sertifikat jaminan asli yang diterbitkan Askrindo."
+        ],
+        "tataCaraKlaim": [
+          "Obligee menyampaikan dokumen klaim (sesuai persyaratan klaim) ke Kantor Cabang Askrindo.",
+          "Tim Askrindo melakukan analisis dan survei bila diperlukan.",
+          "Setelah disepakati, Askrindo membayarkan nilai klaim kepada Obligee.",
+          "Askrindo menagihkan subrogasi kepada Principal."
+        ],
+        "simulasi": "Rate 0,5% × nilai jaminan Rp100.000.000 = Rp1.250.000. Ditambah administrasi Rp50.000 dan materai Rp10.000, sehingga total Rp1.310.000."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "surety"
+      }
+    },
+    {
+      "id": "1O19",
+      "slug": "kontra-l-c",
+      "name": "Kontra L/C",
+      "categoryId": "suretyship",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1O20",
+      "slug": "kontra-skbdn",
+      "name": "Kontra SKBDN",
+      "categoryId": "suretyship",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin ketidakmampuan Applicant dalam memenuhi kewajiban/ tagihan kepada Beneficiary",
+          "Menjamin keterlambatan pembayaran kewajiban/tagihan Applicant kepada Bbeneficiary"
+        ],
+        "skemaPembayaran": "Single Premium atau sesuai dengan Juknis Underwriting"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H03",
+      "slug": "penjaminan-kur",
+      "name": "Penjaminan KUR",
+      "categoryId": "suretyship",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin pelunasan KUR bila debitur gagal membayar saat jatuh tempo.",
+          "Memberi jaminan ketika kredit debitur masuk kategori diragukan.",
+          "Melindungi pemberi kredit apabila debitur dinyatakan pailit, dilikuidasi, atau berada di bawah pengampuan."
+        ],
+        "skemaPembayaran": "Single Premium atau sesuai dengan Juknis Underwriting"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1N14",
+      "slug": "asuransi-kredit",
+      "name": "Asuransi Kredit",
+      "categoryId": "kredit-perdagangan",
+      "status": "active",
+      "quickFacts": {
+        "premi": "1,5% per tahun",
+        "masaPertanggungan": "Maks. 5 tahun",
+        "nilaiPertanggungan": "Maks. plafon kredit"
+      },
+      "sections": {
+        "deskripsi": "Produk yang menjamin risiko gagal bayar debitur atas kewajiban kreditnya kepada pemberi kredit (Tertanggung) sesuai perjanjian kredit.",
+        "jenis": [
+          {
+            "title": "Kredit Konsumtif",
+            "detail": "Melindungi risiko gagal bayar atas pinjaman untuk kebutuhan konsumtif, seperti kredit pribadi, kendaraan, atau barang elektronik."
+          },
+          {
+            "title": "Kredit Produktif",
+            "detail": "Melindungi risiko gagal bayar atas pinjaman untuk kegiatan usaha, seperti modal kerja, investasi, atau pengembangan bisnis."
+          }
+        ],
+        "manfaat": [
+          "Memberi ganti rugi atas kegagalan pembayaran kredit selama jangka waktu pertanggungan.",
+          "Berlaku ketika debitur dinyatakan berkolektibilitas macet sesuai ketentuan yang berlaku."
+        ],
+        "biaya": [
+          "Biaya akuisisi (komisi, diskon, fee based): maksimal 10%.",
+          "Materai: Rp10.000.",
+          "Administrasi: 0,1‰ × nilai pertanggungan (minimal Rp100.000, maksimal Rp10.000.000)."
+        ],
+        "skemaPembayaran": "Premi dibayar sekaligus di muka untuk seluruh jangka waktu.",
+        "pengecualian": [
+          "Debitur meninggal dunia secara alami.",
+          "Kebijakan pemerintah yang secara langsung menghambat usaha debitur sehingga kreditnya tidak terlunasi.",
+          "Risiko yang seharusnya dapat dijamin oleh polis asuransi umum lain.",
+          "Risiko politik: demonstrasi, kerusuhan, pemogokan, invasi, terorisme, sabotase, perang, atau pemberontakan.",
+          "Bencana alam (Act of God) dan bencana non-alam yang ditetapkan pemerintah.",
+          "Tindak pidana berkekuatan hukum tetap oleh pengurus atau pemegang saham debitur yang menyebabkan kredit macet.",
+          "Penyimpangan penggunaan kredit: side streaming, penyalahgunaan legalitas usaha, sengketa hukum, fraud, proyek fiktif, atau pemalsuan identitas.",
+          "Dokumen atau informasi tertanggung/debitur terbukti tidak benar saat terjadi gagal bayar.",
+          "Pelanggaran ketentuan APU-PPT (Anti Pencucian Uang dan Pencegahan Pendanaan Terorisme).",
+          "Debitur dalam proses pailit selama masa pertanggungan.",
+          "Penghentian fasilitas kredit secara sepihak oleh tertanggung.",
+          "Reaksi nuklir, radiasi, atau kontaminasi radioaktif.",
+          "Ketentuan pertanggungan yang dipersyaratkan tidak terpenuhi.",
+          "Premi belum lunas sebelum polis diterbitkan."
+        ],
+        "persyaratan": [
+          "Permohonan penutupan memenuhi syarat dan ketentuan dalam Perjanjian Kerjasama sesuai produk yang dijamin."
+        ],
+        "tataCara": [
+          "Tertanggung mengajukan permohonan penutupan melalui media yang disepakati.",
+          "Permohonan harus memenuhi syarat dan ketentuan dalam Perjanjian Kerjasama.",
+          "Penanggung menganalisis setiap permohonan penutupan.",
+          "Untuk polis berperiode lebih dari satu tahun, tertanggung memiliki tiga hari kerja untuk menyampaikan keberatan atas draf polis.",
+          "Permohonan yang disetujui ditindaklanjuti dengan penerbitan Polis dan Ikhtisar Polis; yang ditolak diberi surat penolakan.",
+          "Perubahan fasilitas kredit, termasuk perpanjangan, wajib diberitahukan untuk penyesuaian atau penerbitan polis baru.",
+          "Penutupan dapat dilakukan secara CAC (Conditional Automatic Cover) atau CBC (Case by Case)."
+        ],
+        "persyaratanKlaim": [
+          "Permohonan pengajuan klaim melalui surat atau media yang disepakati.",
+          "Identitas debitur sesuai Perjanjian Kerjasama.",
+          "Salinan SLIK OJK atau surat keterangan kualitas kredit (loan inquiry).",
+          "Dokumen relevan lain sesuai Perjanjian Kerjasama."
+        ],
+        "tataCaraKlaim": [
+          "Tertanggung mengajukan klaim dalam jangka waktu yang disepakati sejak timbulnya hak klaim.",
+          "Klaim dilampiri dokumen pendukung yang dipersyaratkan.",
+          "Tertanggung melengkapi kekurangan dokumen sesuai tenggat dalam Perjanjian Kerjasama.",
+          "Penanggung mengonfirmasi kekurangan dokumen secara tertulis paling lambat 14 hari kerja."
+        ],
+        "simulasi": "Contoh skema proporsional: plafon kredit Rp50.000.000.000, coverage 70%, tarif premi 1,5% per tahun, sehingga premi Rp750.000.000. Bila terjadi kerugian (sisa baki debet) Rp10.000.000.000, ganti rugi = 70% × Rp10.000.000.000 = Rp7.000.000.000 dan retensi tertanggung Rp3.000.000.000. Tersedia pula skema Underinsured Proportional dan Excess of Loss."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "kredit"
+      }
+    },
+    {
+      "id": "1N15",
+      "slug": "asuransi-kredit-perdagangan-domestik-reguler",
+      "name": "Asuransi Kredit Perdagangan Domestik Reguler",
+      "categoryId": "kredit-perdagangan",
+      "status": "active",
+      "quickFacts": {
+        "premi": "0,1%–2%",
+        "masaPertanggungan": "12 bulan",
+        "nilaiPertanggungan": "Sesuai credit limit"
+      },
+      "sections": {
+        "deskripsi": "Asuransi Kredit Perdagangan Domestik Reguler melindungi penjual (Tertanggung) dari risiko pembeli tidak membayar piutang dagang, sekaligus menyediakan layanan kontrol dan analisis kredit dari Askrindo.",
+        "jenis": [
+          {
+            "title": "Domestik Reguler",
+            "detail": "Perlindungan atas transaksi perdagangan di dalam negeri terhadap risiko gagal bayar pembeli."
+          }
+        ],
+        "manfaat": [
+          "Memberi ganti rugi apabila pembeli pailit atau dilikuidasi (Insolvensi).",
+          "Memberi ganti rugi apabila pembeli terlambat membayar 120 hari sejak jatuh tempo (Protracted Default).",
+          "Menyediakan bantuan kontrol dan analisis kredit pembeli."
+        ],
+        "biaya": [
+          "Biaya akuisisi 10% (apabila ada).",
+          "Biaya administrasi Rp500.000 per polis."
+        ],
+        "skemaPembayaran": [
+          "Skema Plafond: premi dibayar di muka sebesar rate × credit limit.",
+          "Skema Invoice: premi minimum dibayar di awal, kemudian premi riil sesuai realisasi penjualan."
+        ],
+        "pengecualian": [
+          "Penipuan atau kesalahan yang disengaja oleh tertanggung, afiliasi, atau agennya, termasuk pembeli dan transaksi fiktif.",
+          "Perselisihan antara tertanggung dan pembeli terkait syarat kredit, pengiriman barang, atau pembayaran.",
+          "Pengalihan piutang dari atau kepada pihak ketiga.",
+          "Outstanding yang berasal dari individu (bukan atas nama perusahaan).",
+          "Outstanding dari lembaga pemerintah, TNI, atau lembaga negara yang secara hukum tidak dapat dipailitkan.",
+          "Denda akibat keterlambatan pembayaran oleh pembeli.",
+          "Hubungan afiliasi antara tertanggung dan pembeli (induk-anak perusahaan atau hubungan manajerial).",
+          "Kejadian khusus: reaksi nuklir, risiko politik (kerusuhan, perang, terorisme), serta bencana alam dan non-alam yang ditetapkan pemerintah.",
+          "Usaha tertanggung atau pembeli yang bertentangan dengan hukum atau peraturan yang berlaku.",
+          "Risiko yang terjadi di luar jangka waktu pertanggungan dalam Ikhtisar Polis dan Sertifikat Pembeli.",
+          "Pembeli tidak tercantum dalam Sertifikat Pembeli, transaksi setelah periode overdue, atau invoice yang tidak dilaporkan dalam Deklarasi."
+        ],
+        "persyaratan": [
+          "Form A-AKP atau dokumen lain yang setara.",
+          "Form B-AKP atau dokumen lain yang setara.",
+          "Salinan akta pendirian atas nama calon tertanggung.",
+          "Salinan akta perubahan terakhir atas nama calon tertanggung.",
+          "Salinan NPWP atas nama calon tertanggung.",
+          "Salinan KTP pengurus perusahaan atas nama calon tertanggung.",
+          "Company profile calon tertanggung.",
+          "Laporan keuangan teraudit dua tahun terakhir atas nama calon tertanggung.",
+          "Data penjualan bulanan selama 12 bulan terakhir untuk masing-masing pembeli yang diajukan.",
+          "Data umur piutang bulanan selama 12 bulan terakhir untuk masing-masing pembeli yang diajukan.",
+          "Laporan keuangan masing-masing pembeli (khusus bila credit limit yang diajukan di atas Rp10 miliar).",
+          "Informasi NPWP, surat keterangan domisili, atau akta pendirian pembeli yang diajukan.",
+          "Informasi agunan (jenis dan nilai) yang diberikan pembeli kepada calon tertanggung untuk transaksi jual beli."
+        ],
+        "tataCara": [
+          "Calon tertanggung mengajukan pertanggungan untuk para pembeli melalui Form A-AKP dan Form B-AKP beserta dokumen yang dipersyaratkan ke Kantor Cabang Penanggung.",
+          "Penanggung melakukan analisis terhadap calon tertanggung.",
+          "Setelah permohonan disetujui, Penanggung menerbitkan Proposal Persyaratan Khusus Polis.",
+          "Setelah calon tertanggung menyetujui syarat dalam proposal, Penanggung menerbitkan Persyaratan Khusus Polis.",
+          "Penanggung menganalisis credit limit untuk setiap pembeli yang diajukan.",
+          "Setelah credit limit disetujui, Penanggung menerbitkan Sertifikat Credit Limit."
+        ],
+        "persyaratanKlaim": [
+          "Kontrak penjualan.",
+          "Salinan invoice.",
+          "Salinan PO/DO.",
+          "Salinan laporan penunggakan.",
+          "Salinan korespondensi atau dokumen terkait penagihan piutang.",
+          "Dokumen terkait keadaan pailit pembeli.",
+          "Kronologi kejadian."
+        ],
+        "tataCaraKlaim": [
+          "Mengajukan ganti rugi melalui Form I-AKP beserta dokumen pendukung sesuai persyaratan klaim.",
+          "Tertanggung wajib menyampaikan Surat Kuasa Pelimpahan Penagihan Piutang Dagang (Form G-AKP).",
+          "Penanggung menyampaikan keputusan ganti rugi paling lambat 14 hari kerja setelah klaim diajukan secara lengkap dan benar.",
+          "Bila disetujui, ganti rugi dibayarkan paling lambat 30 hari kerja setelah klaim disetujui."
+        ],
+        "simulasi": "Skema Plafond: premi = rate × credit limit, dibayar sebelum masa pertanggungan dimulai."
+      },
+      "skemaUrl": "https://drive.google.com/file/d/1imovQ_uxhblS_bnTZdJtRlnUn7JnRsrS/preview",
+      "calculator": {
+        "type": "kredit"
+      }
+    },
+    {
+      "id": "H01",
+      "slug": "asuransi-kredit-serbaguna",
+      "name": "Asuransi Kredit Serbaguna",
+      "categoryId": "kredit-perdagangan",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberi kepastian pembayaran bagi pemberi kredit saat debitur gagal bayar.",
+          "Menjamin risiko gagal bayar akibat debitur terkena Pemutusan Hubungan Kerja (PHK).",
+          "Menjamin kredit yang bermasalah karena debitur tidak memenuhi kewajiban perjanjian kredit."
+        ],
+        "skemaPembayaran": "Single Premium atau sesuai dengan Juknis Underwriting"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H02",
+      "slug": "asuransi-kredit-kpr-flpp",
+      "name": "Asuransi Kredit KPR (FLPP)",
+      "categoryId": "kredit-perdagangan",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberi kepastian pembayaran bagi penyalur kredit KPR (FLPP) saat debitur gagal melunasi kreditnya.",
+          "Menjamin risiko kredit yang masuk kategori kurang lancar.",
+          "Menjamin risiko bila debitur mengalami cacat tetap.",
+          "Memberi ganti rugi atas kebakaran bangunan yang dibiayai dengan kerusakan berat."
+        ],
+        "skemaPembayaran": "Single Premium atau sesuai dengan Juknis Underwriting"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AC",
+      "slug": "property-all-risk",
+      "name": "Property All Risk",
+      "categoryId": "properti",
+      "status": "active",
+      "quickFacts": {
+        "premi": "Sesuai tarif OJK",
+        "masaPertanggungan": "Maks. 12 bulan",
+        "nilaiPertanggungan": "Rp1 juta–Rp350 miliar"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian atau kerusakan pada harta benda beserta kepentingan yang dipertanggungkan dari berbagai risiko (all risk).",
+        "manfaat": [
+          "Perlindungan komprehensif atas berbagai risiko: kebakaran, pencurian, kerusakan akibat air, hingga bencana alam.",
+          "Mendukung kelangsungan usaha dengan mempercepat pemulihan setelah kerugian.",
+          "Mengurangi biaya tak terduga akibat kerusakan atau kehilangan aset.",
+          "Memberi ketenangan serta menjaga kepercayaan pemilik, pemegang saham, dan karyawan.",
+          "Memenuhi persyaratan regulasi maupun kontrak, termasuk tender."
+        ],
+        "biaya": [
+          "Biaya polis: Rp30.000.",
+          "Materai: Rp10.000 (total < Rp5.000.000) atau Rp20.000 (lebih dari Rp5.000.000)."
+        ],
+        "skemaPembayaran": "Premi dibayar paling lambat 30 hari sejak awal pertanggungan, atau sesuai Klausul Premi Angsuran (Deferred Premium Clause).",
+        "pengecualian": [
+          "Perang, kerusuhan, dan terorisme.",
+          "Kontaminasi radioaktif dari bahan bakar nuklir.",
+          "Tindakan kelalaian atau kesengajaan.",
+          "Harta benda yang sedang dipasang, dikerjakan, atau diangkut.",
+          "Kerugian akibat keterlambatan, kehilangan, atau tindakan curang.",
+          "Biaya pembetulan material cacat dan pemeliharaan rutin.",
+          "Kerugian usaha akibat tindakan otoritas publik, pembatalan izin, atau sewa."
+        ],
+        "persyaratan": [
+          "Data tertanggung: nama, fotokopi KTP dan NPWP, serta bidang usaha.",
+          "Data objek pertanggungan: kondisi bangunan (konstruksi, usia, jumlah lantai, luas), okupasi, letak risiko, lingkungan sekitar, riwayat kerugian, serta polis lain yang menjamin objek."
+        ],
+        "tataCara": [
+          "Inventarisasi properti yang akan diasuransikan.",
+          "Penetapan nilai pertanggungan.",
+          "Mengisi Surat Permohonan Penutupan Asuransi (SPPA).",
+          "Membayar premi dan menerima polis."
+        ],
+        "persyaratanKlaim": [
+          "Laporan kerusakan atau kehilangan.",
+          "Dokumentasi kerusakan.",
+          "Laporan polisi untuk kehilangan atau kerusakan akibat pencurian maupun perbuatan jahat.",
+          "Laporan dari pihak ketiga.",
+          "Formulir klaim."
+        ],
+        "tataCaraKlaim": [
+          "Pemberitahuan awal (notification of loss) secara tertulis kepada Penanggung.",
+          "Melengkapi dokumen klaim: formulir, kronologi, laporan polisi (bila perlu), rincian kerugian, dan dokumen pertanggungan.",
+          "Membantu proses survei klaim bila diperlukan.",
+          "Menanggapi keputusan persetujuan atau penolakan klaim.",
+          "Bila ditolak, tertanggung dapat mengajukan banding atau menerima penolakan.",
+          "Bila disetujui, tertanggung menandatangani Letter of Discharge (LoD)."
+        ],
+        "simulasi": "Total nilai pertanggungan Rp1.000.000.000 (bangunan Rp500 juta, mesin Rp250 juta, inventaris Rp250 juta) selama 12 bulan dengan rate premi 0,1530%. Premi = 0,1530% × Rp1.000.000.000 = Rp1.530.000 (belum termasuk biaya polis dan materai)."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "property"
+      }
+    },
+    {
+      "id": "1AJ",
+      "slug": "industrial-all-risk",
+      "name": "Industrial All Risk",
+      "categoryId": "properti",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian dan kerusakan fisik harta benda yang terjadi tiba-tiba dan tidak terduga.",
+          "Menanggung biaya perbaikan atau penggantian atas kerusakan yang dijamin.",
+          "Menjamin kerugian akibat gangguan usaha yang timbul dari kerusakan tersebut."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AB",
+      "slug": "polis-standar-asuransi-gempa-bumi-indonesia",
+      "name": "Polis Standar Asuransi Gempa Bumi Indonesia",
+      "categoryId": "properti",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian atau kerusakan harta benda yang secara langsung disebabkan oleh gempa bumi, letusan gunung berapi, tsunami, serta kebakaran dan ledakan yang mengikutinya.",
+        "manfaat": [
+          "Menjamin kerugian dan kerusakan harta benda akibat gempa bumi.",
+          "Menjamin kerugian akibat letusan gunung berapi.",
+          "Menjamin kebakaran dan ledakan yang mengikuti gempa bumi atau letusan gunung berapi.",
+          "Menjamin kerugian akibat tsunami."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H08",
+      "slug": "asuransi-gempa-bumi-berbasis-index",
+      "name": "Asuransi Gempa Bumi Berbasis Index",
+      "categoryId": "properti",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan ganti rugi atas risiko gempa bumi berdasarkan indeks paket pertanggungan.",
+          "Besaran ganti rugi mengikuti magnitudo dan intensitas gempa dari data resmi BMKG.",
+          "Memudahkan proses klaim karena perhitungan mengacu pada parameter gempa, bukan penilaian kerusakan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AA",
+      "slug": "polis-standar-asuransi-kebakaran-indonesia",
+      "name": "Polis Standar Asuransi Kebakaran Indonesia",
+      "categoryId": "properti",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian atau kerusakan harta benda yang disebabkan secara langsung oleh kebakaran, petir, ledakan, kejatuhan pesawat terbang, dan asap.",
+        "manfaat": [
+          "Menjamin kerugian dan kerusakan harta benda akibat kebakaran, termasuk karena kelalaian, hubungan arus pendek, atau menjalarnya api.",
+          "Menjamin kerusakan yang secara langsung disebabkan oleh petir.",
+          "Menjamin kerugian akibat ledakan.",
+          "Menjamin kerusakan akibat kejatuhan pesawat terbang.",
+          "Menjamin kerugian akibat asap dari kebakaran harta benda yang dipertanggungkan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AD",
+      "slug": "terrorism-and-sabotage",
+      "name": "Terrorism and Sabotage",
+      "categoryId": "properti",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian atau kerusakan harta benda yang secara langsung disebabkan oleh terorisme dan sabotase, termasuk tindakan pencegahannya serta penjarahan yang terjadi selama peristiwa tersebut.",
+        "manfaat": [
+          "Menjamin kerusakan harta benda akibat terorisme, sabotase, dan makar.",
+          "Menjamin kerugian akibat penjarahan yang terjadi selama peristiwa terorisme atau sabotase.",
+          "Menjamin kerugian akibat gangguan usaha yang ditimbulkan oleh kerusakan tersebut."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H09",
+      "slug": "asuransi-movable-property-all-risk",
+      "name": "Asuransi Movable Property All Risk",
+      "categoryId": "properti",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Mengganti kerugian atas kehilangan atau kerusakan harta benda bergerak.",
+          "Melindungi dari segala kecelakaan yang tidak terduga selama masa pertanggungan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H10",
+      "slug": "asuransi-neon-sign",
+      "name": "Asuransi Neon Sign",
+      "categoryId": "properti",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kehilangan atau kerusakan pada papan reklame, glow sign, dan iklan dinding.",
+          "Menjamin tanggung jawab hukum atas cedera atau kematian orang serta kerusakan properti akibat papan reklame."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H26",
+      "slug": "burglary-and-theft-insurance",
+      "name": "Burglary and Theft Insurance",
+      "categoryId": "properti",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kehilangan atau kerusakan harta benda akibat pembongkaran dan pencurian dengan kekerasan.",
+          "Menjamin kerusakan tempat akibat tindakan masuk atau keluar secara paksa oleh pelaku pencurian."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1IA",
+      "slug": "contractor-all-risk",
+      "name": "Contractor All Risk",
+      "categoryId": "rekayasa",
+      "status": "active",
+      "quickFacts": {
+        "premi": "0,80%–2,50%",
+        "masaPertanggungan": "Maks. 72 bulan",
+        "nilaiPertanggungan": "Rp1 miliar–Rp1 triliun"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian atau kerusakan objek konstruksi selama masa pembangunan/pemasangan hingga masa pemeliharaan.",
+        "manfaat": [
+          "Bagian I — Kerusakan Material: menjamin kerugian atau kerusakan fisik yang tiba-tiba dan tidak terduga, kecuali yang dikecualikan.",
+          "Bagian II — Tanggung Jawab Pihak Ketiga: menjamin cedera badan dan kerusakan harta pihak ketiga akibat pelaksanaan proyek, termasuk biaya litigasi atas persetujuan Penanggung."
+        ],
+        "biaya": [
+          "Biaya polis: Rp30.000.",
+          "Materai: Rp10.000 (total < Rp5.000.000) atau Rp20.000 (lebih dari Rp5.000.000)."
+        ],
+        "skemaPembayaran": "Premi dibayar lunas paling lambat 30 hari kalender sejak tanggal mulai berlakunya polis.",
+        "pengecualian": [
+          "Kerusuhan, pemogokan, perbuatan jahat, huru-hara, terorisme, sabotase, perang, dan pemberontakan.",
+          "Penyitaan, penahanan, atau penghancuran atas perintah pemerintah maupun pihak berwenang.",
+          "Reaksi nuklir, radiasi, atau kontaminasi radioaktif.",
+          "Tindakan sengaja atau kelalaian yang disengaja oleh tertanggung atau wakilnya.",
+          "Penghentian pekerjaan baik sebagian maupun seluruhnya.",
+          "Bagian I: risiko sendiri, kerugian lanjutan (consequential loss), cacat desain, biaya pembetulan material atau pengerjaan yang cacat, serta keausan dan korosi.",
+          "Bagian I: kerusakan peralatan dan mesin konstruksi akibat kerusakan mekanik atau elektrik, kecuali bila berakibat kerusakan eksternal.",
+          "Bagian I: kendaraan berizin jalan umum, sarana angkutan air/udara, serta dokumen, uang, dan surat berharga.",
+          "Bagian II: risiko sendiri serta biaya yang sudah dijamin pada Bagian I.",
+          "Bagian II: kerusakan akibat getaran atau melemahnya struktur penyangga.",
+          "Bagian II: cedera atau kerugian karyawan kontraktor maupun pemilik, harta dalam kendali tertanggung, kecelakaan kendaraan berizin, dan perjanjian ganti rugi sukarela."
+        ],
+        "persyaratan": [
+          "SPPA berisi nama dan jenis proyek, pemilik dan kontraktor, pengalaman kontraktor, Total Contract Value (TCV), lokasi, jangka waktu, limit TPL, dan perluasan jaminan.",
+          "Dokumen kontrak: salinan kontrak kerja, time schedule, bill of quantity, denah/lay out, serta soil test bila perlu.",
+          "Informasi underwriting: kondisi lingkungan dan cuaca lokasi, jarak dengan badan air, progress report, serta riwayat kerugian dan perbaikan risiko."
+        ],
+        "tataCara": [
+          "Mengajukan permohonan asuransi.",
+          "Melengkapi dokumen pendukung dan persyaratan.",
+          "Membantu pengumpulan informasi dalam survei risiko oleh Penanggung.",
+          "Melakukan pembayaran premi."
+        ],
+        "persyaratanKlaim": [
+          "Klaim Kerusakan Material: surat pengajuan resmi dengan nilai kerugian dan rincian barang yang rusak.",
+          "Formulir klaim yang telah diisi beserta kronologi kejadian.",
+          "Bukti nilai kerugian: rincian kontrak, penawaran perbaikan/penggantian, progress report, dokumen serah terima, foto kerusakan, dan berita acara kepolisian bila ada tindak kriminal.",
+          "Klaim Tanggung Jawab Pihak Ketiga: surat pengajuan resmi dengan uraian kejadian dan nilai tuntutan.",
+          "Surat tuntutan dari pihak ketiga beserta foto kerusakan atau kuitansi biaya pengobatan.",
+          "Dokumen lain yang relevan dan wajar diminta Penanggung."
+        ],
+        "tataCaraKlaim": [
+          "Memberi tahu Penanggung secara tertulis paling lambat 14 hari kalender sejak terjadinya kerugian, beserta penyebab dan perkiraan nilainya.",
+          "Mengajukan tuntutan ganti rugi beserta dokumen pendukung dalam waktu enam bulan sejak terjadinya kerugian."
+        ],
+        "simulasi": "Pembangunan kompleks perumahan, jangka waktu 9 bulan, limit Rp150.000.000, tarif premi 0,80%, sehingga premi Rp1.200.000. Bila terjadi kebakaran dengan kerugian Rp500.000.000 dan risiko sendiri Rp5.000.000, ganti rugi = Rp500.000.000 - Rp5.000.000 = Rp495.000.000."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "flat_rate"
+      }
+    },
+    {
+      "id": "1IF",
+      "slug": "civil-engineering-completed-risk",
+      "name": "Civil Engineering Completed Risk",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi Pekerjaan Sipil (Civil Engineering Completed Risk) Asuransi Sipil  merupakan Asuransi Bangunan yang sudah selesai namun belum diserahterimakan kepada Pemilik",
+        "manfaat": [
+          "Menjamin ganti rugi atas kerusakan bangunan sipil yang sudah selesai namun belum diserahterimakan.",
+          "Menjamin kerugian akibat kebakaran, petir, ledakan, dan benturan kendaraan.",
+          "Menjamin kerugian akibat kejatuhan pesawat terbang.",
+          "Menjamin kerugian akibat bencana alam seperti gempa bumi, gunung meletus, tsunami, badai, dan banjir.",
+          "Menjamin kerugian akibat tanah longsor serta perusakan (vandalisme)."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1IG",
+      "slug": "comprehensive-machinery-insurance",
+      "name": "Comprehensive Machinery Insurance",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerusakan fisik tak terduga pada mesin dan properti operasional yang membutuhkan perbaikan atau penggantian.",
+          "Menanggung kerugian akibat terganggunya operasi bisnis akibat kerusakan mesin yang dijamin.",
+          "Meliputi biaya pemadaman kebakaran, pengangkatan puing, dan penanganan zat berbahaya."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1IE",
+      "slug": "contractor-plan-machinery-and-equipment",
+      "name": "Contractor Plan Machinery and Equipment",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin segala risiko kerusakan atau kerugian fisik yang tiba-tiba dan tak terduga pada alat berat, baik saat bekerja, diam, maupun dibongkar untuk perawatan (overhauling), kecuali risiko yang dikecualikan.",
+        "manfaat": [
+          "Menjamin kerusakan atau kerugian fisik alat berat, mesin, dan instalasi yang terjadi tiba-tiba dan tak terduga.",
+          "Perlindungan berlaku saat alat sedang bekerja, diam, maupun dalam proses perawatan.",
+          "Menanggung risiko kebakaran, ledakan, bencana alam, dan kerusakan akibat air.",
+          "Menjamin kerugian akibat pencurian, perampokan, serta kesalahan pengoperasian."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1ID",
+      "slug": "electronic-equipment",
+      "name": "Electronic Equipment",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian finansial akibat kerusakan fisik yang tiba-tiba dan tak terduga pada peralatan elektronik, seperti komputer, peralatan komunikasi (radar, satelit), serta peralatan medis dan laboratorium (mis. X-ray).",
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan material pada peralatan elektronik.",
+          "Menanggung kehilangan atau kerusakan data media eksternal.",
+          "Mengganti tambahan biaya kerja akibat kerusakan peralatan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1IB",
+      "slug": "erection-all-risk",
+      "name": "Erection All Risk",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang memberikan jaminan komprehensif atas kerugian atau kerusakan yang tiba-tiba dan tak terduga selama pekerjaan pemasangan (erection) serta uji coba mesin, peralatan, dan struktur baja di lokasi proyek.",
+        "manfaat": [
+          "Memberikan jaminan komprehensif atas kerugian atau kerusakan tiba-tiba dan tak terduga selama pemasangan mesin, peralatan, dan struktur baja.",
+          "Menanggung pekerjaan pemasangan, pekerjaan teknik sipil terkait, serta biaya pembersihan reruntuhan.",
+          "Menjamin tanggung jawab hukum atas cedera badan dan kerusakan harta pihak ketiga di sekitar lokasi proyek."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1BB",
+      "slug": "heavy-equipment",
+      "name": "Heavy Equipment",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerusakan atau kerugian fisik alat berat seperti traktor, buldoser, dan ekskavator selama beroperasi.",
+          "Perlindungan berlaku saat alat sedang bekerja, diam, maupun dalam proses perawatan.",
+          "Menanggung risiko kebakaran, ledakan, bencana alam, dan kerusakan akibat air.",
+          "Menjamin kerugian akibat pencurian, perampokan, dan kesalahan pengoperasian."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1IC",
+      "slug": "machinery-breakdown",
+      "name": "Machinery Breakdown",
+      "categoryId": "rekayasa",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi engineering yang menjamin kerugian atau kerusakan fisik yang tiba-tiba dan tak terduga pada mesin-mesin yang sudah dalam keadaan operasional.",
+        "manfaat": [
+          "Menjamin kerusakan fisik mesin yang sudah beroperasi secara tiba-tiba dan tak terduga.",
+          "Menanggung kerugian akibat cacat bahan, kesalahan pemasangan, maupun kesalahan pengoperasian.",
+          "Melindungi dari risiko ledakan, korsleting, dan kekurangan air pada boiler."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1BA",
+      "slug": "polis-standar-asuransi-kendaraan-bermotor-indonesia",
+      "name": "Polis Standar Asuransi Kendaraan Bermotor Indonesia",
+      "categoryId": "kendaraan",
+      "status": "active",
+      "quickFacts": {
+        "premi": "Sesuai tarif OJK",
+        "masaPertanggungan": "Maks. 18 bulan",
+        "nilaiPertanggungan": "Sesuai harga kendaraan"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kerugian atau kerusakan pada kendaraan bermotor beserta kepentingan yang dipertanggungkan, termasuk tanggung jawab hukum terhadap pihak ketiga.",
+        "manfaat": [
+          "Melindungi kendaraan dari kerugian dan kerusakan.",
+          "Menjamin tanggung jawab hukum atas kerugian yang diderita pihak ketiga."
+        ],
+        "biaya": [
+          "Biaya polis: Rp30.000.",
+          "Materai: Rp10.000 (total < Rp5.000.000) atau Rp20.000 (lebih dari Rp5.000.000)."
+        ],
+        "skemaPembayaran": "Premi dibayar di muka sekaligus.",
+        "pengecualian": [
+          "Penggunaan di luar polis: menarik atau mendorong kendaraan, mengikuti perlombaan, tindak kejahatan oleh tertanggung atau keluarganya, serta kelebihan muatan.",
+          "Barang atau hewan yang diangkut, serta zat kimia dan cairan di dalam kendaraan, kecuali akibat risiko yang dijamin.",
+          "Kerusuhan, huru-hara, terorisme, sabotase, perang, bencana alam (gempa, banjir, tsunami, dan sejenisnya), serta reaksi nuklir.",
+          "Kendaraan dikemudikan tanpa SIM, dalam keadaan mabuk, melanggar rambu lalu lintas, atau dalam keadaan rusak.",
+          "Perlengkapan tambahan di luar polis, ban/velg tanpa kerusakan bagian lain, serta surat kendaraan (STNK/BPKB).",
+          "Kerusakan jalan, jembatan, atau bangunan akibat getaran maupun beban kendaraan.",
+          "Kehilangan keuntungan, upah, penurunan harga, atau kerugian keuangan lainnya."
+        ],
+        "persyaratan": [
+          "SPPA berisi identitas tertanggung (nama, alamat, KTP), jangka waktu, luas jaminan, dan data objek (jenis, merek/tipe, nomor polisi, nomor rangka/mesin, penggunaan, nilai, serta usia kendaraan).",
+          "Informasi underwriting: kondisi kendaraan, riwayat kerugian, asuransi lain yang dimiliki, dan kebijakan akseptasi."
+        ],
+        "tataCara": [
+          "Menyampaikan surat permohonan pertanggungan beserta data objek kendaraan.",
+          "Melampirkan STNK, BPKB, dan KTP.",
+          "Penanggung menerbitkan surat penawaran; setelah disetujui, polis diterbitkan.",
+          "Tertanggung membayar premi sesuai polis.",
+          "Mekanisme penutupan dapat berupa CAC (Coverage Automatic Cover) atau CBC (Case by Case)."
+        ],
+        "tataCaraKlaim": [
+          "Menyampaikan laporan kerugian beserta kronologi kejadian.",
+          "Melampirkan dokumen umum: salinan dan asli polis, SIM, STNK, BPKB, faktur, serta KTP tertanggung.",
+          "Untuk kehilangan total (TLO): surat keterangan kepolisian dan bukti pemblokiran STNK.",
+          "Untuk kerugian sebagian (partial loss): foto kerusakan dan estimasi biaya perbaikan.",
+          "Untuk tanggung jawab pihak ketiga (TJH): laporan polisi dan surat tuntutan dari pihak ketiga."
+        ],
+        "risiko": [
+          "Tabrakan, benturan, terbalik, tergelincir, atau terperosok.",
+          "Perbuatan jahat.",
+          "Pencurian, termasuk yang disertai kekerasan atau ancaman kekerasan.",
+          "Kebakaran, termasuk akibat sambaran petir dan upaya pemadaman.",
+          "Tanggung jawab hukum atas kerugian pihak ketiga."
+        ],
+        "simulasi": "Toyota Rush tahun 2020 di Wilayah 3 senilai Rp300.000.000 dengan jaminan TLO dan TJH Rp5.000.000 selama 12 bulan. Premi CASCO: 0,35% × Rp300.000.000 = Rp1.050.000; TJH: 1% × Rp5.000.000 = Rp5.000. Ditambah biaya polis Rp30.000 dan materai Rp10.000, total Rp1.095.000."
+      },
+      "skemaUrl": null,
+      "calculator": {
+        "type": "casco_tjh"
+      }
+    },
+    {
+      "id": "1HA",
+      "slug": "welcar-insurance",
+      "name": "Welcar Insurance",
+      "categoryId": "kendaraan",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian dan kerusakan fisik pada proyek pertambangan mulai dari pengadaan, konstruksi, pengangkutan, hingga pemasangan dan pengetesan.",
+          "Menanggung seluruh pekerjaan sementara, instalasi, peralatan, dan material terkait proyek.",
+          "Menjamin tanggung jawab hukum pihak ketiga atas cedera badan dan kerusakan properti."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H16",
+      "slug": "electric-vehicle-insurance",
+      "name": "Electric Vehicle Insurance",
+      "categoryId": "kendaraan",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan kendaraan listrik dan baterai akibat tabrakan, benturan, terbalik, atau tergelincir.",
+          "Menanggung risiko perbuatan jahat serta pencurian, termasuk yang disertai kekerasan.",
+          "Melindungi dari kebakaran, termasuk akibat sambaran petir dan kerusakan saat upaya pemadaman."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1JB",
+      "slug": "comprehensive-general-liability",
+      "name": "Comprehensive General Liability",
+      "categoryId": "liability",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin tanggung jawab hukum tertanggung secara menyeluruh atas cedera tubuh atau kerusakan properti pihak lain akibat kelalaian tertanggung maupun karyawannya, termasuk biaya pembelaan, kecuali hal-hal yang dikecualikan.",
+        "manfaat": [
+          "Menjamin tanggung jawab hukum atas cedera tubuh atau kerusakan properti pihak lain akibat kelalaian tertanggung atau karyawannya.",
+          "Menanggung biaya pembelaan hukum.",
+          "Dapat diperluas untuk risiko kerusuhan, pemogokan, huru-hara, dan tanggung jawab silang."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1JF",
+      "slug": "director-and-officer-liability",
+      "name": "Director and Officer Liability",
+      "categoryId": "liability",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang memberikan perlindungan hukum kepada komisaris, direktur, dan pejabat perusahaan atas risiko akibat tindakan salah (wrongful act) yang dilakukan dalam menjalankan jabatannya.",
+        "manfaat": [
+          "Menjamin kerugian pribadi direksi dan pejabat perusahaan akibat tuntutan atas tindakan kesalahan mereka.",
+          "Menanggung biaya pemeriksaan, pembelaan hukum, dan biaya hubungan publik.",
+          "Memberikan perlindungan tambahan khusus bagi direktur non-eksekutif dan direktur badan hukum luar.",
+          "Menjamin kerugian perusahaan yang timbul dari klaim sekuritas dan pelanggaran praktik ketenagakerjaan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1GC",
+      "slug": "onshore-construction-liability",
+      "name": "Oil & Gas Contractor's Liability Insurance",
+      "categoryId": "liability",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin tanggung jawab hukum atas kerusakan harta benda dan cedera badan akibat aktivitas bisnis.",
+          "Menanggung tanggung jawab hukum akibat penggunaan kendaraan.",
+          "Menjamin tuntutan hukum dan kecelakaan kerja yang dialami karyawan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1JE",
+      "slug": "port-and-terminal-liability",
+      "name": "Port and Terminal Liability",
+      "categoryId": "liability",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang mengganti kerugian tertanggung sehubungan dengan tanggung jawab hukumnya atas operasi pelabuhan dan terminal sebagaimana tercantum dalam Ikhtisar Polis.",
+        "manfaat": [
+          "Menjamin tanggung jawab hukum operator pelabuhan dan terminal atas kehilangan atau kerusakan kargo, kontainer, kapal, dan properti dalam pengawasannya.",
+          "Menanggung biaya pembersihan bangkai atau puing yang menjadi tanggung jawab tertanggung.",
+          "Dapat diperluas untuk risiko kesalahan dan kelalaian serta tanggung jawab pihak ketiga."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1JD",
+      "slug": "professional-indemnity",
+      "name": "Professional Indemnity",
+      "categoryId": "liability",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang mengganti kerugian tertanggung atas tanggung jawab hukum membayar kompensasi akibat kesalahan, kelalaian, atau kekeliruan dalam menjalankan jasa profesi, termasuk biaya pembelaan dan penyelesaian klaim yang disetujui Penanggung secara tertulis.",
+        "manfaat": [
+          "Menjamin tanggung jawab hukum atas kerugian akibat kesalahan, kelalaian, atau kekeliruan dalam menjalankan jasa profesi.",
+          "Mencakup kesalahan yang dilakukan oleh Tertanggung maupun karyawannya yang berkompeten.",
+          "Menanggung biaya pembelaan dan penyelesaian klaim."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1JA",
+      "slug": "public-liability",
+      "name": "Public Liability",
+      "categoryId": "liability",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin tanggung jawab hukum tertanggung atas cedera tubuh atau kerusakan properti pihak lain akibat kelalaian tertanggung maupun karyawannya, termasuk biaya pembelaan, kecuali hal-hal yang dikecualikan.",
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan atas harta benda milik pihak ketiga.",
+          "Menjamin cedera badan yang dialami pihak ketiga."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H04",
+      "slug": "freight-forwarder-liability-insurance",
+      "name": "Freight Forwarder Liability Insurance",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin tanggung jawab hukum Tertanggung atas kehilangan atau kerusakan barang selama pengiriman dan pengangkutan.",
+          "Menanggung kerugian akibat keterlambatan penyerahan barang sesuai kontrak pengangkutan.",
+          "Menjamin kerugian akibat kesalahan pencantuman pelabuhan tujuan oleh karyawan Tertanggung.",
+          "Menjamin kerusakan atau kehilangan barang akibat pemuatan di atas dek maupun pengangkutan dengan tongkang."
+        ],
+        "skemaPembayaran": "Single Premium"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H06",
+      "slug": "asuransi-tanggung-jawab-pengangkut-angkutan-udara",
+      "name": "Asuransi Tanggung Jawab Pengangkut Angkutan Udara",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan ganti rugi atas penumpang yang meninggal dunia, cacat tetap, atau luka-luka akibat kecelakaan pengangkutan udara.",
+          "Menjamin kerusakan atau kehilangan bagasi kabin, bagasi tercatat, dan kargo.",
+          "Memberikan santunan atas keterlambatan dan pembatalan penerbangan serta penumpang yang tidak terangkut.",
+          "Menjamin tanggung jawab terhadap pihak ketiga akibat pengoperasian atau kecelakaan pesawat udara."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H13",
+      "slug": "product-liability-insurance",
+      "name": "Product Liability Insurance",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin tanggung jawab hukum atas cedera tubuh atau kerusakan properti yang disebabkan oleh produk yang cacat atau berbahaya.",
+          "Menjamin kerugian akibat iklan sehubungan dengan kegiatan usaha.",
+          "Menanggung biaya pembelaan dan litigasi atas klaim yang diajukan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H14",
+      "slug": "workmen-s-compensation-insurance",
+      "name": "Workmen's Compensation Insurance",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kewajiban Tertanggung membayar kompensasi kepada karyawan yang cedera akibat kecelakaan kerja.",
+          "Mencakup penyakit yang timbul dari dan selama pelaksanaan pekerjaan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H15",
+      "slug": "third-party-liability-insurance",
+      "name": "Third Party Liability Insurance",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin tanggung jawab hukum Tertanggung atas kerusakan harta benda milik pihak ketiga.",
+          "Menanggung biaya pengobatan, cedera badan, dan kematian pihak ketiga.",
+          "Menjamin biaya perkara dan bantuan ahli yang berkaitan dengan tanggung jawab hukum."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H17",
+      "slug": "keracunan-makanan",
+      "name": "Keracunan Makanan",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan atas keracunan makanan yang dialami pihak yang terdaftar dalam polis.",
+          "Perlindungan berlaku untuk keracunan yang terjadi tanpa unsur kelalaian atau kesengajaan Tertanggung."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H20",
+      "slug": "container-and-liability-insurance",
+      "name": "Container and Liability Insurance",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerusakan atau kehilangan kontainer saat digunakan dalam transportasi darat akibat kecelakaan seperti tabrakan, kebakaran, atau ledakan.",
+          "Menjamin tanggung jawab hukum atas kerusakan harta benda dan cedera badan pihak ketiga akibat penggunaan kontainer."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H23",
+      "slug": "parking-liability-insurance",
+      "name": "Parking Liability Insurance",
+      "categoryId": "liability",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerusakan total atau kehilangan kendaraan selama berada di lokasi parkir.",
+          "Menjamin pencurian barang berharga yang ditinggal di dalam kendaraan.",
+          "Memberikan santunan atas kematian akibat kecelakaan di lokasi parkir."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1LB",
+      "slug": "asuransi-pa-plus-nd",
+      "name": "Asuransi PA plus ND",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan atas kematian akibat kecelakaan.",
+          "Memberikan santunan atas cacat tetap keseluruhan maupun sebagian akibat kecelakaan.",
+          "Mengganti biaya perawatan dan pengobatan akibat kecelakaan.",
+          "Menyediakan manfaat opsional berupa santunan kematian alami, biaya pemakaman, ambulans, dan pengurusan dokumen."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1LE",
+      "slug": "asuransiku",
+      "name": "Asuransiku",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1EC",
+      "slug": "aviation-loss-of-licence",
+      "name": "Aviation Loss of Licence",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan kompensasi atas kematian, cacat tetap, maupun cacat sementara akibat kecelakaan kerja.",
+          "Menanggung biaya medis dan operasi terkait kecelakaan yang dialami.",
+          "Memberikan santunan kehilangan lisensi akibat ketidakmampuan permanen atau sementara pilot dan kru."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1EB",
+      "slug": "aviation-personal-accident",
+      "name": "Aviation Personal Accident",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1LC",
+      "slug": "pa-tenaga-kerja-asing",
+      "name": "PA Tenaga Kerja Asing",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Non Reneweble Dibagi menjadi 3 periode waktu yakni: a. Masa pertanggungan 1 (satu) bulan; b. Masa pertanggungan 3 (tiga) bulan; c. Masa pertanggungan 6 (enam) bulan."
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan meninggal dunia baik karena sakit, alami, maupun kecelakaan.",
+          "Menjamin cacat tetap total maupun sebagian akibat kecelakaan.",
+          "Menanggung biaya rawat inap dan pengobatan akibat sakit dan kecelakaan secara cashless di rumah sakit jaringan.",
+          "Menyediakan layanan evakuasi dan repatriasi medis darurat."
+        ],
+        "skemaPembayaran": "Single Premium"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1LA",
+      "slug": "polis-standar-asuransi-kecelakaan-diri-indonesia",
+      "name": "Polis Standar Asuransi Kecelakaan Diri Indonesia",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang memberikan santunan atas risiko kematian, cacat tetap, cacat sementara, serta biaya perawatan atau pengobatan akibat kecelakaan, yaitu kejadian tiba-tiba dari luar, tidak dikehendaki, dan langsung mengakibatkan luka badani.",
+        "manfaat": [
+          "Menjamin risiko meninggal dunia akibat kecelakaan.",
+          "Menanggung cacat tetap dan cacat sementara akibat kecelakaan.",
+          "Mengganti biaya perawatan dan pengobatan akibat kecelakaan.",
+          "Dapat diperluas untuk risiko kerusuhan, huru-hara, dan kecelakaan saat berkendara sepeda motor."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1LD",
+      "slug": "warisanku",
+      "name": "Warisanku",
+      "categoryId": "kecelakaan-diri",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {
+        "deskripsi": "Memberikan santunan duka kepada ahli waris peserta yang meninggal akibat kecelakaan (kecuali bunuh diri atau tindak kriminal). Ditujukan bagi masyarakat berpenghasilan rendah dan dipasarkan melalui komunitas atau mitra seperti ritel, BPR, dan kantor pos. Bila peserta meninggal karena sakit, ahli waris tetap menerima santunan pemakaman Rp500.000 (5% dari santunan kecelakaan)."
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H24",
+      "slug": "personal-accident-xtra-insurance",
+      "name": "Personal Accident Xtra Insurance",
+      "categoryId": "kecelakaan-diri",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin santunan meninggal dunia akibat kecelakaan.",
+          "Dapat diperluas dengan santunan cacat tetap serta biaya perawatan dan pengobatan.",
+          "Menyediakan santunan tambahan seperti biaya ambulans, evakuasi, pemakaman, pendidikan, dan pemulangan jenazah."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H25",
+      "slug": "personal-accident-pro-insurance",
+      "name": "Personal Accident Pro Insurance",
+      "categoryId": "kecelakaan-diri",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin meninggal dunia, cacat tetap, dan biaya perawatan akibat kecelakaan.",
+          "Menanggung tanggung jawab hukum atas kerusakan infrastruktur jalan tol akibat kecelakaan kendaraan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1FA",
+      "slug": "asuransi-satelit",
+      "name": "Asuransi Satelit",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1EA",
+      "slug": "aviation-hull",
+      "name": "Asuransi Penerbangan (Aviation Insurance)",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan pada rangka pesawat, mesin, dan peralatannya.",
+          "Menanggung tanggung jawab hukum terhadap pihak ketiga.",
+          "Melindungi dari risiko perang, pembajakan, dan sabotase.",
+          "Menjamin kecelakaan dan kematian awak pesawat serta risiko satelit."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1DB",
+      "slug": "marine-builder-risk",
+      "name": "Marine Builder Risk",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Melindungi kapal yang sedang dibangun di galangan, termasuk lambung, mesin, dan perlengkapannya.",
+          "Menjamin kerusakan akibat kesalahan rancang bangun yang ditemukan selama masa pertanggungan.",
+          "Menanggung tanggung jawab hukum akibat tabrakan kapal.",
+          "Mengganti biaya penyelamatan dan kerugian umum (general average)."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1CA",
+      "slug": "marine-cargo",
+      "name": "Marine Cargo",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan barang selama pengangkutan melalui laut maupun darat.",
+          "Melindungi dari risiko kebakaran, ledakan, kapal kandas, tenggelam, dan tabrakan.",
+          "Menanggung kerugian umum (general average) dan biaya penyelamatan.",
+          "Diperluas untuk kerugian akibat tabrakan kapal di mana kedua pihak bersalah."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1DA",
+      "slug": "marine-hull",
+      "name": "Marine Hull",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan kapal akibat bahaya laut, kebakaran, ledakan, dan kandas.",
+          "Melindungi dari pencurian dengan kekerasan, pembajakan, dan gempa bumi.",
+          "Menanggung kerusakan akibat kelalaian nahkoda, perwira, atau kru.",
+          "Menjamin tanggung jawab hukum akibat tabrakan dengan kapal lain."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1HB",
+      "slug": "offshore-property",
+      "name": "Offshore Property",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1GB",
+      "slug": "oil-rig",
+      "name": "Oil Rig",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin semua risiko kerugian atau kerusakan fisik pada peralatan pengeboran minyak dan gas.",
+          "Melindungi peralatan pengeboran di lokasi onshore maupun offshore.",
+          "Menanggung mesin, perlengkapan, bangunan portabel, dan peralatan pendukung pengeboran."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1GA",
+      "slug": "oil-and-gas",
+      "name": "Oil and Gas",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin properti, mesin, dan peralatan minyak dan gas di darat maupun lepas pantai.",
+          "Menanggung biaya pengendalian sumur dan pengeboran ulang akibat kejadian yang dijamin.",
+          "Melindungi dari risiko rembesan, pencemaran, serta biaya pembersihannya.",
+          "Menjamin lambung kapal dan mesin terkait operasi minyak dan gas."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1DD",
+      "slug": "protection-and-indemnity",
+      "name": "Protection and Indemnity",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menanggung tanggung jawab hukum terhadap awak kapal maupun orang lain.",
+          "Menjamin tanggung jawab akibat tabrakan dan kerusakan harta benda pihak ketiga.",
+          "Menanggung biaya pengangkatan bangkai kapal serta risiko polusi.",
+          "Menjamin tanggung jawab atas kargo, denda, penyelamatan nyawa, dan kerugian laut umum."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1DC",
+      "slug": "wreck-removal",
+      "name": "Wreck Removal",
+      "categoryId": "marine-aviation",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menanggung biaya pengangkatan dan pembersihan bangkai kapal.",
+          "Menanggung biaya pembersihan pencemaran akibat kecelakaan kapal.",
+          "Menjamin tanggung jawab hukum atas kerusakan lingkungan yang ditimbulkan.",
+          "Menanggung klaim dari pihak ketiga yang terdampak pencemaran."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H05",
+      "slug": "container-insurance",
+      "name": "Container Insurance",
+      "categoryId": "marine-aviation",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kerugian atau kerusakan pada kontainer yang dipertanggungkan.",
+          "Menanggung kerugian umum dan biaya penyelamatan yang timbul selama pengangkutan.",
+          "Menjamin tanggung jawab akibat tabrakan kapal, termasuk kerusakan mesin kontainer karena kebakaran, ledakan, atau kecelakaan alat angkut."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AE",
+      "slug": "proteksi-griya",
+      "name": "Household Insurance",
+      "categoryId": "mikro",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Melindungi rumah dan isinya dari kebakaran, petir, ledakan, kejatuhan pesawat, dan asap.",
+          "Diperluas untuk risiko kerusuhan, pemogokan, huru-hara, perbuatan jahat, kebongkaran, tertabrak kendaraan, serta angin topan dan banjir.",
+          "Menjamin tanggung jawab hukum atas cedera atau kerusakan yang dialami pihak ketiga di dalam rumah maupun pekarangan.",
+          "Memberikan santunan meninggal dunia, cacat tetap, dan biaya pengobatan akibat kebakaran, serta biaya sewa rumah sementara.",
+          "Dapat diperluas dengan jaminan gempa bumi, terorisme, dan sabotase."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AG",
+      "slug": "rumahku",
+      "name": "Rumahku",
+      "categoryId": "mikro",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan bila rumah tinggal dan isinya rusak akibat kebakaran, petir, ledakan, atau kejatuhan pesawat.",
+          "Menyediakan santunan meninggal dunia bagi peserta akibat risiko tersebut.",
+          "Dapat diperluas dengan jaminan bencana alam."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AF",
+      "slug": "safehome",
+      "name": "Safehome",
+      "categoryId": "mikro",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Melindungi rumah dari kebakaran, petir, ledakan, kejatuhan pesawat, dan asap.",
+          "Dapat diperluas dengan jaminan kerusuhan, pemogokan, huru-hara, dan perbuatan jahat.",
+          "Menjamin tanggung jawab hukum kepada pihak ketiga serta biaya pemadam kebakaran, pembersihan puing, dan sewa rumah sementara.",
+          "Memberikan santunan uang duka bila terjadi meninggal dunia akibat kebakaran."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AH",
+      "slug": "stop-usaha-erupsi",
+      "name": "Stop Usaha - Erupsi",
+      "categoryId": "mikro",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1AI",
+      "slug": "stop-usaha-gempa-tsunami",
+      "name": "Stop Usaha - Gempa Tsunami",
+      "categoryId": "mikro",
+      "status": "maintenance",
+      "quickFacts": {},
+      "sections": {},
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H11",
+      "slug": "asuransi-mikro-usahaku",
+      "name": "Asuransi Mikro Usahaku",
+      "categoryId": "mikro",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan bila bangunan atau perlengkapan usaha rusak akibat kebakaran, petir, ledakan, kejatuhan pesawat, kerusuhan, tertabrak kendaraan, dan bencana alam.",
+          "Menyediakan santunan meninggal dunia bagi peserta akibat risiko tersebut."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H12",
+      "slug": "asuransi-mikro-bahari-revamp",
+      "name": "Asuransi Mikro Bahari (Revamp)",
+      "categoryId": "mikro",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan bila kapal atau perahu tenggelam atau rusak total saat berlayar maupun bersandar.",
+          "Menjamin risiko kebakaran, sambaran petir, ledakan, dan kejatuhan pesawat.",
+          "Menjamin risiko bencana alam dan tabrakan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H19",
+      "slug": "asuransi-mikro-proteksi-usaha-plus",
+      "name": "Asuransi Mikro Proteksi Usaha Plus",
+      "categoryId": "mikro",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan santunan untuk kerusakan berat maupun ringan pada bangunan atau perlengkapan usaha akibat kebakaran, bencana alam, kerusuhan, dan risiko sejenis.",
+          "Menyediakan santunan gangguan usaha bila akses ke lokasi usaha ditutup oleh otoritas publik.",
+          "Memberikan santunan meninggal dunia, cidera, cacat, dan biaya pengobatan akibat kecelakaan atau perbuatan jahat.",
+          "Menjamin kerugian akibat pencurian disertai kebongkaran pada tempat atau perlengkapan usaha.",
+          "Menyediakan santunan duka atau pemakaman akibat kecelakaan maupun perbuatan jahat."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H22",
+      "slug": "asuransi-pertanian",
+      "name": "Asuransi Pertanian",
+      "categoryId": "mikro",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan ganti rugi atas kerusakan tanaman pertanian akibat hama dan penyakit.",
+          "Dapat diperluas untuk kerusakan akibat gempa bumi, letusan gunung berapi, tsunami, kebakaran, tanah longsor, dan pencemaran limbah.",
+          "Menyediakan santunan atas kerugian tanaman akibat perubahan cuaca berdasarkan indeks curah hujan, angin, suhu, dan kelembaban."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H28",
+      "slug": "asuransi-bersama-standar-asuransi-perikanan-bagi-pembudi-daya-ikan-kecil-perubahan",
+      "name": "Asuransi Bersama Standar Asuransi Perikanan Bagi Pembudi Daya Ikan Kecil (Perubahan)",
+      "categoryId": "mikro",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1JC",
+      "slug": "aviation-premises-liabilities-and-hangar-keeper",
+      "name": "Asuransi Airport Liability",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin biaya akibat irregularity bagasi, kargo, dan penumpang yang disebabkan faktor manajemen maskapai, teknis operasional, cuaca, atau force majeure (asap, kabut, erupsi, kebakaran, banjir), termasuk biaya refund tiket terkait.",
+        "manfaat": [
+          "Menjamin tanggung jawab hukum atas cedera personal dan cedera pihak ketiga di area bandar udara.",
+          "Menjamin tanggung jawab atas keterlambatan atau pembatalan penerbangan akibat kerusakan fasilitas bandara.",
+          "Dapat diperluas dengan jaminan biaya tebusan dan penahanan pesawat yang tidak tepat."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PE",
+      "slug": "cash-in-atm",
+      "name": "Cash In ATM",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kehilangan uang dari dalam ATM sesuai syarat dan kondisi yang tercantum pada polis.",
+        "manfaat": [
+          "Menjamin kehilangan uang di dalam ATM akibat pencurian, termasuk yang disertai kekerasan atau perusakan.",
+          "Menjamin kerusakan tempat penyimpanan akibat pencurian atau upaya pencurian."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PC",
+      "slug": "cash-in-cashier-box",
+      "name": "Cash In Cashier Box",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kehilangan uang di dalam cashier box akibat pencurian oleh pihak lain, termasuk yang disertai kekerasan, penodongan, atau pengrusakan tempat penyimpanan.",
+        "manfaat": [
+          "Menjamin kehilangan uang di dalam cashier box akibat pencurian, termasuk yang disertai kekerasan atau perusakan.",
+          "Menjamin kerusakan tempat penyimpanan akibat pencurian atau upaya pencurian."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PB",
+      "slug": "cash-in-safe",
+      "name": "Cash In Safe",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kehilangan uang di dalam tempat penyimpanan (safe) akibat pencurian oleh pihak lain, termasuk yang disertai kekerasan, penodongan, atau pengrusakan tempat penyimpanan.",
+        "manfaat": [
+          "Menjamin kehilangan uang di dalam brankas akibat pencurian, termasuk yang disertai kekerasan atau perusakan.",
+          "Menjamin kerusakan tempat penyimpanan akibat pencurian atau upaya pencurian."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1CB",
+      "slug": "cash-in-transit",
+      "name": "Cash In Transit",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin kehilangan uang selama pengiriman antar lokasi akibat pencurian yang disertai kekerasan atau ancaman kekerasan.",
+          "Menjamin kehilangan, kerusakan, atau musnahnya uang akibat kebakaran selama masa pengiriman."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PA",
+      "slug": "cyber-insurance",
+      "name": "Cyber Insurance",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang melindungi dari kerugian akibat tanggung gugat siber, seperti pelanggaran data pribadi maupun perusahaan, termasuk biaya pembelaan, penyelidikan, denda, pemulihan reputasi, dan jasa forensik.",
+        "manfaat": [
+          "Melindungi perusahaan dari tanggung gugat atas kebocoran data pribadi, data perusahaan, maupun kegagalan keamanan data.",
+          "Menanggung biaya pembelaan hukum serta denda dan penyelidikan administratif terkait data.",
+          "Membiayai pemulihan reputasi, pemberitahuan, pemantauan, dan jasa forensik pasca-insiden.",
+          "Perluasan jaminan mencakup tanggung gugat konten media dan gangguan jaringan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PD",
+      "slug": "document-in-safe",
+      "name": "Document In Safe",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi Document in Safe adalah produk yang memberikan manfaat berupa ganti rugi kepada Tertanggung atas kehilangan dan atau kerusakan pada dokumen yang disimpan.",
+        "manfaat": [
+          "Memberikan ganti rugi atas kehilangan atau kerusakan dokumen yang disimpan sesuai lingkup polis."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PF",
+      "slug": "money-insurance",
+      "name": "Money Insurance",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang menjamin kehilangan uang yang dipertanggungkan serta kerugian atau kerusakan pada kotak deposit, lemari besi, atau carrying case khusus pembawa uang, kecuali risiko yang dikecualikan.",
+        "manfaat": [
+          "Menjamin hilangnya uang yang dipertanggungkan dari berbagai risiko, kecuali yang dikecualikan.",
+          "Melindungi uang yang tersimpan di brankas (money in safe) maupun dalam pengiriman (money in transit).",
+          "Dapat diperluas dengan jaminan kecurangan karyawan (fidelity guarantee) dan pembongkaran (burglary)."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "1PG",
+      "slug": "travel-insurance",
+      "name": "Travel Insurance",
+      "categoryId": "lainnya",
+      "status": "maintenance",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "deskripsi": "Asuransi yang memberikan perlindungan atas peristiwa tak terduga selama perjalanan, baik di dalam maupun luar negeri, berupa bantuan material maupun jasa bagi pemegang polis.",
+        "manfaat": [
+          "Melindungi tertanggung dari risiko kecelakaan diri, kematian, dan cacat selama perjalanan.",
+          "Menanggung biaya pengobatan darurat, santunan rumah sakit, evakuasi, dan repatriasi medis.",
+          "Mengganti kerugian akibat pembatalan, penundaan, atau pengurangan perjalanan serta pembajakan pesawat.",
+          "Menjamin kehilangan atau kerusakan bagasi, keterlambatan bagasi, dan kehilangan transportasi lanjutan.",
+          "Mencakup tanggung jawab pribadi, konsultasi medis 24 jam, dan pemulangan jenazah."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H07",
+      "slug": "asuransi-fidelity-guarantee",
+      "name": "Asuransi Fidelity Guarantee",
+      "categoryId": "lainnya",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Mengganti kerugian finansial tertanggung akibat kecurangan atau ketidakjujuran karyawannya.",
+          "Menjamin kerugian selama karyawan bekerja dalam kapasitas yang diperjanjikan dan ditemukan dalam periode yang ditetapkan."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H18",
+      "slug": "well-insurance",
+      "name": "Well Insurance",
+      "categoryId": "lainnya",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Menjamin biaya untuk mendapatkan kembali kendali atas sumur yang lepas kendali serta memadamkan kebakaran sumur.",
+          "Menanggung biaya pemulihan atau pengeboran ulang sumur yang hilang atau rusak akibat kejadian yang dijamin.",
+          "Mengganti kerugian akibat rembesan, pencemaran, dan kontaminasi dari sumur, termasuk biaya pembersihan dan pembelaan hukum.",
+          "Diperluas untuk kerusakan harta benda lepas pantai akibat ranjau, torpedo, atau senjata perang terbengkalai."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H21",
+      "slug": "personal-cyber-insurance",
+      "name": "Personal Cyber Insurance",
+      "categoryId": "lainnya",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Melindungi individu dari kerugian finansial akibat kejahatan dan serangan siber.",
+          "Menjamin risiko pada belanja online, transaksi online, dan pencurian identitas online.",
+          "Mencakup pemulihan data (restorasi data) dan perlindungan dari perundungan siber (cyber bullying)."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    },
+    {
+      "id": "H27",
+      "slug": "asuransi-pemadaman-listrik",
+      "name": "Asuransi Pemadaman Listrik",
+      "categoryId": "lainnya",
+      "status": "active",
+      "quickFacts": {
+        "masaPertanggungan": "Reneweble (sesuai dengan ketentuan underwriting)"
+      },
+      "sections": {
+        "manfaat": [
+          "Memberikan perlindungan atas ketidaknyamanan akibat pemadaman listrik yang terjadi tiba-tiba tanpa pemberitahuan.",
+          "Menjamin risiko kebakaran, termasuk yang disertai perampokan, akibat pemadaman listrik.",
+          "Memberikan santunan kematian, cacat tetap total, dan rawat inap akibat kecelakaan.",
+          "Menanggung risiko gangguan usaha sesuai paket asuransi yang dipilih."
+        ],
+        "skemaPembayaran": "Single Premium dan/atau Installment"
+      },
+      "skemaUrl": null,
+      "calculator": null
+    }
+  ]
+}

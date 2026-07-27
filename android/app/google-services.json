@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "436844402963",
+    "project_id": "mbis-38aa0",
+    "storage_bucket": "mbis-38aa0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:436844402963:android:f300beef0ef6d6179ee2e6",
+        "android_client_info": {
+          "package_name": "com.askrindo.mbis.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7wlbeVrtQdrMpA4pyRsFKTFxFTc5DY9M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:436844402963:android:f300beef0ef6d6179ee2e6",
+        "android_client_info": {
+          "package_name": "com.askrindo.mbis.mobile.staging"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7wlbeVrtQdrMpA4pyRsFKTFxFTc5DY9M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

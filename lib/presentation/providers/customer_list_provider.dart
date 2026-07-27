@@ -1,0 +1,298 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:mbis/core/providers/app_providers.dart';
+import 'package:mbis/core/providers/repository_providers.dart';
+import 'package:mbis/src/customer/customer_repository.dart';
+import 'package:mbis/src/dashboard/dashboard_repository.dart';
+import 'package:mbis/src/reference/reference_repository.dart';
+
+/// Ukuran halaman daftar customer (server-paged). Dipakai notifier (request) &
+/// layar (label paginasi). Dulu `_pageSize` privat di `customer_list_screen`.
+const int kCustomerPageSize = 10;
+
+const Object _keep = Object();
+
+/// State daftar customer — cerminan 1:1 dari field `setState` di layar lama.
+class CustomerListState {
+  final List<CustomerListModel> items;
+  final int page;
+  final int totalPages;
+  final int totalElements;
+  final List<ParamRef> entityOptions;
+  final List<ScopeOffice> offices;
+  final String? regionId;
+  final String? branchId;
+  final String searchTerm;
+  final String? entityFilter;
+  final bool hvcFilter;
+  final CustomerKpi? kpi;
+  final bool initialLoading;
+  final String? error;
+  final bool canAddCustomer;
+
+  const CustomerListState({
+    this.items = const [],
+    this.page = 0,
+    this.totalPages = 0,
+    this.totalElements = 0,
+    this.entityOptions = const [],
+    this.offices = const [],
+    this.regionId,
+    this.branchId,
+    this.searchTerm = '',
+    this.entityFilter,
+    this.hvcFilter = false,
+    this.kpi,
+    this.initialLoading = true,
+    this.error,
+    this.canAddCustomer = false,
+  });
+
+  CustomerListState copyWith({
+    List<CustomerListModel>? items,
+    int? page,
+    int? totalPages,
+    int? totalElements,
+    List<ParamRef>? entityOptions,
+    List<ScopeOffice>? offices,
+    Object? regionId = _keep,
+    Object? branchId = _keep,
+    String? searchTerm,
+    Object? entityFilter = _keep,
+    bool? hvcFilter,
+    Object? kpi = _keep,
+    bool? initialLoading,
+    Object? error = _keep,
+    bool? canAddCustomer,
+  }) {
+    return CustomerListState(
+      items: items ?? this.items,
+      page: page ?? this.page,
+      totalPages: totalPages ?? this.totalPages,
+      totalElements: totalElements ?? this.totalElements,
+      entityOptions: entityOptions ?? this.entityOptions,
+      offices: offices ?? this.offices,
+      regionId: regionId == _keep ? this.regionId : regionId as String?,
+      branchId: branchId == _keep ? this.branchId : branchId as String?,
+      searchTerm: searchTerm ?? this.searchTerm,
+      entityFilter:
+          entityFilter == _keep ? this.entityFilter : entityFilter as String?,
+      hvcFilter: hvcFilter ?? this.hvcFilter,
+      kpi: kpi == _keep ? this.kpi : kpi as CustomerKpi?,
+      initialLoading: initialLoading ?? this.initialLoading,
+      error: error == _keep ? this.error : error as String?,
+      canAddCustomer: canAddCustomer ?? this.canAddCustomer,
+    );
+  }
+
+  /// Region/branch pilihan (supervisor). Derivasi murni dari [offices] —
+  /// menggantikan getter `_regions`/`_branches` di layar.
+  List<ScopeOffice> get regions =>
+      offices.where((o) => o.type == 'REGIONAL').toList();
+
+  List<ScopeOffice> get branches => offices
+      .where((o) =>
+          o.type == 'BRANCH' && (regionId == null || o.parentId == regionId))
+      .toList();
+}
+
+final customerListProvider =
+    NotifierProvider<CustomerListNotifier, CustomerListState>(
+        CustomerListNotifier.new);
+
+/// Menggantikan seluruh logika `setState` di `_CustomerListScreenState`.
+/// Perilaku (paging, filter, guard stale-load, jalur agent) DIPINDAH APA ADANYA.
+class CustomerListNotifier extends Notifier<CustomerListState> {
+  bool _agentScoped = false;
+
+  /// Token load monotonik: perubahan filter/search memulai load baru; halaman
+  /// lama yang masih in-flight diabaikan saat kembali. (Dulu `_loadSeq`.)
+  int _loadSeq = 0;
+
+  /// Agent = buku kecil server-fixed (client-side); selain itu server-paginated.
+  bool get _isPaged => !_agentScoped;
+
+  @override
+  CustomerListState build() => const CustomerListState();
+
+  CustomerRepository get _repo => ref.read(customerRepoProvider);
+  DashboardRepository get _dashRepo => ref.read(dashboardRepoProvider);
+  ReferenceRepository get _refRepo => ref.read(referenceRepoProvider);
+
+  /// Dipanggil sekali dari initState layar (post-frame). Set scope + izin
+  /// tambah (berdasar peran sesi) + bootstrap data. Menggantikan `initState`.
+  void start({required bool agentScoped}) {
+    _agentScoped = agentScoped;
+    final session = ref.read(sessionProvider);
+    // RM dan ketua KUP boleh menambah customer — ketua KUP pada dasarnya RM yang
+    // merangkap ketua unit, jadi ia punya portofolio sendiri. Kemampuan AGEN
+    // sengaja disembunyikan (bukan dihapus): endpoint & alurnya tetap ada di
+    // sistem, tinggal dimunculkan lagi bila kebijakan berubah.
+    final userRoles = session?.user.roles ?? const <String>[];
+    final canAdd = userRoles.contains('RM') || userRoles.contains('KUP');
+    state = state.copyWith(canAddCustomer: canAdd);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    _loadEntityOptions(); // best-effort; chip filter entity dinamis
+    if (_isPaged) {
+      _loadScopeOffices(); // best-effort; supervisor dapat filter wilayah/cabang
+      _loadStats(); // best-effort; gagal tak boleh menghambat daftar
+      await _resetAndLoad();
+    } else {
+      await _loadAgentAll();
+    }
+  }
+
+  Future<void> _loadEntityOptions() async {
+    try {
+      final opts = await _refRepo.parameters('ENTITY_CATEGORY');
+      state = state.copyWith(entityOptions: opts);
+    } catch (_) {
+      // Chip jatuh ke "Semua" + HVC saja bila gagal.
+    }
+  }
+
+  void onHvcToggle() {
+    state = state.copyWith(hvcFilter: !state.hvcFilter);
+    if (_isPaged) {
+      _loadStats();
+      _resetAndLoad();
+    }
+  }
+
+  Future<void> _loadScopeOffices() async {
+    try {
+      final offices = await _dashRepo.getScopeOffices();
+      state = state.copyWith(offices: offices);
+    } catch (_) {
+      // Filter opsional (RM/agent list kosong); abaikan gagal.
+    }
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final kpi = await _repo.getCustomerKpi(
+        search: state.searchTerm,
+        entity: state.entityFilter,
+        regionId: state.regionId,
+        branchId: state.branchId,
+        hvc: state.hvcFilter,
+      );
+      state = state.copyWith(kpi: kpi);
+    } catch (_) {
+      // KPI dekoratif; biarkan "–".
+    }
+  }
+
+  // ── Jalur paginated (non-agent) ─────────────────────────────────────────────
+  Future<void> _resetAndLoad() async {
+    state = state.copyWith(page: 0, initialLoading: true, error: null);
+    await _loadPage();
+  }
+
+  Future<void> _loadPage() async {
+    final seq = ++_loadSeq; // klaim ini sbg load terbaru
+    try {
+      final res = await _repo.getCustomersPaged(
+        page: state.page,
+        size: kCustomerPageSize,
+        search: state.searchTerm,
+        entity: state.entityFilter,
+        regionId: state.regionId,
+        branchId: state.branchId,
+        hvc: state.hvcFilter,
+      );
+      // Load lebih baru (filter/search/reset) mulai saat ini in-flight — buang
+      // respons usang ini agar barisnya tak menimpa daftar baru.
+      if (seq != _loadSeq) return;
+      // Refresh bisa mendarat melewati halaman terakhir (data menyusut) —
+      // mundur ke halaman terakhir yang masih ada.
+      if (res.content.isEmpty && res.page > 0 && res.totalPages > 0) {
+        state = state.copyWith(page: res.totalPages - 1);
+        await _loadPage();
+        return;
+      }
+      state = state.copyWith(
+        items: res.content,
+        page: res.page,
+        totalPages: res.totalPages,
+        totalElements: res.totalElements,
+        initialLoading: false,
+      );
+    } catch (e) {
+      if (seq != _loadSeq) return;
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+        initialLoading: false,
+      );
+    }
+  }
+
+  /// Pindah halaman dari kontrol paging. (Scroll-ke-atas ditangani layar.)
+  void goToPage(int page) {
+    if (page < 0 ||
+        (state.totalPages > 0 && page >= state.totalPages) ||
+        page == state.page) {
+      return;
+    }
+    state = state.copyWith(page: page, initialLoading: true, error: null);
+    _loadPage();
+  }
+
+  // ── Jalur agent (client-side) ───────────────────────────────────────────────
+  Future<void> _loadAgentAll() async {
+    state = state.copyWith(initialLoading: true, error: null);
+    try {
+      final data = await _repo.getAgentCustomers();
+      state = state.copyWith(items: data, initialLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+        initialLoading: false,
+      );
+    }
+  }
+
+  Future<void> refresh() {
+    if (_isPaged) {
+      _loadStats(); // header KPI ikut data yang diedit di layar detail
+      // Muat ulang halaman AKTIF (bukan balik ke halaman 1).
+      state = state.copyWith(initialLoading: true, error: null);
+      return _loadPage();
+    }
+    return _loadAgentAll();
+  }
+
+  void onSearchChanged(String value) {
+    final v = value.trim();
+    if (v == state.searchTerm) return;
+    state = state.copyWith(searchTerm: v);
+    if (_isPaged) {
+      _resetAndLoad();
+      _loadStats(); // header counts ikut filter
+    }
+  }
+
+  void onEntityChanged(String? entity) {
+    state = state.copyWith(entityFilter: entity);
+    if (_isPaged) {
+      _resetAndLoad();
+      _loadStats();
+    }
+  }
+
+  void onRegionChanged(String? regionId) {
+    // branches bergantung region yang dipilih → reset branch.
+    state = state.copyWith(regionId: regionId, branchId: null);
+    _resetAndLoad();
+    _loadStats();
+  }
+
+  void onBranchChanged(String? branchId) {
+    state = state.copyWith(branchId: branchId);
+    _resetAndLoad();
+    _loadStats();
+  }
+}

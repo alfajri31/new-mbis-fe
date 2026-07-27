@@ -1,0 +1,166 @@
+name: mbis
+description: "M-BIS — Marketing/Business Information System Askrindo (PJD). Satu codebase untuk web dan mobile: pipeline, nasabah, kunjungan, dan analisis kinerja."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  # ^3.12.0 (not 3.12.2) so the Docker build can use the cirruslabs flutter:3.44.0
+  # image (Dart 3.12.0) — they haven't published a 3.44.3 image yet. Local dev on
+  # 3.44.3 (Dart 3.12.2) still satisfies this. Raise back to ^3.12.2 when the
+  # Dockerfile is bumped to a Flutter image that bundles Dart >= 3.12.2.
+  sdk: ^3.12.0
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+  # Clean web URLs (usePathUrlStrategy). SDK package; no-op off web.
+  flutter_web_plugins:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  # Token sesi (access + refresh) disimpan di sini, BUKAN di SharedPreferences:
+  # disandarkan ke Android Keystore / iOS Keychain sehingga tidak terbaca sebagai
+  # teks biasa di perangkat yang di-root/jailbreak atau lewat `adb backup`.
+  # v10+ wajib: implementasi web-nya berbasis package:web (bukan dart:html) sehingga
+  # kompatibel dengan build `flutter build web --wasm` (v9 memakai dart:html dan
+  # menggagalkan build web).
+  flutter_secure_storage: ^10.3.1
+  # Microsoft Entra ID (Azure AD) SSO. The browser interaction is done via
+  # package:web (already below) so it stays WASM-compatible — flutter_web_auth_2
+  # can't be used here because its web implementation imports dart:html, which the
+  # --wasm build forbids. crypto builds the PKCE code challenge; token exchange is a
+  # plain HTTPS POST to Microsoft (no CDN).
+  crypto: ^3.0.3
+  # Real file picking, GPS, and an OpenStreetMap-based map picker (no API key needed)
+  file_picker: ^8.1.2
+  image_picker: ^1.1.2
+  geolocator: ^13.0.1
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  # Native (mobile/desktop) file opening: write the fetched bytes to a temp file
+  # and hand it to the OS viewer (e.g. a PDF reader). Web uses package:web (see
+  # file_opener_web.dart) — path_provider has no web implementation.
+  path_provider: ^2.1.4
+  open_filex: ^4.5.0
+  # Web DOM/JS interop for the WASM-compatible web file opener (Blob/URL/window).
+  web: ^1.1.0
+  go_router: ^17.3.0
+  # Open the external Fintrack portal for commission disbursement (pencairan is
+  # handled outside this app).
+  url_launcher: ^6.3.0
+  # Push notifications (FCM). firebase_core init is guarded so the app still boots
+  # if Firebase isn't configured; flutter_local_notifications renders foreground pushes.
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.1.3
+  flutter_local_notifications: ^18.0.1
+  # Premium-calculator PDF export (proforma invoice): pdf builds the document,
+  # printing previews/shares/prints it (works on web & mobile).
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  flutter_riverpod: ^3.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo-mbis.webp
+    - assets/images/maskot.png
+    - assets/images/askrindo-logo.png
+    - assets/product_knowledge.json
+
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/PlusJakartaSans-Italic.ttf
+          style: italic
+
+    # Alias the brand font as "Roboto" so the web CanvasKit/skwasm engine finds a
+    # locally-registered Roboto and STOPS fetching Roboto-Regular from
+    # fonts.gstatic.com on every cold load (a 3rd-party DNS+TLS round-trip + ~63KB
+    # that clashes with our keep-everything-on-the-VPS setup). The app already
+    # renders all text in PlusJakartaSans via the theme; this only satisfies the
+    # engine's internal fallback, so reusing the brand font keeps any fallback text
+    # on-brand. Same asset path as above -> bundled once, no extra bytes.
+    # See flutter/flutter#136118.
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

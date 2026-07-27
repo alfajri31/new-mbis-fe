@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Authentication complete</title>
+</head>
+<body>
+  <!--
+    Microsoft SSO redirect landing page (web). Microsoft redirects the sign-in popup
+    here (<origin>/auth.html?code=...); this script hands the full URL back to the
+    opener window (see entra_authenticator_web.dart) and closes the popup so
+    EntraAuthService can read the authorization code. Register this exact URL as a
+    "SPA" redirect URI in the Entra App Registration.
+  -->
+  <script>
+    function postAuthenticationMessage() {
+      var message = { 'mbis-sso': window.location.href };
+      if (window.opener) {
+        window.opener.postMessage(message, window.location.origin);
+        window.close();
+      } else if (window.parent && window.parent !== window) {
+        window.parent.postMessage(message, window.location.origin);
+      }
+    }
+    postAuthenticationMessage();
+  </script>
+  Authentication complete. You can close this window.
+</body>
+</html>

@@ -1,0 +1,131 @@
+# Codemagic — jalur rilis M-BIS.
+#
+# Alasan ada berkas ini: build & unggah iOS WAJIB macOS + Xcode, sedangkan tim bekerja
+# di Windows. Codemagic menyediakan runner macOS. CI gerbang PR (analyze + test) tetap
+# di GitHub Actions (.github/workflows/ci.yml); berkas ini khusus untuk RILIS.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# PRASYARAT sebelum workflow ini bisa jalan (rinci di docs/RILIS-IOS.md):
+#
+#   1. Role App Store Connect minimal App Manager → bikin app record + submit.
+#      Membuat API key-nya sendiri butuh Admin/Account Holder.
+#   2. Bundle id `com.askrindo.mbis.mobile` terdaftar di Apple Developer.
+#   3. App Store Connect → Users and Access → Integrations → App Store Connect API:
+#      buat key (akses App Manager), catat Issuer ID + Key ID, unduh `.p8`
+#      (HANYA bisa diunduh sekali). Pasang di Codemagic → Teams → Integrations →
+#      App Store Connect dengan nama persis `askrindo-app-store-connect`.
+#   4. Codemagic → Environment variables, buat GROUP `mbis-prod` (tidak rahasia):
+#         API_URL = https://<host-backend-produksi>        (tanpa akhiran /api)
+#         APP_ENV = prod
+#      Base URL sengaja lewat variabel, tidak di-hardcode — aturan externalize-config.
+#   5. Untuk workflow Android, buat GROUP `mbis-android-keystore` (RAHASIA, centang
+#      "Secure" pada tiap variabel):
+#         KEYSTORE_B64       = isi upload keystore (.jks) yang di-base64
+#                              (Windows: certutil -encode mbis.jks mbis.b64)
+#         KEYSTORE_PASSWORD  = password store
+#         KEY_ALIAS          = alias kunci
+#         KEY_PASSWORD       = password kunci
+#   6. iOS: `ios/Runner/GoogleService-Info.plist` BELUM ada di repo → push FCM mati
+#      di iOS sampai ditambahkan. Daftarkan app iOS di Firebase project `mbis-38aa0`
+#      (proyek yang sama dengan Android), lalu unggah APNs key ke Firebase.
+# ──────────────────────────────────────────────────────────────────────────────
+
+definitions:
+  common_scripts:
+    - &pub_get
+      name: Ambil dependensi
+      script: flutter pub get
+    - &verify
+      name: Analyze + test (gerbang mutu sebelum rilis)
+      script: |
+        flutter analyze
+        flutter test
+
+workflows:
+  # ───────────────────────────── iOS → TestFlight ─────────────────────────────
+  ios-testflight:
+    name: iOS — TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Ini NAMA integrasi di Codemagic (Teams → Integrations → App Store Connect),
+      # bukan Key ID-nya. Beri nama persis seperti di bawah saat memasang key,
+      # atau ubah baris ini agar cocok dengan nama yang Anda pakai.
+      app_store_connect: askrindo-app-store-connect
+    environment:
+      flutter: 3.44.2          # samakan dengan .github/workflows/ci.yml & pubspec
+      xcode: latest
+      cocoapods: default
+      groups:
+        - mbis-prod            # API_URL, APP_ENV
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.askrindo.mbis.mobile
+    scripts:
+      - *pub_get
+      - *verify
+      - name: Pasang provisioning profile ke project Xcode
+        script: xcode-project use-profiles
+      - name: Build IPA
+        # iOS TIDAK memakai --flavor: skema flavor hanya dikonfigurasi di Android
+        # (prod/staging), sisi iOS cuma punya skema `Runner`.
+        script: |
+          flutter build ipa --release \
+            --dart-define=API_URL="$API_URL" \
+            --dart-define=APP_ENV="$APP_ENV" \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # Naikkan ke App Store review hanya setelah rute distribusi diputuskan TI
+        # (TestFlight → Custom App ABM / Unlisted / publik). Lihat docs/RILIS-IOS.md §0c.
+        submit_to_app_store: false
+      email:
+        recipients:
+          - transformation@askrindo.co.id
+        notify:
+          success: true
+          failure: true
+
+  # ─────────────────────────── Android → AAB rilis ────────────────────────────
+  android-release:
+    name: Android — AAB rilis
+    instance_type: linux_x2
+    max_build_duration: 45
+    environment:
+      flutter: 3.44.2
+      java: 17
+      groups:
+        - mbis-prod            # API_URL, APP_ENV
+        - mbis-android-keystore  # KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+    scripts:
+      - name: Susun key.properties dari secret
+        # build.gradle.kts membaca android/key.properties; kalau tidak ada, ia jatuh
+        # ke debug key — itu TIDAK boleh untuk rilis, jadi berkas ini wajib dibuat.
+        script: |
+          echo "$KEYSTORE_B64" | base64 --decode > "$CM_BUILD_DIR/android/app/release.keystore"
+          cat > "$CM_BUILD_DIR/android/key.properties" <<EOF
+          storeFile=$CM_BUILD_DIR/android/app/release.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+      - *pub_get
+      - *verify
+      - name: Build AAB
+        script: |
+          flutter build appbundle --release --flavor prod \
+            --dart-define=API_URL="$API_URL" \
+            --dart-define=APP_ENV="$APP_ENV" \
+            --build-number=$PROJECT_BUILD_NUMBER
+    artifacts:
+      - build/app/outputs/bundle/**/*.aab
+      - build/app/outputs/**/mapping.txt
+
+# Catatan web: website memakai Flutter Web dan dibangun lewat Dockerfile di root repo
+# (multi-stage → nginx), bukan lewat Codemagic. Lihat Dockerfile & nginx.conf.
