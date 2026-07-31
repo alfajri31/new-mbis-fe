@@ -12,8 +12,6 @@ ARG FLUTTER_VERSION=3.44.0
 FROM ghcr.io/cirruslabs/flutter:${FLUTTER_VERSION} AS build
 WORKDIR /app
 
-# API_URL is intentionally NOT passed: the web app calls '/api' on its own origin,
-# and nginx (stage 2) proxies that to the backend — so no rebuild on domain change.
 # Maps use free OpenStreetMap tiles — no API key needed.
 
 # Resolve dependencies first for layer caching.
@@ -31,6 +29,22 @@ COPY . .
 ARG ENTRA_TENANT_ID=
 ARG ENTRA_CLIENT_ID=
 
+# Base URL backend. KOSONG = perilaku lama: web memanggil '/api' di origin-nya sendiri dan
+# nginx (stage 2) mem-proxy-nya ke backend, sehingga ganti domain tidak perlu rebuild. Itu
+# yang masih dipakai staging (mbis.askrindo.net) dan wajib tetap begitu.
+#
+# PROD memakai topologi lain: API publik di https://mbis.askrindo.co.id/v2 sementara web
+# dilayani terpisah di IP privat — beda origin, jadi bundle harus tahu alamat penuh API:
+#   docker build --build-arg API_URL=https://mbis.askrindo.co.id/v2 ...
+# TANPA akhiran '/api' dan tanpa garis miring di akhir; kode fitur menempelkan '/api/...'
+# sendiri. Konsekuensi yang tidak boleh dilupakan: begitu ini diisi, backend WAJIB
+# mengizinkan origin web di MBIS_CORS_ALLOWED_ORIGINS — kalau tidak seluruh web kena 403
+# padahal aplikasi HP tetap normal. Lihat docs/MIGRASI-DOMAIN-PROD-V2.md.
+#
+# Sengaja diletakkan SETELAH `flutter pub get`: nilainya berubah tiap ganti target, dan
+# ARG di atas COPY pubspec akan membatalkan cache dependensi setiap kali.
+ARG API_URL=
+
 # --wasm: compile Dart to WasmGC (skwasm renderer) instead of JavaScript. The app
 # runs as compiled WebAssembly -> no multi-MB main.dart.js to parse/JIT on the main
 # thread (that was ~4.4s of CPU at first load), and skwasm is a smaller renderer
@@ -43,6 +57,7 @@ ARG ENTRA_CLIENT_ID=
 # our own nginx instead of pulling from gstatic.com on every cold start -> removes a
 # third-party DNS+TLS round-trip and lets the files be compressed & hard-cached.
 RUN flutter build web --wasm --release --no-web-resources-cdn \
+    --dart-define=API_URL=$API_URL \
     --dart-define=ENTRA_TENANT_ID=$ENTRA_TENANT_ID \
     --dart-define=ENTRA_CLIENT_ID=$ENTRA_CLIENT_ID
 
