@@ -83,6 +83,11 @@ dependencies:
   pdf: ^3.11.1
   printing: ^5.13.4
   flutter_riverpod: ^3.3.2
+  # Pelaporan crash. Dinyalakan bersamaan dengan minify R8 di build rilis: sejak
+  # kode JVM diobfuskasi, crash di lapangan tidak lagi bisa dilacak dari laporan
+  # pengguna saja. Jangan pernah menaruh PII (NIK, NPWP, nama nasabah) di custom
+  # key — lihat core/observability/crash_reporter.dart.
+  firebase_crashlytics: ^4.3.10
 
 dev_dependencies:
   flutter_test:
@@ -111,6 +116,11 @@ flutter:
     - assets/images/maskot.png
     - assets/images/askrindo-logo.png
     - assets/product_knowledge.json
+    # Rantai sertifikat untuk certificate pinning. Didaftarkan sebagai DIREKTORI
+    # supaya berkas .crt bisa ditambahkan tanpa mengubah pubspec lagi. Saat ini
+    # hanya berisi README — pinning nonaktif sampai SSL_PINNED_HOSTS diisi.
+    # Lihat assets/ssl/README.md dan lib/src/network/ssl_pinning.dart.
+    - assets/ssl/
 
   fonts:
     - family: PlusJakartaSans

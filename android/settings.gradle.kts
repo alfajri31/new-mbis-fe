@@ -23,6 +23,8 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
     // Firebase Cloud Messaging — reads android/app/google-services.json at build time.
     id("com.google.gms.google-services") version "4.4.2" apply false
+    // Crashlytics: mengunggah simbol NDK & memetakan crash ke rilis yang benar.
+    id("com.google.firebase.crashlytics") version "3.0.2" apply false
 }
 
 include(":app")

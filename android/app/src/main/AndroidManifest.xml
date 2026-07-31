@@ -1,10 +1,31 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Android 13+ runtime permission for posting notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Firebase Messaging menyuntikkan AD_ID lewat merged manifest. M-BIS tidak
+         beriklan dan tidak melakukan tracking iklan, jadi permission-nya dibuang
+         eksplisit: kalau ia lolos ke AAB, form Data safety harus mendeklarasikan
+         "Advertising ID" dan deklarasi itu jadi tidak cocok dengan perilaku app
+         (penyebab suspend yang umum). -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
+
+    <!-- image_picker & file_picker menyuntikkan seluruh trio READ_MEDIA_*, padahal
+         app ini hanya mengambil foto (kamera) dan berkas pdf/jpg/png lewat SAF —
+         tidak pernah menyentuh video atau audio. Permission READ_MEDIA_* termasuk
+         yang paling disorot reviewer Play, jadi dua yang tidak terpakai dibuang. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
     <application
         android:label="MBIS"
         android:name="${applicationName}"
