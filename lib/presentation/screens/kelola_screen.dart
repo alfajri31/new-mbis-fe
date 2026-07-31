@@ -97,6 +97,12 @@ class KelolaScreen extends StatelessWidget {
         desc: 'Setujui/tolak referral pipeline lintas cabang & assign RM tujuan',
         bg: AppColors.navyBg,
         route: '/kelola/referral',
+        // Antrean ini memang milik pimpinan kantor: ReferralService menyaringnya
+        // per cabang dan hanya menandai `actionable` untuk BM yang mengampu
+        // tahap berjalan. Tanpa baris ini kartunya jatuh ke default ADMIN-only,
+        // sehingga BM cabang tujuan melihat statusnya "Menunggu BM Tujuan" tanpa
+        // punya satu pun pintu untuk menyetujuinya.
+        roles: {'ADMIN', 'BM', 'RO', 'KUP'},
       ),
       _KelolaItem(
         icon: Icons.payments_outlined,
@@ -111,6 +117,20 @@ class KelolaScreen extends StatelessWidget {
         desc: 'Unduh report kinerja (customer, pipeline, kunjungan) sebagai Excel per rentang tanggal',
         bg: AppColors.greenLight,
         route: '/kelola/export-data',
+      ),
+      _KelolaItem(
+        icon: Icons.file_upload_outlined,
+        label: 'Impor Pipeline',
+        desc: 'Impor pipeline WON dari RM yang belum diinput manual, via template Excel',
+        bg: AppColors.orangeLight,
+        route: '/kelola/import-pipeline',
+      ),
+      _KelolaItem(
+        icon: Icons.flag_outlined,
+        label: 'Impor Target RM',
+        desc: 'Unggah target bulanan tiap RM per kategori (AKK, AKM, SB, ...) via template Excel',
+        bg: AppColors.navyBg,
+        route: '/kelola/import-target',
       ),
     ];
 

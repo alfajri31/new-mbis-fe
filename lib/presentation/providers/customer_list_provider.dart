@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mbis/core/providers/app_providers.dart';
 import 'package:mbis/core/providers/repository_providers.dart';
+import 'package:mbis/src/app.dart';
 import 'package:mbis/src/customer/customer_repository.dart';
 import 'package:mbis/src/dashboard/dashboard_repository.dart';
 import 'package:mbis/src/reference/reference_repository.dart';
@@ -30,6 +31,15 @@ class CustomerListState {
   final String? error;
   final bool canAddCustomer;
 
+  // View atasan (supervisor): filter RM/COB + kartu Target/Realisasi/Visit. Hanya
+  // untuk RO/BM/KUP/ADMIN/DPJ; RM/agen tetap daftar customer polos.
+  final bool isSupervisor;
+  final String? rmId; // RM terpilih (null = semua RM di scope)
+  final String? rmName; // label tampil untuk RM terpilih
+  final String? cob; // COB / kategori-target terpilih (null = semua)
+  final List<DashboardCategoryStat> cobOptions; // opsi dropdown COB
+  final CustomerScopedSummary? summary; // headline Target/Realisasi/Visit
+
   const CustomerListState({
     this.items = const [],
     this.page = 0,
@@ -46,6 +56,12 @@ class CustomerListState {
     this.initialLoading = true,
     this.error,
     this.canAddCustomer = false,
+    this.isSupervisor = false,
+    this.rmId,
+    this.rmName,
+    this.cob,
+    this.cobOptions = const [],
+    this.summary,
   });
 
   CustomerListState copyWith({
@@ -64,6 +80,12 @@ class CustomerListState {
     bool? initialLoading,
     Object? error = _keep,
     bool? canAddCustomer,
+    bool? isSupervisor,
+    Object? rmId = _keep,
+    Object? rmName = _keep,
+    Object? cob = _keep,
+    List<DashboardCategoryStat>? cobOptions,
+    Object? summary = _keep,
   }) {
     return CustomerListState(
       items: items ?? this.items,
@@ -82,6 +104,12 @@ class CustomerListState {
       initialLoading: initialLoading ?? this.initialLoading,
       error: error == _keep ? this.error : error as String?,
       canAddCustomer: canAddCustomer ?? this.canAddCustomer,
+      isSupervisor: isSupervisor ?? this.isSupervisor,
+      rmId: rmId == _keep ? this.rmId : rmId as String?,
+      rmName: rmName == _keep ? this.rmName : rmName as String?,
+      cob: cob == _keep ? this.cob : cob as String?,
+      cobOptions: cobOptions ?? this.cobOptions,
+      summary: summary == _keep ? this.summary : summary as CustomerScopedSummary?,
     );
   }
 
@@ -130,7 +158,11 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     // sistem, tinggal dimunculkan lagi bila kebijakan berubah.
     final userRoles = session?.user.roles ?? const <String>[];
     final canAdd = userRoles.contains('RM') || userRoles.contains('KUP');
-    state = state.copyWith(canAddCustomer: canAdd);
+    // "View atasan": peran supervisor dapat filter RM/COB + kartu monitoring.
+    // Pakai daftar penyelia kanonik aplikasi (ADMIN/RO/BM/KUP — DPJ belum termasuk,
+    // selaras main/profil/tools screen). Hanya bermakna di jalur paged (non-agent).
+    final isSupervisor = _isPaged && MbisApp.isSupervisorRole(userRoles);
+    state = state.copyWith(canAddCustomer: canAdd, isSupervisor: isSupervisor);
     _bootstrap();
   }
 
@@ -139,9 +171,41 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     if (_isPaged) {
       _loadScopeOffices(); // best-effort; supervisor dapat filter wilayah/cabang
       _loadStats(); // best-effort; gagal tak boleh menghambat daftar
+      if (state.isSupervisor) {
+        _loadCobOptions(); // opsi dropdown COB (pakai kategori dashboard)
+        _loadSummary(); // kartu Target/Realisasi/Visit
+      }
       await _resetAndLoad();
     } else {
       await _loadAgentAll();
+    }
+  }
+
+  /// Opsi COB / kategori-target untuk filter supervisor (11 sama dengan dashboard).
+  Future<void> _loadCobOptions() async {
+    try {
+      final cats = await _dashRepo.getCategories();
+      state = state.copyWith(cobOptions: cats.categories);
+    } catch (_) {
+      // Filter COB opsional; biarkan kosong bila gagal.
+    }
+  }
+
+  /// Headline Target / Realisasi / Visit untuk kartu supervisor. Mengikuti hanya
+  /// filter region/branch/RM/COB (bukan pencarian nama atau chip entity), jadi
+  /// tanpa filter angkanya sama dengan dashboard depan.
+  Future<void> _loadSummary() async {
+    if (!state.isSupervisor) return;
+    try {
+      final s = await _dashRepo.getCustomerSummary(
+        regionId: state.regionId,
+        branchId: state.branchId,
+        rmId: state.rmId,
+        cob: state.cob,
+      );
+      state = state.copyWith(summary: s);
+    } catch (_) {
+      // Kartu dekoratif; biarkan "–" bila gagal.
     }
   }
 
@@ -178,6 +242,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         entity: state.entityFilter,
         regionId: state.regionId,
         branchId: state.branchId,
+        rmId: state.rmId,
         hvc: state.hvcFilter,
       );
       state = state.copyWith(kpi: kpi);
@@ -202,6 +267,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         entity: state.entityFilter,
         regionId: state.regionId,
         branchId: state.branchId,
+        rmId: state.rmId,
         hvc: state.hvcFilter,
       );
       // Load lebih baru (filter/search/reset) mulai saat ini in-flight — buang
@@ -284,15 +350,50 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
   }
 
   void onRegionChanged(String? regionId) {
-    // branches bergantung region yang dipilih → reset branch.
-    state = state.copyWith(regionId: regionId, branchId: null);
+    // branches bergantung region yang dipilih → reset branch. Dropdown RM ikut
+    // region/branch, jadi reset juga.
+    state = state.copyWith(
+        regionId: regionId, branchId: null, rmId: null, rmName: null);
     _resetAndLoad();
-    _loadStats();
+    _loadStats(); // header counts ikut filter region/branch
+    _loadSummary(); // kartu Target/Realisasi/Visit ikut filter region/branch
   }
 
   void onBranchChanged(String? branchId) {
-    state = state.copyWith(branchId: branchId);
+    // Dropdown RM ikut region/branch, jadi reset saat cabang berubah.
+    state = state.copyWith(branchId: branchId, rmId: null, rmName: null);
     _resetAndLoad();
     _loadStats();
+    _loadSummary();
+  }
+
+  void onRmChanged(String? rmId, String? rmName) {
+    state = state.copyWith(rmId: rmId, rmName: rmName);
+    _resetAndLoad(); // daftar menyempit ke customer RM ini
+    _loadStats();
+    _loadSummary();
+  }
+
+  void onCobChanged(String? cob) {
+    // COB hanya memengaruhi kartu Target/Realisasi, bukan daftar customer.
+    state = state.copyWith(cob: cob);
+    _loadSummary();
+  }
+
+  /// Bersihkan semua filter yang dikendalikan sheet sekaligus (tombol "Reset").
+  void resetAllFilters() {
+    state = state.copyWith(
+      entityFilter: null,
+      hvcFilter: false,
+      regionId: null,
+      branchId: null,
+      rmId: null,
+      rmName: null,
+    );
+    if (_isPaged) {
+      _resetAndLoad();
+      _loadStats();
+      _loadSummary();
+    }
   }
 }

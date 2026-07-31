@@ -55,6 +55,43 @@ Color agentStatusColor(String status) {
 
 String agentTypeLabel(String type) => type == 'TPM' ? 'TPM' : 'Agen';
 
+/// Human label for an agent onboarding document code (phase-1 registration &
+/// phase-2 post-license). Falls back to the raw code for unknown types.
+String agentDocLabel(String code) {
+  switch (code) {
+    // Phase 1 — pendaftaran
+    case 'KTP':
+      return 'Fotokopi KTP';
+    case 'NPWP':
+      return 'Fotokopi NPWP';
+    case 'PIPELINE':
+      return 'Dokumen Pipeline';
+    case 'SURAT_PERNYATAAN':
+      return 'Surat Pernyataan Bermeterai';
+    case 'PENGALAMAN_KERJA':
+      return 'Pengalaman Kerja';
+    case 'MEMO_1':
+      return 'Memo Pengajuan';
+    case 'AAUI':
+      return 'Copy AAUI';
+    case 'SK_DOMISILI':
+      return 'SK Domisili';
+    case 'SURAT_PENGUNDURAN_DIRI':
+      return 'Surat Pengunduran Diri';
+    // Phase 2 — setelah lisensi
+    case 'PAKTA_INTEGRITAS':
+      return 'Pakta Integritas';
+    case 'PKS':
+      return 'Perjanjian Kerja Sama (PKS)';
+    case 'SMAP':
+      return 'SMAP (Sistem Manajemen Anti Penyuapan)';
+    case 'MEMO_2':
+      return 'Memo (Setelah Lisensi)';
+    default:
+      return code;
+  }
+}
+
 /// S-150 — Manajemen Agen. Back-office worklist for the agent onboarding flow.
 /// Tabs adapt to the caller's role: every allowed user sees "Semua"; a Branch
 /// Manager also gets "Persetujuan" (pending), an Admin gets "Lisensi".
@@ -66,8 +103,19 @@ class AgentManagementScreen extends StatelessWidget {
     final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
     final repo = AgentRepository(apiClient: ApiClient(session: MbisApp.of(context)?.session));
 
+    // RM murni (tanpa peran back-office) hanya melihat agen yang dia ajukan sendiri
+    // — layar ini jadi "riwayat pengajuan"-nya, bukan manajemen se-cabang.
+    final isRmOnly = roles.contains('RM') &&
+        !roles.any((r) => r == 'BM' || r == 'RO' || r == 'KUP' || r == 'ADMIN');
+
     final tabs = <({String label, Future<List<AgentModel>> Function() loader, String emptyMsg})>[
-      (label: 'Semua', loader: repo.getAgents, emptyMsg: 'Belum ada agen terdaftar.'),
+      (
+        label: 'Semua',
+        loader: repo.getAgents,
+        emptyMsg: isRmOnly
+            ? 'Belum ada pengajuan agen. Ajukan agen baru lewat menu Pengajuan Agen.'
+            : 'Belum ada agen terdaftar.',
+      ),
     ];
     if (roles.any((r) => r == 'BM' || r == 'RO' || r == 'KUP')) {
       tabs.add((label: 'Pengajuan', loader: repo.getPending, emptyMsg: 'Tidak ada agen menunggu persetujuan.'));
@@ -80,7 +128,8 @@ class AgentManagementScreen extends StatelessWidget {
     if (tabs.length == 1) {
       return Scaffold(
         backgroundColor: AppColors.bgScreen,
-        appBar: const BackAppBar(title: 'Manajemen Agen'),
+        appBar: BackAppBar(
+            title: isRmOnly ? 'Pengajuan Agen Saya' : 'Manajemen Agen'),
         body: _AgentListTab(loader: tabs.first.loader, emptyMsg: tabs.first.emptyMsg),
       );
     }
@@ -168,6 +217,7 @@ class _AgentListTabState extends State<_AgentListTab>
         Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
           child: TextField(
+            style: AppInput.fieldText,
             onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(

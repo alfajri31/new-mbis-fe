@@ -177,6 +177,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
     String? ktpSubdistrict,
     String? ktpRt,
     String? ktpRw,
+    String? ktpPostalCode,
     String? domicileAddress,
     String? domicileProvince,
     String? domicileCity,
@@ -184,6 +185,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
     String? domicileSubdistrict,
     String? domicileRt,
     String? domicileRw,
+    String? domicilePostalCode,
     required List<(String, List<int>, String)> uploads,
   }) async {
     state = state.copyWith(busy: true);
@@ -210,6 +212,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
           ktpSubdistrict: ktpSubdistrict,
           ktpRt: ktpRt,
           ktpRw: ktpRw,
+          ktpPostalCode: ktpPostalCode,
           domicileAddress: domicileAddress,
           domicileProvince: domicileProvince,
           domicileCity: domicileCity,
@@ -217,6 +220,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
           domicileSubdistrict: domicileSubdistrict,
           domicileRt: domicileRt,
           domicileRw: domicileRw,
+          domicilePostalCode: domicilePostalCode,
         );
         agentId = existingId;
       } else {
@@ -238,6 +242,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
           ktpSubdistrict: ktpSubdistrict,
           ktpRt: ktpRt,
           ktpRw: ktpRw,
+          ktpPostalCode: ktpPostalCode,
           domicileAddress: domicileAddress,
           domicileProvince: domicileProvince,
           domicileCity: domicileCity,
@@ -245,6 +250,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
           domicileSubdistrict: domicileSubdistrict,
           domicileRt: domicileRt,
           domicileRw: domicileRw,
+          domicilePostalCode: domicilePostalCode,
         );
         agentId = created.id;
       }

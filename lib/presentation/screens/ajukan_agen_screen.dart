@@ -1,15 +1,20 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/input_formatters.dart';
 import '../widgets/field_label.dart';
 import '../../src/app.dart';
 import '../../src/network/api_client.dart';
 import '../../src/agent/agent_repository.dart';
+import '../../src/region/region_repository.dart';
 import '../../src/common/file_opener.dart';
+import '../../core/providers/repository_providers.dart';
 import '../providers/ajukan_agen_provider.dart';
 import '../widgets/back_app_bar.dart';
 import '../widgets/missing_fields_notice.dart';
+import '../widgets/region_address_fields.dart';
 
 /// RM submits a new Agen/TPM candidate (POST /api/agents). This creates the
 /// agent as DRAFT — the first step of the approval chain (RM → Pimpinan Cabang
@@ -41,6 +46,14 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   bool _domicileDiffers = false; // reveals + requires SK Domisili
   bool _wasAgentElsewhere = false; // reveals + requires Surat Pengunduran Diri
 
+  // Langkah wizard aktif: 0 Data · 1 Alamat · 2 Dokumen · 3 Kirim. Semua field
+  // tetap hidup di dalam Form (IndexedStack), jadi validasi & submit tak berubah.
+  int _step = 0;
+  static const _stepLabels = ['Data', 'Alamat', 'Dokumen', 'Kirim'];
+
+  /// Repo wilayah untuk dropdown alamat (provinsi→kelurahan).
+  RegionRepository get _regionRepo => ref.read(regionRepoProvider);
+
   // State async (template dokumen, config field/checklist, opsi gender, kode
   // dokumen eksisting, flag simpan) dikelola AjukanAgenNotifier. Field lama
   // diproksikan lewat getter agar kode build/form memakai nama yang sama tanpa
@@ -50,7 +63,6 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   AjukanAgenNotifier get _notifier => ref.read(ajukanAgenProvider.notifier);
 
   Map<String, AgentTemplateItem> get _templates => _aas.templates; // code → template (for download buttons)
-  Map<String, bool> get _fieldRequired => _aas.fieldRequired; // field code → wajib (admin config)
   List<AjukanDocDef>? get _configDocs => _aas.configDocs; // registration doc checklist from admin config (null = fallback)
   Set<String> get _existingDocCodes => _aas.existingDocCodes;
   bool get _busy => _aas.busy;
@@ -73,7 +85,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
     _gender = e.gender;
     _birthDate = e.birthDate.isEmpty ? null : DateTime.tryParse(e.birthDate);
     _nameController.text = e.name;
-    _npwpController.text = e.npwp;
+    _npwpController.text = maskNpwp(e.npwp);
     _emailController.text = e.email;
     _phoneController.text = e.phone;
     _ktpNumberController.text = e.ktpNumber;
@@ -85,6 +97,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
     _ktpSubdistrictController.text = e.ktpSubdistrict;
     _ktpRtController.text = e.ktpRt;
     _ktpRwController.text = e.ktpRw;
+    _ktpPostalController.text = e.ktpPostalCode;
     _domAddressController.text = e.domicileAddress;
     _domProvinceController.text = e.domicileProvince;
     _domCityController.text = e.domicileCity;
@@ -92,6 +105,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
     _domSubdistrictController.text = e.domicileSubdistrict;
     _domRtController.text = e.domicileRt;
     _domRwController.text = e.domicileRw;
+    _domPostalController.text = e.domicilePostalCode;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadExistingDocs(e.id);
     });
@@ -108,7 +122,168 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
     });
   }
 
-  bool _req(String code, bool fallback) => _fieldRequired[code] ?? fallback;
+  // Semua field pengajuan dipaksa wajib (permintaan user), mengabaikan konfig
+  // admin per-field. Bila kelak ingin mengembalikan konfig, kembalikan ke
+  // `_fieldRequired[code] ?? fallback`.
+  bool _req(String code, bool fallback) => true;
+
+  // ── Anchor per-field untuk auto-scroll ke isian wajib pertama yang kosong ──
+  final Map<String, GlobalKey> _anchors = {};
+  GlobalKey _anchorKey(String code) => _anchors.putIfAbsent(code, () => GlobalKey());
+
+  /// Urutan field wajib per langkah (untuk cari yang kosong pertama + scroll).
+  List<String> _stepFieldCodes(int step) {
+    switch (step) {
+      case 0:
+        return const ['NAME', 'KTP_NUMBER', 'GENDER', 'BIRTHDATE', 'EMAIL',
+            'PHONE', 'NPWP', 'BANK_NAME', 'ACCOUNT_NUMBER'];
+      case 1:
+        return const ['KTP_ADDRESS', 'KTP_REGION', 'KTP_RT', 'KTP_RW',
+            'DOMICILE_ADDRESS', 'DOMICILE_REGION', 'DOMICILE_RT', 'DOMICILE_RW'];
+      case 2:
+        return const ['DOCS'];
+      default:
+        return const [];
+    }
+  }
+
+  bool _codeEmpty(String code) {
+    switch (code) {
+      case 'NAME':
+        return _nameController.text.trim().isEmpty;
+      case 'KTP_NUMBER':
+        return _ktpNumberController.text.trim().isEmpty;
+      case 'GENDER':
+        return _gender.trim().isEmpty;
+      case 'BIRTHDATE':
+        return _birthDate == null;
+      case 'EMAIL':
+        return _emailController.text.trim().isEmpty;
+      case 'PHONE':
+        return _phoneController.text.trim().isEmpty;
+      case 'NPWP':
+        return _npwpController.text.trim().isEmpty;
+      case 'BANK_NAME':
+        return _bank.trim().isEmpty;
+      case 'ACCOUNT_NUMBER':
+        return _accountNumberController.text.trim().isEmpty;
+      case 'KTP_ADDRESS':
+        return _ktpAddressController.text.trim().isEmpty;
+      case 'KTP_REGION':
+        return [_ktpProvinceController, _ktpCityController, _ktpDistrictController,
+                _ktpSubdistrictController, _ktpPostalController]
+            .any((c) => c.text.trim().isEmpty);
+      case 'KTP_RT':
+        return _ktpRtController.text.trim().isEmpty;
+      case 'KTP_RW':
+        return _ktpRwController.text.trim().isEmpty;
+      case 'DOMICILE_ADDRESS':
+        return _domAddressController.text.trim().isEmpty;
+      case 'DOMICILE_REGION':
+        return [_domProvinceController, _domCityController, _domDistrictController,
+                _domSubdistrictController, _domPostalController]
+            .any((c) => c.text.trim().isEmpty);
+      case 'DOMICILE_RT':
+        return _domRtController.text.trim().isEmpty;
+      case 'DOMICILE_RW':
+        return _domRwController.text.trim().isEmpty;
+      case 'DOCS':
+        return _missingRequiredDocs().isNotEmpty;
+      default:
+        return false;
+    }
+  }
+
+  /// Kode field wajib pertama yang kosong pada [step], atau null bila lengkap.
+  String? _firstEmptyCode(int step) {
+    for (final code in _stepFieldCodes(step)) {
+      if (_codeEmpty(code)) return code;
+    }
+    return null;
+  }
+
+  /// Nama isian yang ramah untuk ditampilkan di toast per kode field.
+  static const Map<String, String> _codeLabels = {
+    'NAME': 'Nama Lengkap',
+    'KTP_NUMBER': 'No. KTP',
+    'GENDER': 'Jenis Kelamin',
+    'BIRTHDATE': 'Tanggal Lahir',
+    'EMAIL': 'Email',
+    'PHONE': 'No. Telepon',
+    'NPWP': 'NPWP',
+    'BANK_NAME': 'Nama Bank',
+    'ACCOUNT_NUMBER': 'No. Rekening',
+    'KTP_ADDRESS': 'Alamat KTP',
+    'KTP_REGION': 'Wilayah KTP (Provinsi/Kota/Kecamatan/Kelurahan/Kode Pos)',
+    'KTP_RT': 'RT (KTP)',
+    'KTP_RW': 'RW (KTP)',
+    'DOMICILE_ADDRESS': 'Alamat Domisili',
+    'DOMICILE_REGION': 'Wilayah Domisili (Provinsi/Kota/Kecamatan/Kelurahan/Kode Pos)',
+    'DOMICILE_RT': 'RT (Domisili)',
+    'DOMICILE_RW': 'RW (Domisili)',
+  };
+
+  /// Daftar nama isian wajib yang belum lengkap pada [step] — untuk toast
+  /// informatif. Untuk langkah Dokumen, sebut nama dokumen yang kurang.
+  List<String> _missingLabelsForStep(int step) {
+    final out = <String>[];
+    for (final code in _stepFieldCodes(step)) {
+      if (!_codeEmpty(code)) continue;
+      if (code == 'DOCS') {
+        out.addAll(_missingRequiredDocs());
+      } else {
+        out.add(_codeLabels[code] ?? code);
+      }
+    }
+    return out;
+  }
+
+  void _scrollToAnchor(String code) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _anchors[code]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 350),
+            alignment: 0.1,
+            curve: Curves.easeInOut);
+      }
+    });
+  }
+
+  /// Error FORMAT (bukan sekadar kosong) pada langkah [step]. Hanya langkah Data
+  /// yang punya aturan format tambahan (email). Dipisah dari validasi Form penuh
+  /// supaya "Lanjut" TIDAK terhalang isian kosong di LANGKAH LAIN.
+  String? _stepFormatError(int step) {
+    if (step == 0) {
+      final email = _emailController.text.trim();
+      if (email.isNotEmpty && !email.contains('@')) return 'Email tidak valid';
+    }
+    return null;
+  }
+
+  /// "Lanjut": validasi HANYA langkah aktif. Bila ada yang kosong/format salah →
+  /// tampilkan error merah, toast informatif, dan scroll ke isian salah pertama.
+  void _onNext() {
+    final firstEmpty = _firstEmptyCode(_step);
+    final formatErr = _stepFormatError(_step);
+    if (firstEmpty == null && formatErr == null) {
+      setState(() => _step += 1);
+      return;
+    }
+    // Nyalakan error inline (merah). validate() penuh hanya untuk MENAMPILKAN
+    // error; keputusan lanjut/tidak murni dari langkah aktif di atas.
+    setState(() => _autovalidate = AutovalidateMode.onUserInteraction);
+    _formKey.currentState?.validate();
+    final labels = [
+      ..._missingLabelsForStep(_step),
+      ?formatErr,
+    ];
+    showMissingFieldsNotice(
+      ScaffoldMessenger.of(context),
+      labels.isEmpty ? const ['Ada isian yang belum valid'] : labels,
+    );
+    _scrollToAnchor(firstEmpty ?? 'EMAIL');
+  }
 
   Future<void> _downloadTemplate(String code) async {
     final pending = openPendingTab();
@@ -146,6 +321,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   final _ktpSubdistrictController = TextEditingController();
   final _ktpRtController = TextEditingController();
   final _ktpRwController = TextEditingController();
+  final _ktpPostalController = TextEditingController();
   // Alamat Domisili
   final _domAddressController = TextEditingController();
   final _domProvinceController = TextEditingController();
@@ -154,6 +330,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   final _domSubdistrictController = TextEditingController();
   final _domRtController = TextEditingController();
   final _domRwController = TextEditingController();
+  final _domPostalController = TextEditingController();
 
   @override
   void dispose() {
@@ -162,8 +339,10 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       _ktpNumberController, _accountNumberController,
       _ktpAddressController, _ktpProvinceController, _ktpCityController,
       _ktpDistrictController, _ktpSubdistrictController, _ktpRtController, _ktpRwController,
+      _ktpPostalController,
       _domAddressController, _domProvinceController, _domCityController,
       _domDistrictController, _domSubdistrictController, _domRtController, _domRwController,
+      _domPostalController,
     ]) {
       c.dispose();
     }
@@ -176,6 +355,12 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   String? _orNull(TextEditingController c) =>
       c.text.trim().isEmpty ? null : c.text.trim();
 
+  /// NPWP: kirim angka murni (tanpa titik/strip) — mask hanya untuk tampilan.
+  String? _digitsOrNull(TextEditingController c) {
+    final digits = c.text.replaceAll(RegExp(r'[^0-9]'), '');
+    return digits.isEmpty ? null : digits;
+  }
+
   /// Phase-1 document requirements, in display order. Conditional docs only
   /// appear (and are only required) when their toggle is on.
   List<AjukanDocDef> get _phase1Docs => const [
@@ -184,7 +369,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
         AjukanDocDef('PIPELINE', 'Dokumen Pipeline', required: true),
         AjukanDocDef('SURAT_PERNYATAAN', 'Surat Pernyataan Bermeterai', required: true),
         AjukanDocDef('PENGALAMAN_KERJA', 'Pengalaman Kerja', required: true),
-        AjukanDocDef('MEMO_1', 'Memo', required: true),
+        AjukanDocDef('MEMO_1', 'Memo Pengajuan', required: true),
         AjukanDocDef('AAUI', 'Copy AAUI (opsional)'),
         AjukanDocDef('SK_DOMISILI', 'SK Domisili', required: true, condition: 'domicile'),
         AjukanDocDef('SURAT_PENGUNDURAN_DIRI', 'Surat Pengunduran Diri', required: true, condition: 'exAgent'),
@@ -245,6 +430,9 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       if (!_req(code, fallback)) continue;
       if (controller.text.trim().isEmpty) missing.add(label);
     }
+    // Field non-teks yang juga wajib.
+    if (_req('GENDER', true) && _gender.trim().isEmpty) missing.add('Jenis Kelamin');
+    if (_req('BIRTHDATE', true) && _birthDate == null) missing.add('Tanggal Lahir');
     // Email punya aturan tambahan (format) di validator-nya.
     final email = _emailController.text.trim();
     if (email.isNotEmpty && !email.contains('@')) missing.add('Email tidak valid');
@@ -286,6 +474,16 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       final missing = [..._missingRequiredFields(), ..._missingRequiredDocs()];
       if (missing.isNotEmpty) {
         setState(() => _autovalidate = AutovalidateMode.onUserInteraction);
+        // Lompat ke langkah pertama yang punya isian salah, lalu scroll ke sana.
+        for (int s = 0; s < _stepLabels.length; s++) {
+          final code = _firstEmptyCode(s);
+          if (code != null) {
+            setState(() => _step = s);
+            _formKey.currentState?.validate();
+            _scrollToAnchor(code);
+            break;
+          }
+        }
         _formKey.currentState?.validate();
         showMissingFieldsNotice(messengerForNotice, missing);
         return;
@@ -326,7 +524,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       type: type,
       phone: phone,
       email: email,
-      npwp: _orNull(_npwpController),
+      npwp: _digitsOrNull(_npwpController),
       bankName: _bank.isEmpty ? null : _bank,
       accountNumber: _orNull(_accountNumberController),
       ktpNumber: _orNull(_ktpNumberController),
@@ -339,6 +537,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       ktpSubdistrict: _orNull(_ktpSubdistrictController),
       ktpRt: _orNull(_ktpRtController),
       ktpRw: _orNull(_ktpRwController),
+      ktpPostalCode: _orNull(_ktpPostalController),
       domicileAddress: _orNull(_domAddressController),
       domicileProvince: _orNull(_domProvinceController),
       domicileCity: _orNull(_domCityController),
@@ -346,6 +545,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       domicileSubdistrict: _orNull(_domSubdistrictController),
       domicileRt: _orNull(_domRtController),
       domicileRw: _orNull(_domRwController),
+      domicilePostalCode: _orNull(_domPostalController),
       uploads: uploads,
     );
 
@@ -469,9 +669,16 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
-            child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          children: [
+            child: Column(
+              children: [
+                _stepIndicator(),
+                Expanded(
+                  child: IndexedStack(
+                    index: _step,
+                    sizing: StackFit.expand,
+                    children: [
+                      // ── Langkah 1: Data calon ──
+                      _stepScroll([
             _section('Jenis Pengajuan', [
               Row(
                 children: [
@@ -517,7 +724,9 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
                   code: 'PHONE', controller: _phoneController, keyboardType: TextInputType.phone),
               const SizedBox(height: 12),
               _field('NPWP', '00.000.000.0-000.000',
-                  code: 'NPWP', controller: _npwpController, required: false),
+                  code: 'NPWP', controller: _npwpController, required: false,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [NpwpInputFormatter()]),
             ]),
             const SizedBox(height: 16),
             _section('Rekening Bank', [
@@ -527,22 +736,23 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
                   code: 'ACCOUNT_NUMBER', controller: _accountNumberController,
                   keyboardType: TextInputType.number, required: false),
             ]),
-            const SizedBox(height: 16),
+                      ]),
+                      // ── Langkah 2: Alamat ──
+                      _stepScroll([
             _section('Alamat KTP', [
               _field('Alamat', 'Alamat sesuai KTP',
                   code: 'KTP_ADDRESS', controller: _ktpAddressController, required: false),
               const SizedBox(height: 12),
-              _field('Provinsi', 'Provinsi',
-                  code: 'KTP_PROVINCE', controller: _ktpProvinceController, required: false),
-              const SizedBox(height: 12),
-              _field('Kota / Kabupaten', 'Kota / Kabupaten',
-                  code: 'KTP_CITY', controller: _ktpCityController, required: false),
-              const SizedBox(height: 12),
-              _field('Kecamatan', 'Kecamatan',
-                  code: 'KTP_DISTRICT', controller: _ktpDistrictController, required: false),
-              const SizedBox(height: 12),
-              _field('Kelurahan / Desa', 'Kelurahan / Desa',
-                  code: 'KTP_SUBDISTRICT', controller: _ktpSubdistrictController, required: false),
+              RegionAddressFields(
+                key: _anchorKey('KTP_REGION'),
+                required: true,
+                repo: _regionRepo,
+                province: _ktpProvinceController,
+                city: _ktpCityController,
+                district: _ktpDistrictController,
+                subdistrict: _ktpSubdistrictController,
+                postalCode: _ktpPostalController,
+              ),
               const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -564,17 +774,16 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
               _field('Alamat', 'Alamat domisili',
                   code: 'DOMICILE_ADDRESS', controller: _domAddressController, required: false),
               const SizedBox(height: 12),
-              _field('Provinsi', 'Provinsi',
-                  code: 'DOMICILE_PROVINCE', controller: _domProvinceController, required: false),
-              const SizedBox(height: 12),
-              _field('Kota / Kabupaten', 'Kota / Kabupaten',
-                  code: 'DOMICILE_CITY', controller: _domCityController, required: false),
-              const SizedBox(height: 12),
-              _field('Kecamatan', 'Kecamatan',
-                  code: 'DOMICILE_DISTRICT', controller: _domDistrictController, required: false),
-              const SizedBox(height: 12),
-              _field('Kelurahan / Desa', 'Kelurahan / Desa',
-                  code: 'DOMICILE_SUBDISTRICT', controller: _domSubdistrictController, required: false),
+              RegionAddressFields(
+                key: _anchorKey('DOMICILE_REGION'),
+                required: true,
+                repo: _regionRepo,
+                province: _domProvinceController,
+                city: _domCityController,
+                district: _domDistrictController,
+                subdistrict: _domSubdistrictController,
+                postalCode: _domPostalController,
+              ),
               const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -591,8 +800,14 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
                 ],
               ),
             ]),
-            const SizedBox(height: 16),
-            _documentsSection(),
+                      ]),
+                      // ── Langkah 3: Dokumen ──
+                      _stepScroll([
+            KeyedSubtree(key: _anchorKey('DOCS'), child: _documentsSection()),
+                      ]),
+                      // ── Langkah 4: Review & kirim ──
+                      _stepScroll([
+            _reviewSummary(),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -645,13 +860,168 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
               style: TextStyle(fontSize: 11, color: AppColors.grayStage),
             ),
             const SizedBox(height: 24),
-          ],
-        ),
+                      ]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// Satu langkah wizard: konten yang bisa digulir dengan padding standar.
+  /// Tombol navigasi (Kembali/Lanjut) ditempel di paling bawah isi — ikut
+  /// menggulung, TIDAK sticky.
+  Widget _stepScroll(List<Widget> children) => SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...children,
+            _wizardNav(),
+          ],
+        ),
+      );
+
+  /// Indikator 4 langkah di atas form; bisa diketuk untuk lompat langkah
+  /// (validasi tetap di tombol Kirim, jadi lompat aman).
+  Widget _stepIndicator() {
+    return Container(
+      color: AppColors.surfaceWhite,
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+      child: Row(
+        children: [
+          for (int i = 0; i < _stepLabels.length; i++) _stepDot(i, _stepLabels[i]),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepDot(int i, String label) {
+    final active = i == _step;
+    final done = i < _step;
+    final color = (active || done) ? AppColors.primaryNavy : AppColors.grayStage;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _step = i),
+        child: Column(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: (active || done) ? AppColors.primaryNavy : AppColors.surfaceWhite,
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: done
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : Text('${i + 1}',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: active ? Colors.white : color)),
+            ),
+            const SizedBox(height: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                    color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Navigasi Kembali / Lanjut. TIDAK sticky — ikut menggulung di paling bawah
+  /// isi tiap langkah. Di langkah terakhir hanya Kembali (Kirim & Draft ada di
+  /// isi langkah Review). "Lanjut" memvalidasi langkah aktif dulu ([_onNext]).
+  Widget _wizardNav() {
+    final isLast = _step == _stepLabels.length - 1;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.lg),
+      child: Row(
+        children: [
+          if (_step > 0)
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _busy ? null : () => setState(() => _step -= 1),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primaryNavy,
+                  side: const BorderSide(color: AppColors.primaryNavy, width: 1.4),
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: const Text('Kembali',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          if (_step > 0 && !isLast) const SizedBox(width: 12),
+          if (!isLast)
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _busy ? null : _onNext,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: const Text('Lanjut',
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  int _activeDocCount() => _docs.where(_isDocActive).length;
+
+  int _chosenDocCount() => _docs.where((d) {
+        if (!_isDocActive(d)) return false;
+        return (_docFiles[d.code]?.bytes != null) || _existingDocCodes.contains(d.code);
+      }).length;
+
+  /// Ringkasan singkat di langkah Review sebelum kirim.
+  Widget _reviewSummary() {
+    String orDash(TextEditingController c) =>
+        c.text.trim().isEmpty ? '-' : c.text.trim();
+    return _section('Ringkasan', [
+      _reviewRow('Jenis', _jenis == 'agen' ? 'Agen' : 'TPM'),
+      _reviewRow('Nama', orDash(_nameController)),
+      _reviewRow('Email', orDash(_emailController)),
+      _reviewRow('No. Telepon', orDash(_phoneController)),
+      _reviewRow('Dokumen dipilih', '${_chosenDocCount()} / ${_activeDocCount()}'),
+    ]);
+  }
+
+  Widget _reviewRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(label,
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ),
+            Expanded(
+              child: Text(value,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            ),
+          ],
+        ),
+      );
 
   Widget _section(String title, List<Widget> children) {
     return Container(
@@ -707,6 +1077,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   Widget _bankField() {
     final isRequired = _req('BANK_NAME', false);
     return Column(
+      key: _anchorKey('BANK_NAME'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label(isRequired ? 'Nama Bank *' : 'Nama Bank'),
@@ -727,15 +1098,17 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
 
   Widget _genderDropdown() {
     return Column(
+      key: _anchorKey('GENDER'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label('Jenis Kelamin'),
+        _label('Jenis Kelamin *'),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           // Nilai di luar daftar opsi membuat DropdownButtonFormField melempar
           // assertion (layar mati), bukan sekadar tampil kosong. Master data
           // bisa berubah, jadi nilainya divalidasi dulu terhadap opsinya.
           initialValue: _genderOptions.contains(_gender) ? _gender : null,
+          style: AppInput.fieldText,
           isExpanded: true,
           hint: const Text('Pilih jenis kelamin',
               style: TextStyle(color: AppColors.grayStage, fontSize: 14)),
@@ -748,6 +1121,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
                   ))
               .toList(),
           onChanged: (val) => setState(() => _gender = val ?? ''),
+          validator: (_) => _gender.trim().isEmpty ? 'Wajib dipilih' : null,
           icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.grayStage),
           decoration: _decoration(null),
         ),
@@ -756,10 +1130,14 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   }
 
   Widget _dateField(String label, DateTime? value, ValueChanged<DateTime> onPicked) {
+    // Tanggal picker bukan FormField, jadi errornya ditampilkan manual saat
+    // validasi sudah dipicu dan tanggalnya masih kosong.
+    final showError = _autovalidate != AutovalidateMode.disabled && value == null;
     return Column(
+      key: _anchorKey('BIRTHDATE'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label(label),
+        _label('$label *'),
         const SizedBox(height: 6),
         InkWell(
           borderRadius: AppRadius.radiusMd,
@@ -774,7 +1152,8 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
             if (picked != null) onPicked(picked);
           },
           child: InputDecorator(
-            decoration: _decoration(null),
+            decoration: _decoration(null)
+                .copyWith(errorText: showError ? 'Wajib dipilih' : null),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -801,9 +1180,11 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       String? code,
       TextInputType keyboardType = TextInputType.text,
       bool required = true,
+      List<TextInputFormatter>? inputFormatters,
       String? Function(String?)? validator}) {
     final isRequired = code != null ? _req(code, required) : required;
     return Column(
+      key: code != null ? _anchorKey(code) : null,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label(isRequired ? '$label *' : label),
@@ -811,6 +1192,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
           validator: validator ??
               (isRequired
                   ? (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null

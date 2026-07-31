@@ -76,14 +76,10 @@ final List<_Section> _kSections = [
     group: _kGroupProduk,
     builder: (repo) => _CategoryTab(repo: repo),
   ),
-  _Section(
-    id: 'komisi',
-    title: 'Rate Komisi',
-    subtitle: 'Persentase komisi agen per jenis pertanggungan (TOC)',
-    icon: Icons.percent,
-    group: _kGroupProduk,
-    builder: (repo) => _KomisiTab(repo: repo),
-  ),
+  // Rate Komisi per-produk (TOC) DIHAPUS dari master data: rate komisi kini
+  // mengikuti PKS per agen (lihat "Atur PKS" di detail agen), bisa beda tiap
+  // agen & berubah tiap PKS diperbarui. Default fallback tetap via parameter
+  // COMMISSION_DEFAULT. (_KomisiTab kini tak terpakai — bisa dihapus.)
   _Section(
     id: 'broker',
     title: 'Broker',
@@ -490,6 +486,7 @@ Widget _searchField(TextEditingController ctrl, String hint, ValueChanged<String
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
       child: TextField(
         controller: ctrl,
+        style: AppInput.fieldText,
         onChanged: (v) => onChanged(v.trim().toLowerCase()),
         decoration: InputDecoration(
           hintText: hint,
@@ -821,6 +818,7 @@ class _TemplateFormState extends State<_TemplateForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama template', hint: 'mis. Pakta Integritas'),
                 textCapitalization: TextCapitalization.words,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
@@ -829,12 +827,14 @@ class _TemplateFormState extends State<_TemplateForm> {
               if (_isEdit)
                 TextFormField(
                   controller: _code,
+                  style: AppInput.fieldText,
                   enabled: false,
                   decoration: _dec('Kode'),
                 )
               else
                 TextFormField(
                   controller: _code,
+                  style: AppInput.fieldText,
                   decoration: _dec('Kode (opsional)',
                       hint: 'kosongkan untuk dibuat otomatis dari nama'),
                   textCapitalization: TextCapitalization.characters,
@@ -850,6 +850,7 @@ class _TemplateFormState extends State<_TemplateForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _sort,
+                style: AppInput.fieldText,
                 keyboardType: TextInputType.number,
                 decoration: _dec('Urutan tampil (opsional)',
                     hint: 'makin kecil makin atas'),
@@ -1144,6 +1145,7 @@ class _ParameterFormState extends State<_ParameterForm> {
             // Category: free text + quick-pick from known categories.
             TextFormField(
               controller: _category,
+              style: AppInput.fieldText,
               decoration: _dec('Kategori', hint: 'mis. BADAN_HUKUM, COB, BANK'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
             ),
@@ -1163,6 +1165,7 @@ class _ParameterFormState extends State<_ParameterForm> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _value,
+              style: AppInput.fieldText,
               decoration: _dec('Nilai / Label', hint: 'teks yang tampil di dropdown'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
             ),
@@ -1172,6 +1175,7 @@ class _ParameterFormState extends State<_ParameterForm> {
                 Expanded(
                   child: TextFormField(
                     controller: _numeric,
+                    style: AppInput.fieldText,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: _dec('Nilai numerik (opsional)', hint: 'mis. rate 0.15'),
                   ),
@@ -1181,6 +1185,7 @@ class _ParameterFormState extends State<_ParameterForm> {
                   width: 90,
                   child: TextFormField(
                     controller: _sort,
+                    style: AppInput.fieldText,
                     keyboardType: TextInputType.number,
                     decoration: _dec('Urutan'),
                   ),
@@ -1306,6 +1311,7 @@ class _KomisiTabState extends ConsumerState<_KomisiTab> {
           padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
           child: TextField(
+            style: AppInput.fieldText,
             onChanged: (v) => setState(() => _search = v),
             decoration: InputDecoration(
               hintText: 'Cari produk / COB…',
@@ -1373,6 +1379,7 @@ class _KomisiTabState extends ConsumerState<_KomisiTab> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: controller,
+                style: AppInput.fieldText,
                 autofocus: true,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
@@ -1723,11 +1730,13 @@ class _ProductFormState extends State<_ProductForm> {
                 children: [
                   TextFormField(
                     controller: _jenis[i].title,
+                    style: AppInput.fieldText,
                     decoration: _dec('Judul jenis', hint: 'mis. Bid Bond'),
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _jenis[i].detail,
+                    style: AppInput.fieldText,
                     decoration: _dec('Keterangan'),
                     minLines: 1,
                     maxLines: 3,
@@ -1766,12 +1775,14 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama Produk'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _categoryId,
+                style: AppInput.fieldText,
                 isExpanded: true,
                 decoration: _dec('Kategori'),
                 items: [
@@ -1784,6 +1795,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _desc,
+                style: AppInput.fieldText,
                 decoration: _dec('Deskripsi'),
                 minLines: 2,
                 maxLines: 4,
@@ -1791,6 +1803,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _manfaat,
+                style: AppInput.fieldText,
                 decoration: _dec('Manfaat (satu per baris)'),
                 minLines: 3,
                 maxLines: 6,
@@ -1811,16 +1824,17 @@ class _ProductFormState extends State<_ProductForm> {
 
               _sectionLabel('Sekilas (opsional)'),
               const SizedBox(height: 8),
-              TextFormField(controller: _premi, decoration: _dec('Premi', hint: 'mis. Sesuai tarif OJK')),
+              TextFormField(controller: _premi, style: AppInput.fieldText, decoration: _dec('Premi', hint: 'mis. Sesuai tarif OJK')),
               const SizedBox(height: 12),
-              TextFormField(controller: _masa, decoration: _dec('Masa Pertanggungan', hint: 'mis. Maks. 12 bulan')),
+              TextFormField(controller: _masa, style: AppInput.fieldText, decoration: _dec('Masa Pertanggungan', hint: 'mis. Maks. 12 bulan')),
               const SizedBox(height: 12),
-              TextFormField(controller: _nilai, decoration: _dec('Nilai Pertanggungan', hint: 'mis. Sesuai nilai proyek')),
+              TextFormField(controller: _nilai, style: AppInput.fieldText, decoration: _dec('Nilai Pertanggungan', hint: 'mis. Sesuai nilai proyek')),
 
               _sectionLabel('Detail (opsional)'),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _biaya,
+                style: AppInput.fieldText,
                 decoration: _dec('Biaya (satu per baris)'),
                 minLines: 2,
                 maxLines: 5,
@@ -1828,6 +1842,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _skemaBayar,
+                style: AppInput.fieldText,
                 decoration: _dec('Skema Pembayaran Premi'),
                 minLines: 1,
                 maxLines: 3,
@@ -1835,6 +1850,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _pengecualian,
+                style: AppInput.fieldText,
                 decoration: _dec('Pengecualian (satu per baris)'),
                 minLines: 2,
                 maxLines: 6,
@@ -1842,6 +1858,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _persyaratan,
+                style: AppInput.fieldText,
                 decoration: _dec('Persyaratan Penutupan (satu per baris)'),
                 minLines: 2,
                 maxLines: 6,
@@ -1849,6 +1866,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _tataCara,
+                style: AppInput.fieldText,
                 decoration: _dec('Tata Cara Penutupan (satu langkah per baris)'),
                 minLines: 2,
                 maxLines: 6,
@@ -1856,6 +1874,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _persyaratanKlaim,
+                style: AppInput.fieldText,
                 decoration: _dec('Persyaratan Klaim (satu per baris)'),
                 minLines: 2,
                 maxLines: 6,
@@ -1863,6 +1882,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _tataCaraKlaim,
+                style: AppInput.fieldText,
                 decoration: _dec('Tata Cara Klaim (satu langkah per baris)'),
                 minLines: 2,
                 maxLines: 6,
@@ -1870,6 +1890,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _risiko,
+                style: AppInput.fieldText,
                 decoration: _dec('Risiko (satu per baris)'),
                 minLines: 2,
                 maxLines: 5,
@@ -1877,6 +1898,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _simulasi,
+                style: AppInput.fieldText,
                 decoration: _dec('Contoh Simulasi'),
                 minLines: 2,
                 maxLines: 5,
@@ -1884,6 +1906,7 @@ class _ProductFormState extends State<_ProductForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _skemaUrl,
+                style: AppInput.fieldText,
                 decoration: _dec('URL Skema Produk (opsional)', hint: 'link Google Drive'),
                 keyboardType: TextInputType.url,
               ),
@@ -2162,12 +2185,14 @@ class _BrokerFormState extends State<_BrokerForm> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _code,
+              style: AppInput.fieldText,
               decoration: _dec('Kode Broker'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _name,
+              style: AppInput.fieldText,
               decoration: _dec('Nama Broker'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
             ),
@@ -2240,6 +2265,7 @@ Widget _simpleSearchField(String hint, ValueChanged<String> onChanged) => Paddin
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: TextField(
+        style: AppInput.fieldText,
         onChanged: onChanged,
         decoration: InputDecoration(
           hintText: hint,
@@ -2427,12 +2453,14 @@ class _BankFormState extends State<_BankForm> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _name,
+              style: AppInput.fieldText,
               decoration: _dec('Nama Bank'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _tipe,
+              style: AppInput.fieldText,
               decoration: _dec('Tipe Bank (opsional)',
                   hint: 'HIMBARA = bank BUMN; mis. SWASTA/BPD'),
             ),
@@ -2651,23 +2679,27 @@ class _BankBranchFormState extends State<_BankBranchForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama Cabang'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 12),
-              TextFormField(controller: _cif, decoration: _dec('No. CIF (opsional)')),
+              TextFormField(controller: _cif, style: AppInput.fieldText, decoration: _dec('No. CIF (opsional)')),
               const SizedBox(height: 12),
               TextFormField(
                   controller: _address,
+                  style: AppInput.fieldText,
                   decoration: _dec('Alamat (opsional)'),
                   maxLines: 2),
               const SizedBox(height: 12),
               TextFormField(
                   controller: _kode,
+                  style: AppInput.fieldText,
                   decoration: _dec('Kode Unit Kerja (opsional)')),
               const SizedBox(height: 12),
               TextFormField(
                   controller: _tipe,
+                  style: AppInput.fieldText,
                   decoration: _dec('Tipe Bank (opsional)', hint: 'mis. HIMBARA')),
               const SizedBox(height: 16),
               _saveBtn(_saving, _save),
@@ -2898,12 +2930,14 @@ class _BumnFormState extends State<_BumnForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama BUMN'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _level,
+                style: AppInput.fieldText,
                 isExpanded: true,
                 decoration: _dec('Level (opsional)', hint: 'Induk / Anak / Cucu / Cicit'),
                 items: _dropItems(_kBumnLevels, _level),
@@ -2912,6 +2946,7 @@ class _BumnFormState extends State<_BumnForm> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _badanHukum,
+                style: AppInput.fieldText,
                 isExpanded: true,
                 decoration: _dec('Badan Hukum (opsional)', hint: 'PT / PT Tbk / CV / UD / Lainnya'),
                 items: _dropItems(_kBumnBadanHukum, _badanHukum),
@@ -3282,12 +3317,14 @@ class _CategoryFormState extends State<_CategoryForm> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _name,
+              style: AppInput.fieldText,
               decoration: _dec('Nama Kategori', hint: 'mis. Properti & Harta Benda'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _icon,
+              style: AppInput.fieldText,
               isExpanded: true,
               decoration: _dec('Ikon'),
               items: [
@@ -3308,6 +3345,7 @@ class _CategoryFormState extends State<_CategoryForm> {
               Expanded(
                 child: TextFormField(
                   controller: _color,
+                  style: AppInput.fieldText,
                   decoration: _dec('Warna (hex)', hint: '#0D2C54'),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -3326,6 +3364,7 @@ class _CategoryFormState extends State<_CategoryForm> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _sort,
+              style: AppInput.fieldText,
               keyboardType: TextInputType.number,
               decoration: _dec('Urutan'),
             ),
@@ -3586,6 +3625,7 @@ class _OfficeFormState extends State<_OfficeForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _id,
+                style: AppInput.fieldText,
                 enabled: !_isEdit, // id is the primary key — fixed after creation
                 textCapitalization: TextCapitalization.characters,
                 decoration: _dec('Kode Kantor', hint: 'mis. KC-060, KUP-001, KW-08'),
@@ -3595,12 +3635,14 @@ class _OfficeFormState extends State<_OfficeForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama Kantor'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _type,
+                style: AppInput.fieldText,
                 isExpanded: true,
                 decoration: _dec('Tipe Kantor'),
                 items: [

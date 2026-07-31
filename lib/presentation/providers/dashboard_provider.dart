@@ -22,6 +22,9 @@ class DashboardState {
   final DashboardCategories? categories;
   final String? selectedCategory;
 
+  /// Tahun periode terpilih (C2). null = tahun berjalan (default server).
+  final int? selectedYear;
+
   const DashboardState({
     this.loading = true,
     this.error,
@@ -31,6 +34,7 @@ class DashboardState {
     this.drilldown,
     this.categories,
     this.selectedCategory,
+    this.selectedYear,
   });
 
   DashboardState copyWith({
@@ -42,6 +46,7 @@ class DashboardState {
     Object? drilldown = _keep,
     Object? categories = _keep,
     Object? selectedCategory = _keep,
+    Object? selectedYear = _keep,
   }) {
     return DashboardState(
       loading: loading ?? this.loading,
@@ -58,6 +63,8 @@ class DashboardState {
       selectedCategory: selectedCategory == _keep
           ? this.selectedCategory
           : selectedCategory as String?,
+      selectedYear:
+          selectedYear == _keep ? this.selectedYear : selectedYear as int?,
     );
   }
 
@@ -117,7 +124,8 @@ class DashboardNotifier extends Notifier<DashboardState> {
       state = state.copyWith(loading: true, error: null);
     }
     try {
-      final summary = await _repo.getSummary();
+      final year = state.selectedYear; // null = tahun berjalan (default server)
+      final summary = await _repo.getSummary(year: year);
       // Schedules are RM-only and non-blocking: a failure shouldn't sink the page.
       // (Supervisors/admin don't have a personal visit schedule, so skip the call.)
       List<DashboardSchedule> schedules = const [];
@@ -134,12 +142,12 @@ class DashboardNotifier extends Notifier<DashboardState> {
       // Drill-down is best-effort: cards still render, drill-down sheet shows '-'.
       DashboardDrilldown? drilldown;
       try {
-        drilldown = await _repo.getDrilldown();
+        drilldown = await _repo.getDrilldown(year: year);
       } catch (_) {}
       // Filter 11 target: best-effort (kartu utama tetap render kalau gagal).
       DashboardCategories? categories;
       try {
-        categories = await _repo.getCategories();
+        categories = await _repo.getCategories(year: year);
       } catch (_) {}
       state = state.copyWith(
         summary: summary,
@@ -165,5 +173,13 @@ class DashboardNotifier extends Notifier<DashboardState> {
   /// mengubah angka turunan ([DashboardState.selectedCat]). Dulu `setState`.
   void onCategoryChanged(String category) {
     state = state.copyWith(selectedCategory: category);
+  }
+
+  /// Ganti tahun periode (C2). Beda dgn kategori: angka datang dari server, jadi
+  /// WAJIB fetch ulang. null = kembali ke tahun berjalan.
+  void onYearChanged(int? year) {
+    if (year == state.selectedYear) return;
+    state = state.copyWith(selectedYear: year);
+    fetch();
   }
 }

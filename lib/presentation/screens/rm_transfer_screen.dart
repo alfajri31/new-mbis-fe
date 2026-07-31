@@ -378,6 +378,7 @@ class _CreateTransferSheetState extends ConsumerState<_CreateTransferSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _reasonCtrl,
+              style: AppInput.fieldText,
               maxLength: 255,
               decoration: InputDecoration(
                 labelText: 'Alasan (opsional)',

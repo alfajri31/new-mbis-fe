@@ -333,6 +333,7 @@ class _KelolaKuotaAiScreenState extends ConsumerState<KelolaKuotaAiScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: ctrl,
+              style: AppInput.fieldText,
               keyboardType: TextInputType.number,
               autofocus: true,
               decoration: InputDecoration(

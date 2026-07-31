@@ -32,19 +32,21 @@ class PencapaianTargetCard extends StatelessWidget {
     final s = summary;
     final cat =
         selectedCat; // kategori terpilih (mengalahkan angka summary lama)
+    // Target yang ditampilkan = target SETAHUN penuh (admin upload target setahun),
+    // dibandingkan dengan realisasi berjalan. Bukan target YTD.
     final double? realVal = cat?.realisasiYtd ?? s?.totalRealization;
-    final double? targetVal = cat?.targetYtd ?? s?.premiTarget;
+    final double? targetVal = cat?.targetFullYear ?? s?.premiTarget;
     final realisasi = realVal != null ? AppFormat.currencyShort(realVal) : '–';
     final target = targetVal != null ? AppFormat.currencyShort(targetVal) : '–';
     final rawPct = cat != null
-        ? cat.progress
+        ? cat.progressFullYear
         : ((s != null && s.premiTarget > 0)
               ? s.totalRealization / s.premiTarget
               : 0.0);
     final pct = rawPct.clamp(0.0, 1.0);
     final title = cat != null
         ? 'Realisasi vs Target — ${cat.label}'
-        : 'Realisasi vs Target YTD';
+        : 'Realisasi vs Target Tahun Ini';
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),

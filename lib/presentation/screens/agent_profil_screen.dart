@@ -79,6 +79,8 @@ class _AgentProfilScreenState extends ConsumerState<AgentProfilScreen> {
                       _buildRenewalCard(agent),
                       const SizedBox(height: AppSpacing.lg),
                     ],
+                    _buildPrivasiButton(context),
+                    const SizedBox(height: AppSpacing.md),
                     _buildLogoutButton(context),
                     const SizedBox(height: AppSpacing.sm),
                     const Text('M-BIS v2.1.0 • PT Askrindo (Persero)',
@@ -318,6 +320,30 @@ class _AgentProfilScreenState extends ConsumerState<AgentProfilScreen> {
                 fontWeight: FontWeight.w500,
                 color: AppColors.textPrimary)),
       ],
+    );
+  }
+
+  /// Sama seperti di profil RM: kebijakan privasi & permintaan hapus akun wajib
+  /// mudah ditemukan, jadi ditempatkan tepat di atas tombol Keluar. Rutenya
+  /// bersarang di shell Agen supaya back kembali ke tab ini.
+  Widget _buildPrivasiButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: OutlinedButton.icon(
+        onPressed: () => context.go('/agent/profil/privasi'),
+        icon: const Icon(Icons.privacy_tip_outlined,
+            size: 18, color: AppColors.primaryNavy),
+        label: const Text('Privasi & Akun',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryNavy)),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+        ),
+      ),
     );
   }
 

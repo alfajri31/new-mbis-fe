@@ -685,6 +685,7 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
                               const SizedBox(height: AppSpacing.sm),
                               if (view.hasConnections) ...[
                                 TextField(
+                                  style: AppInput.fieldText,
                                   onChanged: (v) => setSheet(() => pQuery = v),
                                   decoration: InputDecoration(
                                     hintText: 'Cari nasabah...',

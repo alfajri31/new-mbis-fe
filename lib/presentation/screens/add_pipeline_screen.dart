@@ -440,6 +440,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                                             .any((a) => a.id == _agentId)
                                         ? _agentId
                                         : null,
+                                    style: AppInput.fieldText,
                                     isExpanded: true,
                                     items: agentItems
                                         .map(
@@ -1234,6 +1235,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
         DropdownButtonFormField<String>(
           // Lihat catatan di _buildDropdownFieldKV.
           initialValue: tocs.any((t) => t.tocCode == _tocCode) ? _tocCode : null,
+          style: AppInput.fieldText,
           isExpanded: true,
           items: tocs
               .map(
@@ -1314,6 +1316,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: safeValue,
+          style: AppInput.fieldText,
           isExpanded: true,
           // Let a long selected value wrap to 2 lines so the field grows to fit
           // (e.g. long broker names) instead of being clipped.
@@ -1379,6 +1382,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: safeValue,
+          style: AppInput.fieldText,
           isExpanded: true,
           items: options
               .map(

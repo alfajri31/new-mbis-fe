@@ -560,6 +560,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             // bisa berubah, jadi nilainya divalidasi dulu terhadap opsinya.
             initialValue:
                 _rms.any((r) => r.id == _selectedRmId) ? _selectedRmId : null,
+            style: AppInput.fieldText,
             isExpanded: true,
             decoration: InputDecoration(
               hintText: 'Pilih RM',
@@ -667,6 +668,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             // assertion (layar mati), bukan sekadar tampil kosong. Master data
             // bisa berubah, jadi nilainya divalidasi dulu terhadap opsinya.
             initialValue: items.contains(value) ? value : null,
+            style: AppInput.fieldText,
             isExpanded: true,
             items: items.map((item) {
               return DropdownMenuItem<String>(
@@ -889,6 +891,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           // bisa berubah, jadi nilainya divalidasi dulu terhadap opsinya.
           initialValue:
               options.any((o) => o.key == valueKey) ? valueKey : null,
+          style: AppInput.fieldText,
           isExpanded: true,
           items: options
               .map(

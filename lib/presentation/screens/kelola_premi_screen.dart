@@ -9,6 +9,7 @@ import '../widgets/state_views.dart';
 import '../widgets/max_width_body.dart';
 import '../widgets/dispose_callback.dart';
 import '../../src/network/api_error.dart';
+import '../../utils/input_formatters.dart';
 
 /// Admin/PJD "Kelola Premi & Komisi": lists issued policies and lets the admin
 /// record premi payments. Each payment releases the agent commission tranche
@@ -167,6 +168,7 @@ class _KelolaPremiScreenState extends ConsumerState<KelolaPremiScreen> {
         AppSpacing.sm,
       ),
       child: TextField(
+        style: AppInput.fieldText,
         onChanged: (v) => setState(() => _query = v),
         decoration: InputDecoration(
           hintText: 'Cari no. polis, nasabah, atau agen',
@@ -462,10 +464,13 @@ class _PolicyPaymentScreenState extends State<_PolicyPaymentScreen> {
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: amountC,
+                      style: AppInput.fieldText,
                       keyboardType: TextInputType.number,
-                      decoration: dec('mis. 50000000'),
+                      inputFormatters: [ThousandsInputFormatter()],
+                      decoration: dec('mis. 50.000.000'),
                       validator: (v) {
-                        final n = double.tryParse((v ?? '').trim());
+                        final n = double.tryParse(
+                            (v ?? '').replaceAll(RegExp(r'[^0-9]'), ''));
                         if (n == null || n <= 0) {
                           return 'Jumlah harus angka > 0';
                         }
@@ -508,6 +513,7 @@ class _PolicyPaymentScreenState extends State<_PolicyPaymentScreen> {
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: noteC,
+                      style: AppInput.fieldText,
                       decoration: dec('mis. Cicilan ke-2'),
                     ),
                   ],
@@ -526,7 +532,8 @@ class _PolicyPaymentScreenState extends State<_PolicyPaymentScreen> {
                 onPressed: () {
                   if (!formKey.currentState!.validate()) return;
                   Navigator.of(ctx).pop(<String, dynamic>{
-                    'amount': double.parse(amountC.text.trim()),
+                    'amount':
+                        double.parse(amountC.text.replaceAll(RegExp(r'[^0-9]'), '')),
                     'paidDate': iso(paidDate),
                     'note': noteC.text.trim(),
                   });

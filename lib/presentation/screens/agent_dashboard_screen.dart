@@ -101,23 +101,35 @@ class _AgentDashboardScreenState extends ConsumerState<AgentDashboardScreen> {
     final hasBanner = data.announcements.isNotEmpty;
     return SingleChildScrollView(
       padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Banner di lapis bawah + konten sebagai anak biasa yang di-padding: kartu
+      // utama tetap naik menutupi tepi bawah banner, tapi posisi layout-nya NYATA
+      // sehingga area sentuhnya ikut pindah. (Dengan Transform.translate, sentuhan
+      // pada bagian yang naik masih jatuh ke banner di bawahnya.)
+      child: Stack(
         children: [
           if (hasBanner)
-            AnnouncementBanner(
-              apiClient: apiClient,
-              announcements: data.announcements,
-              height: _bannerHeight,
-              dotsBottomInset: _cardOverlap + 10,
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AnnouncementBanner(
+                apiClient: apiClient,
+                announcements: data.announcements,
+                height: _bannerHeight,
+                dotsBottomInset: _cardOverlap + 10,
+              ),
             ),
-          Transform.translate(
-            // Pull the main card up so it slightly overlaps the banner; when
-            // there's no banner, keep normal top spacing instead.
-            offset: Offset(0, hasBanner ? -_cardOverlap : 0),
+          // width infinity: anak non-positioned di Stack dapat constraint longgar,
+          // tanpa ini kolom konten menyusut selebar isinya (dulu di-stretch Column).
+          SizedBox(
+            width: double.infinity,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(AppSpacing.lg,
-                  hasBanner ? 0 : AppSpacing.lg, AppSpacing.lg, AppSpacing.lg),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                hasBanner ? _bannerHeight - _cardOverlap : AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -235,7 +247,7 @@ class _AgentDashboardScreenState extends ConsumerState<AgentDashboardScreen> {
   Widget _buildPerfGrid(AgentDashboardModel perf) {
     final items =
         <({String label, String value, String? suffix, IconData icon, Color color})>[
-      (label: 'Target YTD', value: AppFormat.currencyShort(perf.targetYtd), suffix: null, icon: Icons.track_changes_outlined, color: AppColors.primaryNavy),
+      (label: 'Target Setahun', value: AppFormat.currencyShort(perf.targetYtd), suffix: null, icon: Icons.track_changes_outlined, color: AppColors.primaryNavy),
       (label: 'Realisasi YTD', value: AppFormat.currencyShort(perf.produksiPremiYtd), suffix: null, icon: Icons.trending_up, color: AppColors.successGreen),
       (label: 'Komisi YTD', value: AppFormat.currencyShort(perf.komisiYtd), suffix: null, icon: Icons.payments_outlined, color: AppColors.secondaryOrange),
       (label: 'Pipeline Aktif', value: '${perf.pipelineAktif}', suffix: ' pipeline', icon: Icons.account_tree_outlined, color: AppColors.primaryNavyLight),

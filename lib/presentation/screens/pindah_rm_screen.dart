@@ -38,7 +38,9 @@ class _PindahRmScreenState extends ConsumerState<PindahRmScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
-      extendBodyBehindAppBar: true,
+      // Body diinset otomatis di bawah app bar + TabBar oleh Scaffold. (Tanpa ini,
+      // konten dipadding manual sebesar tinggi app bar SEKALIGUS diinset Scaffold →
+      // muncul celah kosong ~1 tinggi app bar di atas form.)
       appBar: GlassAppBar(
         title: 'Pindah RM',
         showBack: true,
@@ -122,7 +124,12 @@ class _HandoverFormState extends ConsumerState<_HandoverForm> {
     setState(() {
       _fromRm = rm;
       _selectedCustomers.clear();
-      if (_toRm?.id == rm?.id) _toRm = null;
+      // RM pengganti wajib satu cabang dengan RM asal — buang pilihan lama yang
+      // tak lagi memenuhi syarat (beda cabang atau sama dengan RM asal).
+      if (_toRm != null &&
+          (_toRm!.id == rm?.id || _toRm!.officeId != rm?.officeId)) {
+        _toRm = null;
+      }
     });
     try {
       await _notifier.onFromChanged(rm);
@@ -131,9 +138,20 @@ class _HandoverFormState extends ConsumerState<_HandoverForm> {
     }
   }
 
+  /// RM pengganti yang boleh menampung: hanya RM di cabang yang sama dengan RM
+  /// asal (di luar RM asal itu sendiri). Kosong sampai RM asal dipilih.
+  List<RmCandidate> get _toCandidates {
+    final from = _fromRm;
+    if (from == null) return const [];
+    return _candidates
+        .where((c) => c.id != from.id && c.officeId != null && c.officeId == from.officeId)
+        .toList();
+  }
+
   bool get _canSubmit {
     if (_fromRm == null || _toRm == null || _submitting) return false;
     if (_fromRm!.id == _toRm!.id) return false;
+    if (_toRm!.officeId != _fromRm!.officeId) return false;
     if (_scope == 'SELECTED' && _selectedCustomers.isEmpty) {
       return false;
     }
@@ -204,7 +222,8 @@ class _HandoverFormState extends ConsumerState<_HandoverForm> {
   @override
   Widget build(BuildContext context) {
     ref.watch(pindahRmProvider);
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + 48;
+    // Body sudah diinset di bawah app bar oleh Scaffold; cukup jarak kecil di atas.
+    const topInset = AppSpacing.sm;
     return FutureBuilder<List<RmCandidate>>(
       future: _candidatesFuture,
       builder: (context, snap) {
@@ -235,9 +254,23 @@ class _HandoverFormState extends ConsumerState<_HandoverForm> {
             _label('RM Pengganti'),
             _rmDropdown(
               _toRm,
-              _candidates.where((c) => c.id != _fromRm?.id).toList(),
+              _toCandidates,
               (rm) => setState(() => _toRm = rm),
             ),
+            if (_fromRm != null && _toCandidates.isEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Tidak ada RM lain di cabang yang sama untuk menampung customer.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
+            if (_fromRm != null && _toCandidates.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Hanya RM di cabang yang sama dengan RM asal.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
             const SizedBox(height: AppSpacing.lg),
             _label('Tipe Pemindahan'),
             _choices(
@@ -415,14 +448,18 @@ class _HandoverFormState extends ConsumerState<_HandoverForm> {
       spacing: 8,
       runSpacing: 8,
       children: options.entries
+          // Latar navy saat terpilih (dari chipTheme) + label putih agar kontras.
           .map((e) => ChoiceChip(
                 label: Text(e.value),
                 selected: selected == e.key,
                 onSelected: (_) => onChanged(e.key),
-                selectedColor: AppColors.navyBg,
                 labelStyle: TextStyle(
-                  color: selected == e.key ? AppColors.primaryNavy : AppColors.textSecondary,
-                  fontWeight: selected == e.key ? FontWeight.w600 : FontWeight.normal,
+                  fontSize: 12,
+                  fontWeight:
+                      selected == e.key ? FontWeight.w600 : FontWeight.w500,
+                  color: selected == e.key
+                      ? Colors.white
+                      : AppColors.textSecondary,
                 ),
               ))
           .toList(),
@@ -432,6 +469,7 @@ class _HandoverFormState extends ConsumerState<_HandoverForm> {
   Widget _textField(TextEditingController ctrl, String hint, {int maxLines = 1}) {
     return TextField(
       controller: ctrl,
+      style: AppInput.fieldText,
       maxLines: maxLines,
       decoration: _inputDecoration(hint),
     );
@@ -537,7 +575,8 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
   @override
   Widget build(BuildContext context) {
     ref.watch(pindahRmProvider);
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + 48;
+    // Body sudah diinset di bawah app bar oleh Scaffold; cukup jarak kecil di atas.
+    const topInset = AppSpacing.sm;
     return FutureBuilder<List<RmHandover>>(
       future: _future,
       builder: (context, snap) {

@@ -146,6 +146,7 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: TextField(
         onChanged: (v) => setState(() => _query = v),
+        style: AppInput.fieldText,
         decoration: InputDecoration(
           hintText: 'Cari nama, NIP, email, atau role',
           prefixIcon: const Icon(Icons.search, size: 20),
@@ -254,6 +255,7 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
               onSelected: (v) {
                 if (v == 'edit') _openForm(item: a);
                 if (v == 'toggle') _toggleActive(a);
+                if (v == 'delete') _deleteAccount(a);
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
@@ -272,6 +274,21 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
                     value: 'toggle',
                     child: Text('Aktifkan',
                         style: TextStyle(color: AppColors.successGreen)),
+                  ),
+                // Hapus sengaja hanya muncul untuk akun yang SUDAH nonaktif —
+                // server pun menolak menghapus akun aktif. Penghapusan jadi
+                // tindakan sengaja dua langkah, bukan salah klik pada akun yang
+                // sedang dipakai orang.
+                if (!a.active)
+                  PopupMenuItem(
+                    value: 'delete',
+                    enabled: !isSelf,
+                    child: Text(
+                      isSelf ? 'Hapus (akun Anda)' : 'Hapus akun',
+                      style: TextStyle(
+                          color: isSelf ? AppColors.grayStage : AppColors.errorRed,
+                          fontWeight: FontWeight.w600),
+                    ),
                   ),
               ],
             ),
@@ -331,6 +348,31 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
       await _repo.setActive(a.id, !a.active);
       if (!mounted) return;
       _snack(turnOff ? 'Akun dinonaktifkan' : 'Akun diaktifkan');
+      _fetch();
+    } catch (e) {
+      if (!mounted) return;
+      _snack(e.toString().replaceFirst('Exception: ', ''), isError: true);
+    }
+  }
+
+  /// Penghapusan akun permanen — pelaksana permintaan hapus akun (kewajiban
+  /// Google Play). Hanya tersedia untuk akun yang sudah nonaktif.
+  ///
+  /// Konfirmasinya menuntut pengetikan nama akun, bukan sekadar tombol "Ya":
+  /// tindakan ini tidak bisa dibatalkan, dan daftar akun kerap berisi nama-nama
+  /// yang mirip. Hasil server ditampilkan apa adanya agar admin tahu apakah baris
+  /// benar-benar dibuang atau data pribadinya dimusnahkan sambil menyisakan
+  /// catatan wajib arsip.
+  Future<void> _deleteAccount(AccountModel a) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _KonfirmasiHapusAkunDialog(nama: a.name, nip: a.nip),
+    );
+    if (confirmed != true) return;
+    try {
+      final result = await _repo.deleteAccount(a.id);
+      if (!mounted) return;
+      _snack(result.message);
       _fetch();
     } catch (e) {
       if (!mounted) return;
@@ -446,6 +488,7 @@ class _AccountFormState extends State<_AccountForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nip,
+                style: AppInput.fieldText,
                 enabled: !_isEdit, // NIP is the login id; immutable after creation.
                 decoration: _dec('NIP / ID Login',
                     hint: _isEdit ? null : 'mis. 199001012015031001'),
@@ -456,6 +499,7 @@ class _AccountFormState extends State<_AccountForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama Lengkap'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
@@ -463,6 +507,7 @@ class _AccountFormState extends State<_AccountForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _email,
+                style: AppInput.fieldText,
                 keyboardType: TextInputType.emailAddress,
                 decoration: _dec('Email'),
                 validator: (v) {
@@ -475,6 +520,7 @@ class _AccountFormState extends State<_AccountForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _password,
+                style: AppInput.fieldText,
                 obscureText: true,
                 decoration: _dec(
                   _isEdit ? 'Password baru (opsional)' : 'Password',
@@ -498,6 +544,7 @@ class _AccountFormState extends State<_AccountForm> {
               DropdownButtonFormField<String>(
                 initialValue: officeValue,
                 isExpanded: true,
+                style: AppInput.fieldText,
                 decoration: _dec('Kantor'),
                 items: [
                   const DropdownMenuItem(value: '', child: Text('— Tanpa kantor —')),
@@ -518,6 +565,14 @@ class _AccountFormState extends State<_AccountForm> {
                     FilterChip(
                       label: Text(entry.value),
                       selected: _roles.contains(entry.key),
+                      // Teks putih saat terpilih agar kontras di atas latar navy.
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _roles.contains(entry.key)
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                      ),
                       onSelected: (sel) => setState(() {
                         if (sel) {
                           _roles.add(entry.key);
@@ -624,5 +679,95 @@ class _AccountFormState extends State<_AccountForm> {
       content: Text(msg),
       backgroundColor: isError ? AppColors.errorRed : AppColors.successGreen,
     ));
+  }
+}
+
+/// Konfirmasi penghapusan akun. Tombol "Hapus" baru hidup setelah admin mengetik
+/// ulang nama akun persis — pagar yang sengaja merepotkan, karena penghapusan
+/// tidak bisa dibatalkan dan daftar akun kerap memuat nama yang mirip.
+class _KonfirmasiHapusAkunDialog extends StatefulWidget {
+  const _KonfirmasiHapusAkunDialog({required this.nama, required this.nip});
+
+  final String nama;
+  final String nip;
+
+  @override
+  State<_KonfirmasiHapusAkunDialog> createState() =>
+      _KonfirmasiHapusAkunDialogState();
+}
+
+class _KonfirmasiHapusAkunDialogState
+    extends State<_KonfirmasiHapusAkunDialog> {
+  final _controller = TextEditingController();
+  bool _cocok = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final cocok = _controller.text.trim() == widget.nama.trim();
+      if (cocok != _cocok) setState(() => _cocok = cocok);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      // Layar landscape sangat pendek: tanpa ini isi dialog meluber alih-alih
+      // bisa digulung (pola yang sama dipakai dialog nonaktifkan di atas).
+      scrollable: true,
+      title: const Text('Hapus akun permanen?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${widget.nama} • ${widget.nip}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          const Text(
+            'Data pribadi akun ini dihapus permanen dan tidak dapat dipulihkan: '
+            'NIP, nama, surel, jabatan, kata sandi, perangkat notifikasi, dan '
+            'seluruh riwayat notifikasinya.',
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Catatan pipeline, kunjungan, dan serah terima yang wajib diarsipkan '
+            'tetap disimpan, tetapi tidak lagi menunjuk ke identitas siapa pun.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          Text('Ketik "${widget.nama}" untuk mengonfirmasi:',
+              style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal')),
+        TextButton(
+          onPressed: _cocok ? () => Navigator.of(context).pop(true) : null,
+          child: Text('Hapus permanen',
+              style: TextStyle(
+                  color: _cocok ? AppColors.errorRed : AppColors.grayStage,
+                  fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
   }
 }

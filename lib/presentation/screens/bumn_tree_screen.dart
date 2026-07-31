@@ -122,6 +122,7 @@ class _BumnTreeScreenState extends ConsumerState<BumnTreeScreen> {
             AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
         child: TextField(
           controller: _searchController,
+          style: AppInput.fieldText,
           onChanged: (v) => _notifier.onSearchChanged(v),
           decoration: InputDecoration(
             hintText: 'Cari perusahaan BUMN…',

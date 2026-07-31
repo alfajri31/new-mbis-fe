@@ -54,6 +54,12 @@ class CustomerAiCard extends StatelessWidget {
                   'assets/images/maskot.png',
                   width: 30,
                   height: 30,
+                  // Aset 1309x1202; tanpa cacheWidth/cacheHeight Flutter men-decode
+                  // resolusi penuh (±6 MB) walau digambar 30 px.
+                  cacheWidth:
+                      (30 * MediaQuery.devicePixelRatioOf(context)).round(),
+                  cacheHeight:
+                      (30 * MediaQuery.devicePixelRatioOf(context)).round(),
                   errorBuilder: (_, _, _) => const Icon(
                     Icons.smart_toy_outlined,
                     size: 26,

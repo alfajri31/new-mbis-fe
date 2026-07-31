@@ -341,6 +341,7 @@ class _ReferralManagementScreenState extends ConsumerState<ReferralManagementScr
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: selected,
+                style: AppInput.fieldText,
                 isExpanded: true,
                 items: rms
                     .map((rm) => DropdownMenuItem(

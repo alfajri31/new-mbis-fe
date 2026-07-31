@@ -276,6 +276,7 @@ class _KelolaPengumumanScreenState
                 width: 116,
                 child: TextField(
                   controller: _maxBannerCtrl,
+                  style: AppInput.fieldText,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Maksimal',
@@ -312,9 +313,9 @@ class _KelolaPengumumanScreenState
   }
 
   Widget _buildCard(Announcement a) {
-    final isRecognition = a.isRecognition;
-    final color = isRecognition ? AppColors.secondaryOrange : AppColors.primaryNavy;
-    final icon = isRecognition ? Icons.emoji_events_outlined : Icons.campaign_outlined;
+    // Satu identitas visual untuk semua pengumuman — tidak dibagi per jenis.
+    const color = AppColors.primaryNavy;
+    const icon = Icons.campaign_outlined;
 
     return Container(
       decoration: BoxDecoration(
@@ -371,7 +372,6 @@ class _KelolaPengumumanScreenState
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      _chip(a.typeLabel, color),
                       _chip(a.audienceLabel, AppColors.grayStage),
                       if (a.startsAt != null || a.endsAt != null)
                         _chip(_windowLabel(a), AppColors.grayStage),

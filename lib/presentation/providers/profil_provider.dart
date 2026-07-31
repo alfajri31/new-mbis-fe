@@ -43,15 +43,22 @@ class ProfileData {
 
 const Object _keep = Object();
 
-/// State layar profil — hanya memegang future load (pola FutureBuilder lama).
+/// State layar profil — memegang future load (pola FutureBuilder lama) beserta
+/// pemilik sesi saat future itu dibuat.
 class ProfilState {
   final Future<ProfileData>? future;
 
-  const ProfilState({this.future});
+  /// Id pengguna yang sedang dimuat/termuat oleh [future]. Dipakai mendeteksi
+  /// pergantian sesi; lihat [ProfilNotifier.start].
+  final String? untukUserId;
 
-  ProfilState copyWith({Object? future = _keep}) {
+  const ProfilState({this.future, this.untukUserId});
+
+  ProfilState copyWith({Object? future = _keep, Object? untukUserId = _keep}) {
     return ProfilState(
       future: future == _keep ? this.future : future as Future<ProfileData>?,
+      untukUserId:
+          untukUserId == _keep ? this.untukUserId : untukUserId as String?,
     );
   }
 }
@@ -66,16 +73,27 @@ class ProfilNotifier extends Notifier<ProfilState> {
   @override
   ProfilState build() => const ProfilState();
 
-  /// Dipicu sekali dari `didChangeDependencies` layar. Hanya memulai load bila
-  /// future belum ada — mirror perilaku `_future ??= _load()`.
+  /// Dipicu dari `didChangeDependencies` layar. Memuat bila belum ada future,
+  /// ATAU bila sesi sudah berganti pengguna sejak future itu dibuat.
+  ///
+  /// Pemeriksaan pengguna itu wajib: provider ini hidup selama proses aplikasi
+  /// dan tidak pernah di-invalidate saat logout, jadi versi lama yang hanya
+  /// menguji `future != null` membuat layar Profil terkunci pada pengguna
+  /// PERTAMA yang login. Setelah berganti akun tanpa menutup aplikasi, Profil
+  /// masih menampilkan nama, NIP, dan email pemilik sesi sebelumnya — sementara
+  /// beranda sudah benar karena membaca sesi langsung.
   void start() {
-    if (state.future != null) return;
-    state = state.copyWith(future: _load());
+    final userId = ref.read(sessionProvider)?.user.id;
+    if (state.future != null && state.untukUserId == userId) return;
+    state = ProfilState(future: _load(), untukUserId: userId);
   }
 
   /// Tombol "Coba lagi" — pengganti `setState(() => _future = _load())`.
   void reload() {
-    state = state.copyWith(future: _load());
+    state = ProfilState(
+      future: _load(),
+      untukUserId: ref.read(sessionProvider)?.user.id,
+    );
   }
 
   Future<ProfileData> _load() async {
