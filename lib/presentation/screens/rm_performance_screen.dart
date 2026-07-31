@@ -141,11 +141,19 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
                 ? Responsive.contentMaxWidthFor(context)
                 : double.infinity,
           ),
-          child: Column(
-            children: [
-              _buildSearchAndFilters(topInset),
-              Expanded(child: _buildList()),
-            ],
+          // Header (kartu KPI + cari + Filter) ikut menggulung bersama daftar —
+          // tidak sticky — supaya di viewport kecil daftar tidak terjepit.
+          child: RefreshIndicator(
+            color: AppColors.primaryNavy,
+            displacement: topInset,
+            onRefresh: _resetAndLoad,
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverToBoxAdapter(child: _buildSearchAndFilters(topInset)),
+                ..._buildContentSlivers(),
+              ],
+            ),
           ),
         ),
       ),
@@ -153,8 +161,6 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
   }
 
   Widget _buildSearchAndFilters(double topInset) {
-    final regions = _regions;
-    final branches = _branches;
     return Container(
       color: AppColors.surfaceWhite,
       padding: EdgeInsets.fromLTRB(AppSpacing.lg, topInset + AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
@@ -162,77 +168,236 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
         children: [
           _buildStatCards(),
           const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            decoration: InputDecoration(
-              hintText: 'Cari nama atau NIP RM',
-              hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        _onSearchChanged('');
-                      },
-                    )
-                  : null,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              filled: true,
-              fillColor: AppColors.bgScreen,
-              border: OutlineInputBorder(
-                borderRadius: AppRadius.radiusMd,
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          if (regions.isNotEmpty || branches.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Row(
+          // Kolom cari + satu tombol "Filter" tunggal (wilayah/cabang/Connect saja
+          // pindah ke sheet), menyeragamkan pola dengan tab Customer.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (regions.isNotEmpty)
-                  Expanded(
-                    child: _filterDropdown(
-                      hint: 'Semua wilayah',
-                      value: _regionId,
-                      options: regions,
-                      onChanged: _onRegionChanged,
-                    ),
-                  ),
-                if (regions.isNotEmpty && branches.isNotEmpty)
-                  const SizedBox(width: AppSpacing.sm),
-                if (branches.isNotEmpty)
-                  Expanded(
-                    child: _filterDropdown(
-                      hint: 'Semua cabang',
-                      value: _branchId,
-                      options: branches,
-                      onChanged: _onBranchChanged,
-                    ),
-                  ),
+                Expanded(child: _buildSearchField()),
+                const SizedBox(width: 10),
+                _buildFilterButton(),
               ],
-            ),
-          ],
-          const SizedBox(height: AppSpacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilterChip(
-              label: const Text('Connect saja', style: TextStyle(fontSize: 12.5)),
-              selected: _connectOnly,
-              onSelected: _onConnectOnlyChanged,
-              visualDensity: VisualDensity.compact,
-              showCheckmark: false,
-              selectedColor: AppColors.primaryNavy.withValues(alpha: 0.12),
-              labelStyle: TextStyle(
-                color: _connectOnly ? AppColors.primaryNavy : AppColors.textSecondary,
-                fontWeight: _connectOnly ? FontWeight.w600 : FontWeight.w500,
-              ),
-              side: BorderSide(color: _connectOnly ? AppColors.primaryNavy : AppColors.border),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      style: AppInput.fieldText,
+      onChanged: _onSearchChanged,
+      decoration: InputDecoration(
+        hintText: 'Cari nama atau NIP RM',
+        prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+        suffixIcon: _searchController.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 18),
+                onPressed: () {
+                  _searchController.clear();
+                  _onSearchChanged('');
+                },
+              )
+            : null,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        filled: true,
+        fillColor: AppColors.bgScreen,
+        border: OutlineInputBorder(
+          borderRadius: AppRadius.radiusMd,
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  /// Jumlah filter aktif (wilayah/cabang/Connect) → badge pada tombol Filter.
+  int get _activeFilterCount {
+    int n = 0;
+    if (_regionId != null) n++;
+    if (_branchId != null) n++;
+    if (_connectOnly) n++;
+    return n;
+  }
+
+  Widget _buildFilterButton() {
+    final count = _activeFilterCount;
+    final active = count > 0;
+    return InkWell(
+      onTap: _openFilterSheet,
+      borderRadius: AppRadius.radiusMd,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primaryNavy : AppColors.bgScreen,
+          borderRadius: AppRadius.radiusMd,
+          border: Border.all(color: active ? AppColors.primaryNavy : AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.tune_rounded,
+                size: 18, color: active ? Colors.white : AppColors.grayStage),
+            const SizedBox(width: 6),
+            Text('Filter',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: active ? Colors.white : AppColors.textSecondary)),
+            if (active) ...[
+              const SizedBox(width: 6),
+              Container(
+                constraints: const BoxConstraints(minWidth: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration:
+                    const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: Text('$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryNavy)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFilterSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceWhite,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) =>
+            SingleChildScrollView(child: _buildFilterSheet(setSheetState)),
+      ),
+    );
+  }
+
+  Widget _sheetSectionLabel(String text) => Text(text,
+      style: const TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary));
+
+  /// Bersihkan semua filter sheet (wilayah/cabang/Connect) sekaligus.
+  void _resetAllFilters() {
+    _onRegionChanged(null); // sekaligus mereset cabang
+    if (_connectOnly) _onConnectOnlyChanged(false);
+  }
+
+  Widget _buildFilterSheet(void Function(void Function()) setSheetState) {
+    void refresh(VoidCallback fn) {
+      fn();
+      setSheetState(() {});
+    }
+
+    final regions = _regions;
+    final branches = _branches;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: 20 + MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.tune_rounded, size: 20, color: AppColors.primaryNavy),
+                const SizedBox(width: 8),
+                const Text('Filter',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary)),
+                const Spacer(),
+                if (_activeFilterCount > 0)
+                  TextButton(
+                    onPressed: () => refresh(_resetAllFilters),
+                    style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    child: const Text('Reset',
+                        style: TextStyle(
+                            color: AppColors.secondaryOrange, fontWeight: FontWeight.w600)),
+                  ),
+              ],
+            ),
+            if (regions.isNotEmpty || branches.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _sheetSectionLabel('Wilayah & Cabang'),
+              const SizedBox(height: 10),
+              if (regions.isNotEmpty)
+                _filterDropdown(
+                  hint: 'Semua wilayah',
+                  value: _regionId,
+                  options: regions,
+                  onChanged: (v) => refresh(() => _onRegionChanged(v)),
+                ),
+              if (branches.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _filterDropdown(
+                  hint: 'Semua cabang',
+                  value: _branchId,
+                  options: branches,
+                  onChanged: (v) => refresh(() => _onBranchChanged(v)),
+                ),
+              ],
+            ],
+            const SizedBox(height: 16),
+            _sheetSectionLabel('Kategori'),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilterChip(
+                label: const Text('Connect saja'),
+                selected: _connectOnly,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _connectOnly ? Colors.white : AppColors.textSecondary,
+                ),
+                onSelected: (v) => refresh(() => _onConnectOnlyChanged(v)),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusMd),
+                ),
+                child: const Text('Tutup',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -339,6 +504,7 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
       decoration: BoxDecoration(
         color: AppColors.bgScreen,
         borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: AppColors.border),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
@@ -361,77 +527,82 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
     );
   }
 
-  Widget _buildList() {
+  List<Widget> _buildContentSlivers() {
     if (_initialLoading) {
-      return const SkeletonList(itemCount: 8);
+      // SkeletonList adalah ListView (scrollable) → hasScrollBody harus true.
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: true,
+          child: SkeletonList(itemCount: 8),
+        ),
+      ];
     }
     if (_error != null && _items.isEmpty) {
-      return ListView(children: [
-        const SizedBox(height: 60),
-        ErrorStateView(message: _error!, onRetry: _resetAndLoad),
-      ]);
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: ErrorStateView(message: _error!, onRetry: _resetAndLoad),
+        ),
+      ];
     }
     if (_items.isEmpty) {
-      return RefreshIndicator(
-        color: AppColors.primaryNavy,
-        onRefresh: _resetAndLoad,
-        child: ListView(
-          children: const [
-            SizedBox(height: 80),
-            Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.xl),
+            child: Center(
               child: Text('Tidak ada RM yang cocok dengan filter ini.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
             ),
-          ],
+          ),
         ),
-      );
+      ];
     }
     // Desktop/tablet: two cards per row (header + footer stay full-width). Cards
     // vary in height (name/office can wrap), so pair them into Rows rather than a
     // fixed-extent grid to avoid overflow.
     final wide = Responsive.isWide(context);
     final rowCount = wide ? ((_items.length + 1) ~/ 2) : _items.length;
-    return RefreshIndicator(
-      color: AppColors.primaryNavy,
-      onRefresh: _resetAndLoad,
-      child: ListView.builder(
-        controller: _scrollController,
+    return [
+      SliverPadding(
         padding: const EdgeInsets.all(AppSpacing.lg),
         // +1 header row, +1 footer (loader / end-of-list).
-        itemCount: rowCount + 2,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: Text('$_total RM dalam cakupan',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        sliver: SliverList.builder(
+          itemCount: rowCount + 2,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Text('$_total RM dalam cakupan',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              );
+            }
+            if (index == rowCount + 1) {
+              return _buildFooter();
+            }
+            if (!wide) {
+              return _buildRmCard(_items[index - 1]);
+            }
+            final left = (index - 1) * 2;
+            final right = left + 1;
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildRmCard(_items[left])),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: right < _items.length
+                      ? _buildRmCard(_items[right])
+                      : const SizedBox.shrink(),
+                ),
+              ],
             );
-          }
-          if (index == rowCount + 1) {
-            return _buildFooter();
-          }
-          if (!wide) {
-            return _buildRmCard(_items[index - 1]);
-          }
-          final left = (index - 1) * 2;
-          final right = left + 1;
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildRmCard(_items[left])),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: right < _items.length
-                    ? _buildRmCard(_items[right])
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          );
-        },
+          },
+        ),
       ),
-    );
+    ];
   }
 
   Widget _buildFooter() {

@@ -15,9 +15,13 @@
 #      (HANYA bisa diunduh sekali). Pasang di Codemagic → Teams → Integrations →
 #      App Store Connect dengan nama persis `askrindo-app-store-connect`.
 #   4. Codemagic → Environment variables, buat GROUP `mbis-prod` (tidak rahasia):
-#         API_URL = https://<host-backend-produksi>        (tanpa akhiran /api)
-#         APP_ENV = prod
+#         API_URL               = https://<host-backend-produksi>  (tanpa akhiran /api)
+#         APP_ENV               = prod
+#         PRIVACY_POLICY_URL    = https://<domain>/...    (WAJIB Google Play)
+#         ACCOUNT_DELETION_URL  = https://<domain>/...    (WAJIB Google Play)
+#         PRIVACY_CONTACT_EMAIL = <email unit pengelola>  (opsional)
 #      Base URL sengaja lewat variabel, tidak di-hardcode — aturan externalize-config.
+#      Dua URL kewajiban Play juga di sini; workflow Android menolak build kalau kosong.
 #   5. Untuk workflow Android, buat GROUP `mbis-android-keystore` (RAHASIA, centang
 #      "Secure" pada tiap variabel):
 #         KEYSTORE_B64       = isi upload keystore (.jks) yang di-base64
@@ -57,7 +61,8 @@ workflows:
       xcode: latest
       cocoapods: default
       groups:
-        - mbis-prod            # API_URL, APP_ENV
+        - mbis-prod            # API_URL, APP_ENV, PRIVACY_POLICY_URL,
+                               # ACCOUNT_DELETION_URL, PRIVACY_CONTACT_EMAIL
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.askrindo.mbis.mobile
@@ -101,7 +106,8 @@ workflows:
       flutter: 3.44.2
       java: 17
       groups:
-        - mbis-prod            # API_URL, APP_ENV
+        - mbis-prod            # API_URL, APP_ENV, PRIVACY_POLICY_URL,
+                               # ACCOUNT_DELETION_URL, PRIVACY_CONTACT_EMAIL
         - mbis-android-keystore  # KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
     scripts:
       - name: Susun key.properties dari secret
@@ -118,13 +124,28 @@ workflows:
       - *pub_get
       - *verify
       - name: Build AAB
+        # Gerbang yang sama dengan scripts/build-aab.sh: kalau URL kewajiban Play
+        # belum di-set di group `mbis-prod`, build dihentikan di sini — jauh lebih
+        # murah daripada ditolak review setelah upload.
         script: |
+          set -e
+          for v in API_URL PRIVACY_POLICY_URL ACCOUNT_DELETION_URL; do
+            if [ -z "$(eval echo \$$v)" ]; then
+              echo "GAGAL: $v belum di-set di environment group mbis-prod." >&2
+              exit 1
+            fi
+          done
           flutter build appbundle --release --flavor prod \
             --dart-define=API_URL="$API_URL" \
             --dart-define=APP_ENV="$APP_ENV" \
+            --dart-define=PRIVACY_POLICY_URL="$PRIVACY_POLICY_URL" \
+            --dart-define=ACCOUNT_DELETION_URL="$ACCOUNT_DELETION_URL" \
+            --dart-define=PRIVACY_CONTACT_EMAIL="${PRIVACY_CONTACT_EMAIL:-}" \
             --build-number=$PROJECT_BUILD_NUMBER
     artifacts:
       - build/app/outputs/bundle/**/*.aab
+      # mapping.txt hanya ada karena minify aktif (android/app/build.gradle.kts).
+      # Unggah ke Play Console tiap rilis supaya stack trace crash terbaca.
       - build/app/outputs/**/mapping.txt
 
 # Catatan web: website memakai Flutter Web dan dibangun lewat Dockerfile di root repo

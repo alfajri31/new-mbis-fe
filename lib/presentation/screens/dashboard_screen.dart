@@ -35,9 +35,10 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-/// Full-bleed banner height and how far the main card rides up over it.
+/// Full-bleed banner height. Konten dashboard TIDAK ditumpuk di atas banner:
+/// elemen pertama di bawahnya adalah pemilih Periode (baris tanpa latar), jadi
+/// tumpang-tindih membuatnya terbaca "nabrak" dan sentuhannya jatuh ke banner.
 const double _bannerHeight = 138;
-const double _cardOverlap = 24;
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with RouteAware {
@@ -54,6 +55,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   DashboardDrilldown? get _drilldown => _ds.drilldown;
   DashboardCategories? get _categories => _ds.categories;
   String? get _selectedCategory => _ds.selectedCategory;
+  int? get _selectedYear => _ds.selectedYear;
   DashboardCategoryStat? get _selectedCat => _ds.selectedCat;
   int get _activePipelines => _ds.activePipelines;
   int get _successRate => _ds.successRate;
@@ -108,6 +110,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   // Aksi data → delegasi ke DashboardNotifier (logika dipindah utuh).
   Future<void> _fetch({bool silent = false}) => _notifier.fetch(silent: silent);
   void _onCategoryChanged(String v) => _notifier.onCategoryChanged(v);
+  void _onYearChanged(int? v) => _notifier.onYearChanged(v);
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +177,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               apiClient: _apiClient!,
               announcements: _announcements,
               height: _bannerHeight,
-              dotsBottomInset: _cardOverlap + 10,
             ),
           Center(
             child: ConstrainedBox(
@@ -183,59 +185,102 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     ? Responsive.contentMaxWidthFor(context)
                     : double.infinity,
               ),
-              child: Transform.translate(
-                // Pull the main card up so it slightly overlaps the banner; when
-                // there's no banner, keep normal top spacing instead.
-                offset: Offset(0, hasBanner ? -_cardOverlap : 0),
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    hasBanner ? 0 : AppSpacing.lg,
-                    AppSpacing.lg,
-                    AppSpacing.lg,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Realisasi vs Target YTD is the headline metric, so it leads
-                      // the dashboard (replacing the old Customer/Pipeline/Jadwal strip;
-                      // those now live as cards in the grid below).
-                      PencapaianTargetCard(
-                        summary: _summary,
-                        selectedCat: _selectedCat,
-                        categories: _categories,
-                        selectedCategory: _selectedCategory,
-                        onCategoryChanged: _onCategoryChanged,
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildKinerjaGrid(),
-                      // Anyone seeing more than their own data gets the oversight
-                      // section: supervisors (KUP/BM/RO) by office subtree, and ADMIN
-                      // nationwide. Gated on data scope (scopeLevel != OWNER) rather
-                      // than role, so ADMIN's national oversight view shows here too.
-                      if (_summary?.isSupervisor == true) ...[
-                        const SizedBox(height: AppSpacing.xl),
-                        _buildSupervisorSection(),
-                      ],
-                      if (isRm) ...[
-                        const SizedBox(height: AppSpacing.xl),
-                        SectionTitle(
-                          'Jadwal Kunjungan',
-                          onActionTap: () => context.go('/dashboard/jadwal'),
-                          actionLabel: 'Lihat semua',
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        _buildJadwalList(_schedules),
-                      ],
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Pemilih periode (C2): pilih tahun; semua metrik dashboard
+                    // mengikuti tahun terpilih.
+                    _buildPeriodPicker(),
+                    const SizedBox(height: AppSpacing.md),
+                    // Realisasi vs Target YTD is the headline metric, so it leads
+                    // the dashboard (replacing the old Customer/Pipeline/Jadwal strip;
+                    // those now live as cards in the grid below).
+                    PencapaianTargetCard(
+                      summary: _summary,
+                      selectedCat: _selectedCat,
+                      categories: _categories,
+                      selectedCategory: _selectedCategory,
+                      onCategoryChanged: _onCategoryChanged,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    _buildKinerjaGrid(),
+                    // Anyone seeing more than their own data gets the oversight
+                    // section: supervisors (KUP/BM/RO) by office subtree, and ADMIN
+                    // nationwide. Gated on data scope (scopeLevel != OWNER) rather
+                    // than role, so ADMIN's national oversight view shows here too.
+                    if (_summary?.isSupervisor == true) ...[
                       const SizedBox(height: AppSpacing.xl),
+                      _buildSupervisorSection(),
                     ],
-                  ),
+                    if (isRm) ...[
+                      const SizedBox(height: AppSpacing.xl),
+                      SectionTitle(
+                        'Jadwal Kunjungan',
+                        onActionTap: () => context.go('/dashboard/jadwal'),
+                        actionLabel: 'Lihat semua',
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      _buildJadwalList(_schedules),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
                 ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Pemilih tahun periode (C2). Memilih tahun memicu fetch ulang; semua metrik
+  /// dashboard mengikuti tahun terpilih. Default = tahun berjalan.
+  Widget _buildPeriodPicker() {
+    final currentYear = DateTime.now().year;
+    final selected = _selectedYear ?? currentYear;
+    final years = <int>[for (int y = currentYear; y >= currentYear - 4; y--) y];
+    if (!years.contains(selected)) years.insert(0, selected);
+    return Row(
+      children: [
+        const Icon(Icons.calendar_month_outlined,
+            size: 18, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        const Text('Periode',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary)),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceWhite,
+            borderRadius: AppRadius.radiusMd,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: selected,
+              isDense: true,
+              borderRadius: BorderRadius.circular(8),
+              icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryNavy),
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryNavy),
+              items: [
+                for (final y in years)
+                  DropdownMenuItem<int>(value: y, child: Text('$y')),
+              ],
+              onChanged: (y) {
+                if (y != null) _onYearChanged(y);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -266,9 +311,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final List<Map<String, dynamic>> gridItems = [
       {
         'key': 'target',
-        'label': 'Target YTD',
+        'label': 'Target Setahun',
         'value': cat != null
-            ? AppFormat.currencyShort(cat.targetYtd)
+            ? AppFormat.currencyShort(cat.targetFullYear)
             : (s != null ? AppFormat.currencyShort(s.premiTarget) : '–'),
         'icon': Icons.track_changes_outlined,
         'color': AppColors.primaryNavy,
@@ -990,6 +1035,7 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
           const SizedBox(height: 12),
           TextField(
             controller: _searchCtrl,
+            style: AppInput.fieldText,
             onChanged: (v) => setState(() => _query = v),
             decoration: InputDecoration(
               hintText: 'Cari nama customer…',

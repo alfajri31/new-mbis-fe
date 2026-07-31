@@ -300,6 +300,7 @@ class _AccountPickerState extends State<_AccountPicker> {
               style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           const SizedBox(height: 12),
           TextField(
+            style: AppInput.fieldText,
             onChanged: (v) => setState(() => _query = v),
             decoration: InputDecoration(
               hintText: 'Cari nama, NIP, atau email',
@@ -413,18 +414,21 @@ class _SsoCreateFormState extends State<_SsoCreateForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nip,
+                style: AppInput.fieldText,
                 decoration: _dec('NIP / ID Login', hint: 'mis. 199001012015031001'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
+                style: AppInput.fieldText,
                 decoration: _dec('Nama Lengkap'),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _officeId,
+                style: AppInput.fieldText,
                 isExpanded: true,
                 decoration: _dec('Kantor'),
                 items: [

@@ -6,7 +6,7 @@ import '../../../theme/app_theme.dart';
 /// Documents (SPAU / Underlying) — available for every pipeline; the original
 /// referring RM may still upload here after handover.
 /// Murni presentational — diekstrak dari `pipeline_detail_screen.dart`
-/// (behavior-preserving). Aksi upload/hapus dilewatkan lewat callback.
+/// (behavior-preserving). Aksi buka/upload/hapus dilewatkan lewat callback.
 class PipelineDocumentsCard extends StatelessWidget {
   const PipelineDocumentsCard({
     super.key,
@@ -14,6 +14,7 @@ class PipelineDocumentsCard extends StatelessWidget {
     required this.docs,
     required this.currentUserId,
     required this.isAgent,
+    required this.onView,
     required this.onUpload,
     required this.onDelete,
   });
@@ -22,6 +23,11 @@ class PipelineDocumentsCard extends StatelessWidget {
   final List<PipelineDocumentModel> docs;
   final String? currentUserId;
   final bool isAgent;
+
+  /// Buka/unduh dokumen yang sudah terunggah. Berkasnya dilayani endpoint
+  /// terlindungi `/api/files/**`, jadi pemanggilnya WAJIB mengambil isinya lewat
+  /// ApiClient (bertoken) — bukan melempar URL-nya ke peramban.
+  final ValueChanged<PipelineDocumentModel> onView;
   final ValueChanged<String> onUpload;
   final ValueChanged<PipelineDocumentModel> onDelete;
 
@@ -113,6 +119,15 @@ class PipelineDocumentsCard extends StatelessWidget {
               ],
             ),
           ),
+          // Dokumen yang sudah ada selalu bisa DIBUKA, termasuk oleh RM operan
+          // yang tidak boleh mengelolanya: ia justru perlu membaca SPAU dari RM
+          // asal sebelum bisa menandai WON. Membaca bukan mengelola.
+          if (doc != null)
+            TextButton(
+              onPressed: () => onView(doc),
+              child: const Text('Lihat',
+                  style: TextStyle(fontSize: 12, color: AppColors.primaryNavy)),
+            ),
           if (canEdit) ...[
             TextButton(
               onPressed: () => onUpload(docType),

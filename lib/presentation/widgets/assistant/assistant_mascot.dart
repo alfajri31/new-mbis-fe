@@ -17,6 +17,12 @@ class AssistantMascot extends StatelessWidget {
     'assets/images/maskot.png',
     width: size,
     height: size,
+    // maskot.png berukuran 1309x1202 (±6 MB saat di-decode ke bitmap ARGB),
+    // padahal dirender maksimal 64 px. Tanpa cacheWidth/cacheHeight, Flutter
+    // tetap men-decode pada resolusi penuh walau width/height sudah diberi —
+    // width/height hanya mengatur ukuran GAMBAR, bukan ukuran DECODE.
+    cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+    cacheHeight: (size * MediaQuery.devicePixelRatioOf(context)).round(),
     errorBuilder: (_, _, _) => Icon(
       Icons.smart_toy_outlined,
       size: size,

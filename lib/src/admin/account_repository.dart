@@ -1,6 +1,36 @@
 import 'dart:convert';
 import '../network/api_client.dart';
 
+/// Hasil penghapusan akun. Mencerminkan `UserDeletionResponse` di backend.
+///
+/// Penghapusan berjalan dua mode karena catatan wajib arsip (pipeline, kunjungan,
+/// serah terima RM) merujuk ke akun lewat foreign key NOT NULL:
+///  - `HARD_DELETE` — akun tidak pernah dipakai, barisnya benar-benar dibuang;
+///  - `ANONYMIZED`  — data pribadi dimusnahkan, catatan bisnis tetap ada tanpa
+///    lagi menunjuk ke identitas siapa pun. [retainedBy] menyebut penahannya.
+class AccountDeletionResult {
+  final String mode;
+  final List<String> retainedBy;
+  final String message;
+
+  const AccountDeletionResult({
+    required this.mode,
+    required this.retainedBy,
+    required this.message,
+  });
+
+  bool get isHardDelete => mode == 'HARD_DELETE';
+
+  factory AccountDeletionResult.fromJson(Map<String, dynamic> j) =>
+      AccountDeletionResult(
+        mode: j['mode']?.toString() ?? 'ANONYMIZED',
+        retainedBy: (j['retainedBy'] as List<dynamic>? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        message: j['message']?.toString() ?? 'Akun dihapus.',
+      );
+}
+
 /// A user/account row for the admin "Kelola Akun" screen.
 /// Mirrors AdminUserSummaryResponse / AdminUserDetailResponse on the backend.
 class AccountModel {
@@ -186,6 +216,23 @@ class AccountRepository {
   /// touching its other fields.
   Future<void> setActive(String id, bool active) =>
       updateAccount(id, active: active);
+
+  /// Menghapus akun — langkah ketiga setelah edit dan nonaktifkan, dan pelaksana
+  /// permintaan penghapusan akun (kewajiban Google Play).
+  ///
+  /// Server menolak bila akun masih aktif, masih memegang portofolio, atau merupakan
+  /// ADMIN terakhir. Hasilnya dikembalikan apa adanya supaya admin tahu apakah baris
+  /// benar-benar dibuang (`HARD_DELETE`) atau data pribadinya dimusnahkan sementara
+  /// catatan wajib arsip dipertahankan (`ANONYMIZED`) — lihat `UserDeletionService`
+  /// di backend.
+  Future<AccountDeletionResult> deleteAccount(String id) async {
+    final res = await apiClient.delete('/api/auth/admin/users/$id');
+    if (res.statusCode != 200) {
+      throw Exception(_message(res.body, 'Gagal menghapus akun'));
+    }
+    return AccountDeletionResult.fromJson(
+        jsonDecode(res.body) as Map<String, dynamic>);
+  }
 
   // ── Pending Microsoft SSO requests ──────────────────────────────────────────
 

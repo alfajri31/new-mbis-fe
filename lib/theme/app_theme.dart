@@ -79,6 +79,15 @@ class AppShadows {
   );
 }
 
+/// Gaya isian form yang seragam. Default Material mengambil `bodyLarge` (18) untuk
+/// teks TextField dan `titleMedium` (22) untuk teks DropdownButtonFormField — jauh
+/// lebih besar dari ideal form. Pakai [fieldText] sebagai `style:` pada TextField /
+/// TextFormField / DropdownButtonFormField agar semua form konsisten ~14sp.
+class AppInput {
+  static const TextStyle fieldText =
+      TextStyle(fontSize: 14, color: AppColors.textPrimary);
+}
+
 class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
@@ -102,7 +111,18 @@ class AppTheme {
         disabledColor: AppColors.grayBg,
         checkmarkColor: Colors.white,
         showCheckmark: true,
-        labelStyle: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+        // Label putih saat terpilih (di atas latar navy). FilterChip tidak otomatis
+        // memakai secondaryLabelStyle; warnanya harus WidgetStateColor pada
+        // labelStyle.color (jalur yang benar-benar di-resolve chip), bukan
+        // WidgetStateTextStyle — kalau tidak, chip jatuh ke warna default gelap.
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: WidgetStateColor.resolveWith((states) =>
+              states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : AppColors.textSecondary),
+        ),
         secondaryLabelStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
         side: const BorderSide(color: AppColors.border),
         shape: const StadiumBorder(),
@@ -110,6 +130,19 @@ class AppTheme {
         pressElevation: 0,
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
+      ),
+      // Konsistensi form di seluruh aplikasi: label/hint/helper/error dibuat
+      // seragam ~14/12sp. Tanpa ini, teks dekorasi mewarisi skala teks besar
+      // (bodyLarge 18) sehingga hint search & label form tampak jauh lebih besar
+      // dari isian idealnya. Hanya menyetel UKURAN FONT dekorasi (bukan padding/
+      // border) agar tak menggeser layout form yang sudah ada.
+      inputDecorationTheme: const InputDecorationTheme(
+        labelStyle: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        floatingLabelStyle:
+            TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        hintStyle: TextStyle(fontSize: 14, color: AppColors.grayStage),
+        helperStyle: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        errorStyle: TextStyle(fontSize: 12, color: AppColors.errorRed),
       ),
       textTheme: const TextTheme(
         displayLarge: TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: AppColors.textPrimary, height: 40/34),

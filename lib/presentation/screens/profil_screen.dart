@@ -108,6 +108,8 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
                 _buildMenuSection(context, s),
                 const SizedBox(height: AppSpacing.lg),
               ],
+              _buildPrivasiButton(context, '/profil/privasi'),
+              const SizedBox(height: AppSpacing.md),
               _buildLogoutButton(context),
               const SizedBox(height: AppSpacing.sm),
               const Text(
@@ -475,6 +477,30 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
             side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
             shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Pintu masuk ke kebijakan privasi & permintaan hapus akun. Google Play
+  /// mensyaratkan keduanya "mudah ditemukan" dari dalam aplikasi, jadi ia
+  /// diletakkan tepat di atas tombol Keluar — bukan dikubur di menu konsol.
+  Widget _buildPrivasiButton(BuildContext context, String route) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: OutlinedButton.icon(
+        onPressed: () => context.go(route),
+        icon: const Icon(Icons.privacy_tip_outlined,
+            size: 18, color: AppColors.primaryNavy),
+        label: const Text('Privasi & Akun',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryNavy)),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
         ),
       ),
     );

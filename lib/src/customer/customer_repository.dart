@@ -440,6 +440,7 @@ class CustomerRepository {
     String? entity,
     String? regionId,
     String? branchId,
+    String? rmId,
     bool hvc = false,
   }) async {
     final params = <String, String>{
@@ -449,6 +450,7 @@ class CustomerRepository {
       if (entity != null && entity.isNotEmpty) 'entity': entity,
       if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+      if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
       if (hvc) 'hvc': 'true',
     };
     final query = params.entries
@@ -469,12 +471,14 @@ class CustomerRepository {
     String? entity,
     String? regionId,
     String? branchId,
+    String? rmId,
   }) async {
     final params = <String, String>{
       if (search != null && search.isNotEmpty) 'search': search,
       if (entity != null && entity.isNotEmpty) 'entity': entity,
       if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+      if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
@@ -497,6 +501,7 @@ class CustomerRepository {
     String? entity,
     String? regionId,
     String? branchId,
+    String? rmId,
     bool hvc = false,
   }) async {
     final params = <String, String>{
@@ -504,6 +509,7 @@ class CustomerRepository {
       if (entity != null && entity.isNotEmpty) 'entity': entity,
       if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+      if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
       if (hvc) 'hvc': 'true',
     };
     final query = params.entries

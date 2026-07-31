@@ -2,14 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
 import '../../utils/responsive.dart';
 import '../../src/app.dart';
 import '../../src/customer/customer_repository.dart';
 import '../../src/reference/reference_repository.dart';
 import '../../src/dashboard/dashboard_repository.dart';
+import '../../core/providers/repository_providers.dart';
 import '../providers/customer_list_provider.dart';
 import '../widgets/customer_card.dart';
 import '../widgets/glass_app_bar.dart';
+import '../widgets/rm_picker_sheet.dart';
 import '../widgets/state_views.dart';
 import 'add_customer_screen.dart';
 import 'add_pipeline_screen.dart';
@@ -57,6 +60,14 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   List<ScopeOffice> get _regions => _cs.regions;
   List<ScopeOffice> get _branches => _cs.branches;
 
+  // Supervisor (atasan) monitoring: filter RM/COB + kartu Target/Realisasi/Visit.
+  bool get _isSupervisor => _cs.isSupervisor;
+  String? get _rmId => _cs.rmId;
+  String? get _rmName => _cs.rmName;
+  String? get _cob => _cs.cob;
+  List<DashboardCategoryStat> get _cobOptions => _cs.cobOptions;
+  CustomerScopedSummary? get _summary => _cs.summary;
+
   /// Agents use a small, server-fixed book — keep it client-side; everyone else
   /// is server-paginated so a supervisor's customer base never loads all at once.
   bool get _isPaged => !widget.agentScoped;
@@ -97,6 +108,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   void _onEntityChanged(String? entity) => _notifier.onEntityChanged(entity);
   void _onRegionChanged(String? regionId) => _notifier.onRegionChanged(regionId);
   void _onBranchChanged(String? branchId) => _notifier.onBranchChanged(branchId);
+  void _onRmChanged(String? rmId, String? rmName) =>
+      _notifier.onRmChanged(rmId, rmName);
+  void _onCobChanged(String? cob) => _notifier.onCobChanged(cob);
+  void _resetAllFilters() => _notifier.resetAllFilters();
   Future<void> _refresh() => _notifier.refresh();
 
   /// Pindah halaman + scroll daftar balik ke atas (scroll = urusan widget).
@@ -166,7 +181,6 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
                 SliverToBoxAdapter(
                   child: _buildStatsAndSearch(topInset: topInset, kpi: kpi),
                 ),
-                SliverToBoxAdapter(child: _buildFilterChipsBar()),
                 if (_initialLoading)
                   // SkeletonList is a ListView (scrollable); hasScrollBody must be
                   // true, else SliverFillRemaining tries to measure a viewport's
@@ -417,8 +431,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
     required CustomerKpi? kpi,
   }) {
     String v(int? n) => n?.toString() ?? '–';
-    // Total Customer + pipeline stage breakdown (P3/P2/P1/Won/Declined). Six cards
-    // scroll horizontally so they stay readable on narrow screens.
+    // Total Customer + pipeline stage breakdown (P3/P2/P1/Won/Declined).
     final cards = <Widget>[
       _kpiCard('Total Customer', v(kpi?.totalCustomer), AppColors.primaryNavy),
       _kpiCard('Pipeline P3', v(kpi?.p3), AppColors.grayStage),
@@ -438,102 +451,665 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            // IntrinsicHeight + stretch: all cards share the tallest card's height so
-            // a 2-line label doesn't make one card taller than the rest.
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          // Supervisor monitoring: Target / Realisasi / Visit cards + COB filter.
+          // With no filter these match the front dashboard for the caller's scope.
+          if (_isSupervisor) ...[
+            _buildSupervisorCards(),
+            const SizedBox(height: 14),
+          ],
+          // KPI cards: Total Customer + pipeline stage breakdown. Centered on
+          // desktop; horizontally scrollable on mobile so they stay readable.
+          if (Responsive.isWide(context))
+            Center(
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  for (int i = 0; i < cards.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 10),
-                    SizedBox(width: 120, child: cards[i]),
-                  ],
+                  for (final c in cards) SizedBox(width: 120, child: c),
                 ],
               ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              // IntrinsicHeight + stretch: all cards share the tallest card's
+              // height so a 2-line label doesn't make one card taller.
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < cards.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 10),
+                      SizedBox(width: 120, child: cards[i]),
+                    ],
+                  ],
+                ),
+              ),
             ),
-          ),
           const SizedBox(height: 14),
-          // Minimalist pill search: soft-gray field on the white header, borderless,
-          // rounded icons — clean and professional.
-          Container(
-            decoration: const BoxDecoration(
-              color: AppColors.bgScreen,
-              borderRadius: AppRadius.radiusFull,
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Cari nama customer',
-                hintStyle: const TextStyle(
-                  color: AppColors.grayStage,
-                  fontSize: 14,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: AppColors.grayStage,
-                  size: 20,
-                ),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: 44,
-                  minHeight: 0,
-                ),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: AppColors.grayStage,
-                        ),
-                        splashRadius: 18,
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchChanged('');
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 13),
-              ),
+          // Search field + a single consolidated "Filter" button. All filters
+          // (tipe customer, HVC, and for supervisors wilayah/cabang/RM) live in
+          // the sheet the button opens — keeping the header uncluttered.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _buildSearchField()),
+                const SizedBox(width: 10),
+                _buildFilterButton(),
+              ],
             ),
           ),
-          // Region/branch filter — supervisors only (RM/agent get an empty list,
-          // so the row collapses). The header cards above track these too.
-          if (_regions.isNotEmpty || _branches.isNotEmpty) ...[
-            const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+
+  /// Minimalist pill search: soft-gray field on the white header, borderless.
+  Widget _buildSearchField() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bgScreen,
+        borderRadius: AppRadius.radiusFull,
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+        decoration: InputDecoration(
+          hintText: 'Cari nama customer',
+          hintStyle: const TextStyle(color: AppColors.grayStage, fontSize: 14),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: AppColors.grayStage,
+            size: 20,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 44,
+            minHeight: 0,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.grayStage,
+                  ),
+                  splashRadius: 18,
+                  onPressed: () {
+                    _searchController.clear();
+                    _onSearchChanged('');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 13),
+        ),
+      ),
+    );
+  }
+
+  /// The single "Filter" button beside the search bar. Shows a badge with the
+  /// number of active filters and opens the consolidated filter sheet.
+  Widget _buildFilterButton() {
+    final count = _activeFilterCount;
+    final active = count > 0;
+    return InkWell(
+      onTap: _openFilterSheet,
+      borderRadius: AppRadius.radiusFull,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primaryNavy : AppColors.bgScreen,
+          borderRadius: AppRadius.radiusFull,
+          border: Border.all(
+            color: active ? AppColors.primaryNavy : AppColors.border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 18,
+              color: active ? Colors.white : AppColors.grayStage,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Filter',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 6),
+              Container(
+                constraints: const BoxConstraints(minWidth: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$count',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryNavy,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Count of filters applied through the sheet (drives the button badge).
+  int get _activeFilterCount {
+    int n = 0;
+    if (_entityFilter != null) n++;
+    if (_hvcFilter) n++;
+    if (_regionId != null) n++;
+    if (_branchId != null) n++;
+    if (_rmId != null) n++;
+    return n;
+  }
+
+  Future<void> _openFilterSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) =>
+            SingleChildScrollView(child: _buildFilterSheet(setSheetState)),
+      ),
+    );
+  }
+
+  Widget _sheetSectionLabel(String text) => Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textSecondary,
+        ),
+      );
+
+  /// Body of the consolidated filter sheet. Selections apply live (the list
+  /// underneath is hidden while the sheet is open); [setSheetState] refreshes
+  /// the sheet's own controls to reflect the new selection.
+  Widget _buildFilterSheet(void Function(void Function()) setSheetState) {
+    void refresh(VoidCallback fn) {
+      fn();
+      setSheetState(() {});
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 12,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Row(
               children: [
-                if (_regions.isNotEmpty)
-                  Expanded(
-                    child: _filterDropdown(
-                      hint: 'Semua wilayah',
-                      value: _regionId,
-                      options: _regions,
-                      onChanged: _onRegionChanged,
-                    ),
+                const Icon(
+                  Icons.tune_rounded,
+                  size: 20,
+                  color: AppColors.primaryNavy,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Filter',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
-                if (_regions.isNotEmpty && _branches.isNotEmpty)
-                  const SizedBox(width: 10),
-                if (_branches.isNotEmpty)
-                  Expanded(
-                    child: _filterDropdown(
-                      hint: 'Semua cabang',
-                      value: _branchId,
-                      options: _branches,
-                      onChanged: _onBranchChanged,
+                ),
+                const Spacer(),
+                if (_activeFilterCount > 0)
+                  TextButton(
+                    onPressed: () => refresh(_resetAllFilters),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Reset',
+                      style: TextStyle(
+                        color: AppColors.secondaryOrange,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
               ],
             ),
+            const SizedBox(height: 12),
+            _sheetSectionLabel('Tipe Customer'),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildFilterChip('Semua', null, refresh),
+                for (final o in _entityOptions)
+                  _buildFilterChip(o.value, o.value, refresh),
+              ],
+            ),
+            if (_isPaged) ...[
+              const SizedBox(height: 18),
+              _sheetSectionLabel('Kategori Khusus'),
+              const SizedBox(height: 10),
+              Align(alignment: Alignment.centerLeft, child: _hvcChip(refresh)),
+            ],
+            if (_isSupervisor) ...[
+              if (_regions.isNotEmpty || _branches.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                _sheetSectionLabel('Wilayah & Cabang'),
+                const SizedBox(height: 10),
+                if (_regions.isNotEmpty)
+                  _filterDropdown(
+                    hint: 'Semua wilayah',
+                    value: _regionId,
+                    options: _regions,
+                    onChanged: (v) => refresh(() => _onRegionChanged(v)),
+                  ),
+                if (_branches.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _filterDropdown(
+                    hint: 'Semua cabang',
+                    value: _branchId,
+                    options: _branches,
+                    onChanged: (v) => refresh(() => _onBranchChanged(v)),
+                  ),
+                ],
+              ],
+              const SizedBox(height: 18),
+              _sheetSectionLabel('Nama RM'),
+              const SizedBox(height: 10),
+              _buildRmPickerField(onDone: () => setSheetState(() {})),
+            ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppRadius.radiusMd,
+                  ),
+                ),
+                child: const Text(
+                  'Tutup',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Supervisor monitoring cards + COB/RM filters ────────────────────────────
+  Widget _buildSupervisorCards() {
+    final s = _summary;
+    String count(int? v) => v?.toString() ?? '–';
+    // Analysis header: a wide Target-vs-Realisasi progress bar (with the COB
+    // picker embedded, like the dashboard) beside a compact Visit card, in a
+    // 3:1 split. IntrinsicHeight gives the stretch Row a bounded cross-axis
+    // extent inside the vertically-unbounded scroll view above.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 3, child: _buildTargetRealisasiBar(s)),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _summaryCard(
+              'Visit bln ini',
+              count(s?.visitCountMtd),
+              Icons.location_on_rounded,
+              AppColors.secondaryOrange,
+              subtitle: s == null ? null : 'Total YTD ${s.visitCountYtd}',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Target-vs-Realisasi progress bar with the COB picker embedded in its
+  /// header, mirroring the front dashboard's "Pencapaian Target" card.
+  Widget _buildTargetRealisasiBar(CustomerScopedSummary? s) {
+    final double target = s?.premiTarget ?? 0;
+    final double real = s?.realisasi ?? 0;
+    // Same business rule as the dashboard's DashboardCategoryStat.progress:
+    // target 0 with some realisasi counts as 100% (not 0%), so the bar still
+    // fills and shows its gradient instead of appearing empty/colourless.
+    final rawPct = target > 0 ? real / target : (real > 0 ? 1.0 : 0.0);
+    final pct = rawPct.clamp(0.0, 1.0);
+    String money(double? v) => v == null ? '–' : AppFormat.currencyShort(v);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [AppShadows.level1],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _cobOptions.isNotEmpty
+                    ? _buildCobDropdownInline()
+                    : const Text(
+                        'Realisasi vs Target',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryNavy,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${(rawPct * 100).round()}%',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryNavy,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            height: 8,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.grayBg,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) => Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: constraints.maxWidth * pct,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [
+                        AppColors.primaryNavy,
+                        AppColors.secondaryOrange,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Realisasi ${money(real)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Target ${money(target)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Borderless COB / target-category picker embedded in the bar's header.
+  Widget _buildCobDropdownInline() {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String?>(
+        value: _cob,
+        isDense: true,
+        isExpanded: true,
+        borderRadius: BorderRadius.circular(8),
+        icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryNavy),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.primaryNavy,
+        ),
+        hint: const Text(
+          'Semua COB',
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primaryNavy,
+          ),
+        ),
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('Semua COB', overflow: TextOverflow.ellipsis),
+          ),
+          ..._cobOptions
+              .where((c) => c.category != 'TOTAL')
+              .map((c) => DropdownMenuItem<String?>(
+                    value: c.category,
+                    child: Text(c.label, overflow: TextOverflow.ellipsis),
+                  )),
+        ],
+        onChanged: _onCobChanged,
+      ),
+    );
+  }
+
+  Widget _summaryCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color, {
+    String? subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [AppShadows.level1],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildRmPickerField({VoidCallback? onDone}) {
+    final label = _rmName ?? 'Semua RM';
+    final selected = _rmId != null;
+    return InkWell(
+      onTap: () => _openRmPicker(onDone: onDone),
+      borderRadius: AppRadius.radiusMd,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: 12,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.bgScreen,
+          borderRadius: AppRadius.radiusMd,
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.person_search_rounded,
+              size: 18,
+              color: AppColors.grayStage,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: selected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
+              ),
+            ),
+            if (selected)
+              GestureDetector(
+                onTap: () {
+                  _onRmChanged(null, null);
+                  onDone?.call();
+                },
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: AppColors.grayStage,
+                ),
+              )
+            else
+              const Icon(
+                Icons.expand_more_rounded,
+                size: 18,
+                color: AppColors.grayStage,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRmPicker({VoidCallback? onDone}) async {
+    final dashRepo = ref.read(dashboardRepoProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => RmPickerSheet(
+        repo: dashRepo,
+        regionId: _regionId,
+        branchId: _branchId,
+        onSelected: (rm) {
+          _onRmChanged(rm?.id, rm?.name);
+          onDone?.call();
+        },
       ),
     );
   }
@@ -580,42 +1156,6 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
             ),
           ],
           onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChipsBar() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceWhite,
-        border: Border(
-          top: BorderSide(color: AppColors.border, width: 0.5),
-          bottom: BorderSide(color: AppColors.border, width: 1.0),
-        ),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        child: Row(
-          children: [
-            _buildFilterChip('Semua', null),
-            // Entity-category chips from master parameter ENTITY_CATEGORY.
-            for (final o in _entityOptions) ...[
-              const SizedBox(width: 8),
-              _buildFilterChip(o.value, o.value),
-            ],
-            // Separator + HVC toggle (combinable with the entity filter).
-            Container(
-              width: 1,
-              height: 22,
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              color: AppColors.border,
-            ),
-            _hvcChip(),
-          ],
         ),
       ),
     );
@@ -673,10 +1213,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   }
 
   /// HVC toggle chip (separate from the entity filter; combinable).
-  Widget _hvcChip() {
+  Widget _hvcChip(void Function(VoidCallback) refresh) {
     final selected = _hvcFilter;
     return GestureDetector(
-      onTap: _onHvcToggle,
+      onTap: () => refresh(_onHvcToggle),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
@@ -710,10 +1250,14 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
     );
   }
 
-  Widget _buildFilterChip(String label, String? entityValue) {
+  Widget _buildFilterChip(
+    String label,
+    String? entityValue,
+    void Function(VoidCallback) refresh,
+  ) {
     final isSelected = _entityFilter == entityValue;
     return GestureDetector(
-      onTap: () => _onEntityChanged(entityValue),
+      onTap: () => refresh(() => _onEntityChanged(entityValue)),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(

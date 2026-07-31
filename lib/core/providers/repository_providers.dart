@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mbis/src/admin/account_repository.dart';
 import 'package:mbis/src/admin/export_repository.dart';
 import 'package:mbis/src/admin/policy_repository.dart';
+import 'package:mbis/src/admin/target_import_repository.dart';
 import 'package:mbis/src/agent/agent_repository.dart';
 import 'package:mbis/src/announcement/announcement_repository.dart';
 import 'package:mbis/src/assistant/ai_activity_admin_repository.dart';
@@ -16,6 +17,7 @@ import 'package:mbis/src/master_data/master_data_repository.dart';
 import 'package:mbis/src/pipeline/pipeline_repository.dart';
 import 'package:mbis/src/premi/premi_estimate_repository.dart';
 import 'package:mbis/src/reference/reference_repository.dart';
+import 'package:mbis/src/region/region_repository.dart';
 import 'package:mbis/src/referral/referral_repository.dart';
 import 'package:mbis/src/rm_handover/rm_handover_repository.dart';
 import 'package:mbis/src/rm_handover/rm_transfer_repository.dart';
@@ -42,6 +44,10 @@ final dashboardRepoProvider = Provider<DashboardRepository>(
 
 final referenceRepoProvider = Provider<ReferenceRepository>(
   (ref) => ReferenceRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final regionRepoProvider = Provider<RegionRepository>(
+  (ref) => RegionRepository(apiClient: ref.watch(apiClientProvider)),
 );
 
 final pipelineRepoProvider = Provider<PipelineRepository>(
@@ -105,6 +111,10 @@ final accountRepoProvider = Provider<AccountRepository>(
 
 final exportRepoProvider = Provider<ExportRepository>(
   (ref) => ExportRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final targetImportRepoProvider = Provider<TargetImportRepository>(
+  (ref) => TargetImportRepository(apiClient: ref.watch(apiClientProvider)),
 );
 
 final adminPolicyRepoProvider = Provider<AdminPolicyRepository>(

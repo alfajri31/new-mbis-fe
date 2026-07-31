@@ -37,6 +37,9 @@ class _AnnouncementFormScreenState
   final _bodyCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
 
+  /// Jenis pengumuman tidak lagi dipilih di UI (tanpa Apresiasi/Kebijakan).
+  /// Nilai lama dipertahankan saat edit, dan POLICY dipakai untuk yang baru,
+  /// karena backend masih mewajibkan kolom ini.
   String _type = 'POLICY';
   bool _active = true;
   DateTime? _startsAt;
@@ -116,14 +119,11 @@ class _AnnouncementFormScreenState
               child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
-              _label('Jenis Pengumuman'),
-              const SizedBox(height: 6),
-              _buildTypeSelector(),
-              const SizedBox(height: AppSpacing.lg),
               _label('Kategori (opsional)'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _categoryCtrl,
+                style: AppInput.fieldText,
                 decoration: _inputDecoration('Mis. UNDERWRITING'),
                 textCapitalization: TextCapitalization.characters,
                 textInputAction: TextInputAction.next,
@@ -141,6 +141,7 @@ class _AnnouncementFormScreenState
               const SizedBox(height: 6),
               TextFormField(
                 controller: _titleCtrl,
+                style: AppInput.fieldText,
                 decoration: _inputDecoration('Mis. Kebijakan Underwriting Terbaru'),
                 textInputAction: TextInputAction.next,
                 validator: (v) =>
@@ -151,6 +152,7 @@ class _AnnouncementFormScreenState
               const SizedBox(height: 6),
               TextFormField(
                 controller: _bodyCtrl,
+                style: AppInput.fieldText,
                 decoration: _inputDecoration('Tulis detail pengumuman...'),
                 minLines: 4,
                 maxLines: 8,
@@ -237,48 +239,6 @@ class _AnnouncementFormScreenState
           borderSide: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
         ),
       );
-
-  Widget _buildTypeSelector() {
-    return Row(
-      children: [
-        _typeChip('POLICY', 'Kebijakan', Icons.campaign_outlined, AppColors.primaryNavy),
-        const SizedBox(width: 10),
-        _typeChip('RECOGNITION', 'Apresiasi', Icons.emoji_events_outlined,
-            AppColors.secondaryOrange),
-      ],
-    );
-  }
-
-  Widget _typeChip(String value, String label, IconData icon, Color color) {
-    final selected = _type == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _type = value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? color.withValues(alpha: 0.1) : AppColors.surfaceWhite,
-            borderRadius: AppRadius.radiusLg,
-            border: Border.all(
-              color: selected ? color : AppColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: selected ? color : AppColors.grayStage, size: 22),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: selected ? color : AppColors.textSecondary)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildImagePicker() {
     final hasNew = _pickedImageBytes != null;

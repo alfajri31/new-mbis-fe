@@ -84,6 +84,36 @@ class ExportRepository {
     throw Exception(_message(res.body, 'Gagal mengekspor data'));
   }
 
+  /// Unduh template .xlsx impor pipeline (header + 1 baris contoh).
+  Future<({List<int> bytes, String fileName})> downloadImportTemplate() async {
+    final res = await apiClient.get('/api/admin/import/pipelines/template',
+        timeout: _exportTimeout);
+    if (res.statusCode == 200) {
+      final cd = res.headers['content-disposition'] ?? '';
+      final m = RegExp(r'filename="?([^";]+)"?').firstMatch(cd);
+      return (
+        bytes: res.bodyBytes,
+        fileName: m?.group(1) ?? 'template-import-pipeline.xlsx',
+      );
+    }
+    throw Exception(_message(res.body, 'Gagal mengunduh template'));
+  }
+
+  /// Impor excel pipeline WON (admin). Mengembalikan ringkasan hasil.
+  Future<PipelineImportResult> importPipelines(
+      List<int> bytes, String fileName) async {
+    final res = await apiClient.postMultipart(
+      '/api/admin/import/pipelines',
+      fileField: 'file',
+      fileBytes: bytes,
+      fileName: fileName,
+    );
+    if (res.statusCode == 200) {
+      return PipelineImportResult.fromJson(jsonDecode(res.body));
+    }
+    throw Exception(_message(res.body, 'Gagal mengimpor pipeline'));
+  }
+
   static String _date(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
@@ -93,5 +123,38 @@ class ExportRepository {
       if (j is Map && j['message'] is String) return j['message'] as String;
     } catch (_) {}
     return fallback;
+  }
+}
+
+/// Ringkasan hasil impor pipeline (mirror PipelineImportResponse backend).
+class PipelineImportResult {
+  final int total;
+  final int inserted;
+  final int skippedDuplicate;
+  final int failed;
+  final List<({int row, String message})> errors;
+
+  const PipelineImportResult({
+    required this.total,
+    required this.inserted,
+    required this.skippedDuplicate,
+    required this.failed,
+    required this.errors,
+  });
+
+  factory PipelineImportResult.fromJson(Map<String, dynamic> j) {
+    final list = (j['errors'] as List<dynamic>? ?? const [])
+        .map((e) => (
+              row: (e['row'] ?? 0) as int,
+              message: (e['message'] ?? '').toString(),
+            ))
+        .toList();
+    return PipelineImportResult(
+      total: (j['total'] ?? 0) as int,
+      inserted: (j['inserted'] ?? 0) as int,
+      skippedDuplicate: (j['skippedDuplicate'] ?? 0) as int,
+      failed: (j['failed'] ?? 0) as int,
+      errors: list,
+    );
   }
 }

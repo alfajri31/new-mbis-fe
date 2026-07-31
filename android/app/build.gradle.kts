@@ -8,12 +8,15 @@ plugins {
     // Firebase Cloud Messaging. Requires android/app/google-services.json (replace the
     // committed placeholder with the file from your Firebase project to enable delivery).
     id("com.google.gms.google-services")
+    // Firebase Crashlytics. Wajib ada berdampingan dengan minify R8: tanpa unggahan
+    // peta simbol di bawah, stack trace di Play Console tetap teracak.
+    id("com.google.firebase.crashlytics")
 }
 
 // Release signing is driven by android/key.properties (gitignored). When it's
 // absent — e.g. a local dev build or a fresh checkout — we fall back to the debug
 // key so `flutter run --release` still works. Create key.properties + a keystore
-// before distributing a real release build (see docs/DEPLOY-COOLIFY.md §9).
+// before distributing a real release build (see docs/RILIS-ANDROID.md).
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) {
@@ -21,6 +24,41 @@ val keystoreProperties = Properties().apply {
     }
 }
 val hasReleaseKeystore = keystorePropertiesFile.exists()
+
+// Gerbang keamanan rilis. Tanpa ini, `flutter build appbundle --release` di mesin
+// tanpa key.properties menghasilkan AAB yang ditandatangani DEBUG KEY secara diam-
+// diam — Play Console menolaknya, dan kegagalannya baru ketahuan setelah upload.
+// AAB = jalur distribusi, jadi wajib gagal cepat. APK release masih boleh memakai
+// debug key (dipakai untuk uji lokal / sideload internal), tapi diberi peringatan.
+val requestedTasks = gradle.startParameter.taskNames.joinToString(" ")
+val isBundleRequested = Regex("(^|:)bundle\\w*Release").containsMatchIn(requestedTasks)
+val isAssembleReleaseRequested = Regex("(^|:)assemble\\w*Release").containsMatchIn(requestedTasks)
+
+if (!hasReleaseKeystore) {
+    if (isBundleRequested) {
+        throw GradleException(
+            """
+            |
+            |╭─ RILIS DIBATALKAN ────────────────────────────────────────────────────╮
+            |  android/key.properties tidak ditemukan.
+            |
+            |  Tanpa berkas itu, AAB akan ditandatangani dengan DEBUG KEY dan pasti
+            |  ditolak Google Play Console.
+            |
+            |  Buat keystore rilis lebih dulu — lihat docs/RILIS-ANDROID.md §1.
+            |  Di CI (Codemagic), key.properties dirakit dari secret group
+            |  `mbis-android-keystore`; pastikan variabelnya terisi.
+            |╰───────────────────────────────────────────────────────────────────────╯
+            """.trimMargin()
+        )
+    }
+    if (isAssembleReleaseRequested) {
+        logger.warn(
+            "[mbis] PERINGATAN: key.properties tidak ada — APK release ini memakai " +
+                "DEBUG KEY. Boleh untuk uji lokal, JANGAN dibagikan sebagai rilis."
+        )
+    }
+}
 
 android {
     namespace = "com.askrindo.mbis.mobile"
@@ -78,12 +116,45 @@ android {
         release {
             // Use the real release key when key.properties is present; otherwise fall
             // back to the debug key so local `flutter run --release` still works.
+            // (Jalur AAB sudah dihentikan lebih dulu oleh gerbang di atas.)
             signingConfig = if (hasReleaseKeystore) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
             }
+
+            // R8: perkecil + obfuscate kode JVM (kode Dart sudah AOT, tidak terpengaruh)
+            // dan buang resource Android yang tidak terpakai. Efek sampingnya yang
+            // penting untuk rilis: mapping.txt dihasilkan, sehingga stack trace crash
+            // di Play Console bisa dibaca kembali. Aturan keep ada di proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+
+            // Unggah peta simbol R8 ke Crashlytics saat build rilis. Tanpa ini, crash
+            // yang masuk ke konsol tetap teracak dan pelaporan crash jadi setengah
+            // berguna — persis masalah yang dibuat oleh minify di atas.
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                mappingFileUploadEnabled = true
+            }
         }
+
+        debug {
+            // Build debug tidak mengirim laporan (lihat CrashReporter.install), jadi
+            // unggahan simbolnya hanya memperlambat build tanpa guna.
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                mappingFileUploadEnabled = false
+            }
+        }
+    }
+
+    packaging {
+        // Wajib untuk kompatibilitas 16 KB page size: .so diekstrak/di-align oleh
+        // installer modern alih-alih dibungkus dengan alignment 4 KB warisan.
+        jniLibs { useLegacyPackaging = false }
     }
 }
 

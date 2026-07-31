@@ -699,6 +699,7 @@ class _BrokerScreenState extends ConsumerState<BrokerScreen> with RouteAware {
                               const SizedBox(height: AppSpacing.sm),
                               if (view.hasConnections) ...[
                                 TextField(
+                                  style: AppInput.fieldText,
                                   onChanged: (v) => setSheet(() => pQuery = v),
                                   decoration: InputDecoration(
                                     hintText: 'Cari nasabah...',

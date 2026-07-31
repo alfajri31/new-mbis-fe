@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../providers/pipeline_detail_provider.dart';
+import '../../src/common/file_opener.dart';
 import '../../src/common/mobile_browser_detector.dart';
 import '../../theme/app_theme.dart';
 import '../../src/nav.dart';
@@ -281,10 +282,43 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
         docs: _docs,
         currentUserId: _currentUserId,
         isAgent: isAgent,
+        onView: _openPipelineDoc,
         onUpload: _uploadPipelineDoc,
         onDelete: _deletePipelineDoc,
       ),
     ];
+  }
+
+  /// Buka dokumen SPAU/Underlying milik pipeline.
+  ///
+  /// Berkasnya dilayani `/api/files/**` yang menuntut token, jadi isinya diambil
+  /// lewat ApiClient lalu diserahkan ke penampil — bukan dengan melempar URL ke
+  /// peramban, yang hanya akan berbuah 401. Pola & alasannya sama persis dengan
+  /// `CustomerDetailScreen._openDocument`; tab web sengaja dibuka LEBIH DULU di
+  /// dalam handler ketukan karena Safari/iOS memblokir window.open() setelah await.
+  Future<void> _openPipelineDoc(PipelineDocumentModel doc) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final pending = openPendingTab();
+    try {
+      final res = await ref.read(apiClientProvider).get(doc.fileUrl);
+      if (res.statusCode != 200) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+      final mime = res.headers['content-type'] ?? 'application/octet-stream';
+      final opened = await openBytes(res.bodyBytes, mime, doc.fileName, pending: pending);
+      if (!opened) {
+        closePendingTab(pending);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Tidak ada aplikasi untuk membuka "${doc.fileName}".')),
+        );
+      }
+    } catch (e) {
+      closePendingTab(pending);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Gagal membuka dokumen: ${e.toString().replaceFirst('Exception: ', '')}'),
+        backgroundColor: AppColors.errorRed,
+      ));
+    }
   }
 
   Future<void> _uploadPipelineDoc(String docType) async {
@@ -896,7 +930,9 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           subStage: result.subStage,
           realisasiIdr: result.realisasiIdr,
           cancelReason: result.cancelReason,
-          policyNumber: result.policyNumber);
+          policyNumber: result.policyNumber,
+          policyStart: result.policyStart,
+          policyEnd: result.policyEnd);
       if (!mounted) return;
       _fetchData(silent: true);
       messenger.showSnackBar(const SnackBar(content: Text('Status pipeline diperbarui')));
@@ -1507,7 +1543,12 @@ class _StatusResult {
   final double? realisasiIdr;
   final String? cancelReason;
   final String? policyNumber;
-  _StatusResult(this.subStage, {this.realisasiIdr, this.cancelReason, this.policyNumber});
+  /// Periode polis (ISO yyyy-MM-dd) — wajib menyertai [policyNumber]. Nomor dan
+  /// masa berlaku sama-sama berasal dari sistem penerbitan polis di luar aplikasi.
+  final String? policyStart;
+  final String? policyEnd;
+  _StatusResult(this.subStage,
+      {this.realisasiIdr, this.cancelReason, this.policyNumber, this.policyStart, this.policyEnd});
 }
 
 class _StatusSheet extends StatefulWidget {
@@ -1524,6 +1565,8 @@ class _StatusSheetState extends State<_StatusSheet> {
   late final TextEditingController _realisasiCtrl;
   final _reasonCtrl = TextEditingController();
   late final TextEditingController _policyCtrl;
+  DateTime? _policyStart;
+  DateTime? _policyEnd;
   bool _showErrors = false;
 
   @override
@@ -1574,6 +1617,12 @@ class _StatusSheetState extends State<_StatusSheet> {
       final p = _policyCtrl.text.trim();
       if (p.isNotEmpty) policyNumber = p;
     }
+    // Polis baru sah bila masa berlakunya ikut dicatat: server menerbitkan baris
+    // polis (dasar pencatatan premi & pelepasan komisi agen) hanya bila lengkap.
+    if (policyNumber != null && (_policyStart == null || _policyEnd == null)) {
+      setState(() => _showErrors = true);
+      return;
+    }
     // Konfirmasi kalau nilai realisasi WON berbeda dari nilai premi awal
     // (estimasi saat pipeline dibuat). Mencegah salah ketik nilai realisasi.
     if (isWon && realisasi != null) {
@@ -1585,7 +1634,45 @@ class _StatusSheetState extends State<_StatusSheet> {
       }
     }
     Navigator.of(context).pop(_StatusResult(_selected!,
-        realisasiIdr: realisasi, cancelReason: reason, policyNumber: policyNumber));
+        realisasiIdr: realisasi,
+        cancelReason: reason,
+        policyNumber: policyNumber,
+        policyStart: policyNumber == null ? null : _isoDate(_policyStart!),
+        policyEnd: policyNumber == null ? null : _isoDate(_policyEnd!)));
+  }
+
+  static String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// Satu isian tanggal periode polis. Rentangnya dilebarkan sampai 5 tahun ke
+  /// depan/belakang karena polis bisa terbit mundur maupun berlaku multi-tahun.
+  Widget _policyDateField(String label, DateTime? value, ValueChanged<DateTime> onPicked) {
+    return InkWell(
+      borderRadius: AppRadius.radiusMd,
+      onTap: () async {
+        final now = DateTime.now();
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? now,
+          firstDate: DateTime(now.year - 5),
+          lastDate: DateTime(now.year + 5),
+        );
+        if (picked != null) onPicked(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 12),
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        child: Text(value == null ? 'Pilih tanggal' : _isoDate(value),
+            style: TextStyle(
+                fontSize: 14,
+                color: value == null ? AppColors.grayStage : AppColors.textPrimary)),
+      ),
+    );
   }
 
   /// Dialog konfirmasi saat nilai realisasi WON beda dari nilai awal.
@@ -1760,6 +1847,21 @@ class _StatusSheetState extends State<_StatusSheet> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
             ),
+            const SizedBox(height: 12),
+            const Text('Periode Polis',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: _policyDateField('Mulai', _policyStart, (d) => setState(() => _policyStart = d))),
+              const SizedBox(width: 8),
+              Expanded(child: _policyDateField('Selesai', _policyEnd, (d) => setState(() => _policyEnd = d))),
+            ]),
+            if (_showErrors && _policyCtrl.text.trim().isNotEmpty && (_policyStart == null || _policyEnd == null))
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text('Periode polis wajib diisi bila No. Polis diisi',
+                    style: TextStyle(fontSize: 12, color: AppColors.errorRed)),
+              ),
           ],
           if (isDecline) ...[
             const SizedBox(height: 12),

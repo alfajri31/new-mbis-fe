@@ -130,6 +130,16 @@ class _DraggableAiButtonState extends State<DraggableAiButton> {
                   padding: const EdgeInsets.all(9),
                   child: Image.asset(
                     'assets/images/maskot.png',
+                    // Aset 1309x1202 -> ±6 MB per decode, padahal digambar hanya
+                    // _size(56) - padding(9*2) = 38 dp. Tombol ini terpasang di
+                    // shell utama peran RM (main_screen.dart), jadi biaya decode-nya
+                    // dibayar di layar yang paling sering dibuka.
+                    cacheWidth: ((_size - 18) *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round(),
+                    cacheHeight: ((_size - 18) *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round(),
                     errorBuilder: (_, _, _) =>
                         const Icon(Icons.smart_toy, color: Colors.white, size: 26),
                   ),

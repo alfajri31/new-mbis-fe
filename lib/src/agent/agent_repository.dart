@@ -148,6 +148,8 @@ class AgentModel {
   final String pksNumber;
   final String pksStart;
   final String pksEnd;
+  /// Rate komisi agen sesuai PKS (pecahan, mis. 0.10 = 10%); null = pakai fallback.
+  final double? commissionRate;
   final String rejectionReason;
   final String createdAt;
   // Alamat KTP
@@ -158,6 +160,7 @@ class AgentModel {
   final String ktpSubdistrict;
   final String ktpRt;
   final String ktpRw;
+  final String ktpPostalCode;
   // Alamat Domisili
   final String domicileAddress;
   final String domicileProvince;
@@ -166,6 +169,7 @@ class AgentModel {
   final String domicileSubdistrict;
   final String domicileRt;
   final String domicileRw;
+  final String domicilePostalCode;
 
   AgentModel({
     required this.id,
@@ -187,6 +191,7 @@ class AgentModel {
     required this.pksNumber,
     required this.pksStart,
     required this.pksEnd,
+    this.commissionRate,
     required this.rejectionReason,
     required this.createdAt,
     required this.ktpAddress,
@@ -196,6 +201,7 @@ class AgentModel {
     required this.ktpSubdistrict,
     required this.ktpRt,
     required this.ktpRw,
+    this.ktpPostalCode = '',
     required this.domicileAddress,
     required this.domicileProvince,
     required this.domicileCity,
@@ -203,6 +209,7 @@ class AgentModel {
     required this.domicileSubdistrict,
     required this.domicileRt,
     required this.domicileRw,
+    this.domicilePostalCode = '',
   });
 
   factory AgentModel.fromJson(Map<String, dynamic> j) {
@@ -227,6 +234,7 @@ class AgentModel {
       pksNumber: s(j['pksNumber']),
       pksStart: s(j['pksStart']),
       pksEnd: s(j['pksEnd']),
+      commissionRate: (j['commissionRate'] as num?)?.toDouble(),
       rejectionReason: s(j['rejectionReason']),
       createdAt: s(j['createdAt']),
       ktpAddress: s(j['ktpAddress']),
@@ -236,6 +244,7 @@ class AgentModel {
       ktpSubdistrict: s(j['ktpSubdistrict']),
       ktpRt: s(j['ktpRt']),
       ktpRw: s(j['ktpRw']),
+      ktpPostalCode: s(j['ktpPostalCode']),
       domicileAddress: s(j['domicileAddress']),
       domicileProvince: s(j['domicileProvince']),
       domicileCity: s(j['domicileCity']),
@@ -243,29 +252,55 @@ class AgentModel {
       domicileSubdistrict: s(j['domicileSubdistrict']),
       domicileRt: s(j['domicileRt']),
       domicileRw: s(j['domicileRw']),
+      domicilePostalCode: s(j['domicilePostalCode']),
     );
   }
 }
 
 /// An uploaded agent document (Pakta Integritas / PKS).
+/// Grup rate komisi PKS (LOB / Asuransi Mikro). `code` = lob_code / ASURANSI_MIKRO.
+class CommissionGroupModel {
+  final String code;
+  final String name;
+  final String cobName;
+
+  CommissionGroupModel({required this.code, required this.name, required this.cobName});
+
+  factory CommissionGroupModel.fromJson(Map<String, dynamic> j) => CommissionGroupModel(
+        code: j['code']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        cobName: j['cobName']?.toString() ?? '',
+      );
+}
+
 class AgentDocumentModel {
   final String id;
   final String docType;
   final String fileName;
   final String fileUrl; // relative path served by /api/files/**
+  final String status; // PENDING | APPROVED | REJECTED
+  final String? rejectionReason;
 
   AgentDocumentModel({
     required this.id,
     required this.docType,
     required this.fileName,
     required this.fileUrl,
+    this.status = 'PENDING',
+    this.rejectionReason,
   });
+
+  bool get isApproved => status == 'APPROVED';
+  bool get isRejected => status == 'REJECTED';
+  bool get isPending => status == 'PENDING';
 
   factory AgentDocumentModel.fromJson(Map<String, dynamic> j) => AgentDocumentModel(
         id: j['id']?.toString() ?? '',
         docType: j['docType']?.toString() ?? '',
         fileName: j['fileName']?.toString() ?? '',
         fileUrl: j['fileUrl']?.toString() ?? '',
+        status: j['status']?.toString() ?? 'PENDING',
+        rejectionReason: j['rejectionReason']?.toString(),
       );
 }
 
@@ -405,6 +440,7 @@ class AgentRepository {
     String? ktpSubdistrict,
     String? ktpRt,
     String? ktpRw,
+    String? ktpPostalCode,
     // Alamat Domisili
     String? domicileAddress,
     String? domicileProvince,
@@ -413,6 +449,7 @@ class AgentRepository {
     String? domicileSubdistrict,
     String? domicileRt,
     String? domicileRw,
+    String? domicilePostalCode,
   }) async {
     final res = await apiClient.post('/api/agents', body: {
       'name': name,
@@ -432,6 +469,7 @@ class AgentRepository {
       'ktpSubdistrict': ktpSubdistrict,
       'ktpRt': ktpRt,
       'ktpRw': ktpRw,
+      'ktpPostalCode': ktpPostalCode,
       'domicileAddress': domicileAddress,
       'domicileProvince': domicileProvince,
       'domicileCity': domicileCity,
@@ -439,6 +477,7 @@ class AgentRepository {
       'domicileSubdistrict': domicileSubdistrict,
       'domicileRt': domicileRt,
       'domicileRw': domicileRw,
+      'domicilePostalCode': domicilePostalCode,
     });
     if (res.statusCode == 200 || res.statusCode == 201) {
       return AgentModel.fromJson(jsonDecode(res.body));
@@ -467,6 +506,7 @@ class AgentRepository {
     String? ktpSubdistrict,
     String? ktpRt,
     String? ktpRw,
+    String? ktpPostalCode,
     String? domicileAddress,
     String? domicileProvince,
     String? domicileCity,
@@ -474,6 +514,7 @@ class AgentRepository {
     String? domicileSubdistrict,
     String? domicileRt,
     String? domicileRw,
+    String? domicilePostalCode,
   }) async {
     final res = await apiClient.put('/api/agents/$id', body: {
       'name': name,
@@ -493,6 +534,7 @@ class AgentRepository {
       'ktpSubdistrict': ktpSubdistrict,
       'ktpRt': ktpRt,
       'ktpRw': ktpRw,
+      'ktpPostalCode': ktpPostalCode,
       'domicileAddress': domicileAddress,
       'domicileProvince': domicileProvince,
       'domicileCity': domicileCity,
@@ -500,6 +542,7 @@ class AgentRepository {
       'domicileSubdistrict': domicileSubdistrict,
       'domicileRt': domicileRt,
       'domicileRw': domicileRw,
+      'domicilePostalCode': domicilePostalCode,
     });
     if (res.statusCode == 200) {
       return AgentModel.fromJson(jsonDecode(res.body));
@@ -591,18 +634,51 @@ class AgentRepository {
     throw Exception(_message(res.body, fallback));
   }
 
-  /// RM sets the PKS (cooperation agreement) number + period. Dates are ISO yyyy-MM-dd.
+  /// RM sets the PKS (cooperation agreement) number + period + commission rate.
+  /// Dates are ISO yyyy-MM-dd. [commissionRate] is a fraction (0.10 = 10%); null
+  /// leaves the existing rate unchanged.
   Future<AgentModel> setPks(String id,
-      {required String pksNumber, String? pksStart, String? pksEnd}) async {
+      {required String pksNumber,
+      String? pksStart,
+      String? pksEnd,
+      double? commissionRate,
+      List<Map<String, dynamic>>? groupRates}) async {
     final res = await apiClient.put('/api/agents/$id/pks', body: {
       'pksNumber': pksNumber,
       'pksStart': pksStart,
       'pksEnd': pksEnd,
+      'commissionRate': ?commissionRate,
+      'groupRates': ?groupRates,
     });
     if (res.statusCode == 200) {
       return AgentModel.fromJson(jsonDecode(res.body));
     }
     throw Exception(_message(res.body, 'Gagal menyimpan PKS'));
+  }
+
+  /// Daftar grup rate komisi (LOB + Mikro) untuk form PKS.
+  Future<List<CommissionGroupModel>> getCommissionGroups() async {
+    final res = await apiClient.get('/api/agents/commission-groups');
+    if (res.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(res.body);
+      return list
+          .map((j) => CommissionGroupModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(_message(res.body, 'Gagal memuat grup komisi'));
+  }
+
+  /// Rate per-grup yang sudah tersimpan → map groupCode → rate (pecahan).
+  Future<Map<String, double>> getCommissionRates(String id) async {
+    final res = await apiClient.get('/api/agents/$id/commission-rates');
+    if (res.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(res.body);
+      return {
+        for (final j in list)
+          (j['groupCode']?.toString() ?? ''): ((j['rate'] ?? 0) as num).toDouble(),
+      };
+    }
+    throw Exception(_message(res.body, 'Gagal memuat rate komisi'));
   }
 
   /// Admin issues the CIF + creates the agent's login account.
@@ -643,6 +719,25 @@ class AgentRepository {
     throw Exception(_message(res.body, 'Gagal mengunggah dokumen'));
   }
 
+  /// Admin menyetujui sebuah dokumen agen.
+  Future<AgentDocumentModel> approveDocument(String id, String docType) async {
+    final res = await apiClient.post('/api/agents/$id/documents/$docType/approve');
+    if (res.statusCode == 200) {
+      return AgentDocumentModel.fromJson(jsonDecode(res.body));
+    }
+    throw Exception(_message(res.body, 'Gagal menyetujui dokumen'));
+  }
+
+  /// Admin menolak sebuah dokumen agen dengan alasan (dikembalikan ke RM).
+  Future<AgentDocumentModel> rejectDocument(String id, String docType, String reason) async {
+    final res = await apiClient.post('/api/agents/$id/documents/$docType/reject',
+        body: {'reason': reason});
+    if (res.statusCode == 200) {
+      return AgentDocumentModel.fromJson(jsonDecode(res.body));
+    }
+    throw Exception(_message(res.body, 'Gagal menolak dokumen'));
+  }
+
   /// Lists the onboarding document templates (any authenticated user).
   Future<List<AgentTemplateItem>> getAgentTemplates() async {
     final res = await apiClient.get('/api/agent-templates');
@@ -666,6 +761,26 @@ class AgentRepository {
       );
     }
     throw Exception(_message(res.body, 'Gagal mengunduh template'));
+  }
+
+  /// Mengunduh isi sebuah berkas yang tersimpan (mis. dokumen pengajuan agen)
+  /// berdasar [fileUrl] relatif dari server (mulai dengan `/api/files/…`).
+  /// Dipanggil dengan token auth via [apiClient], jadi reviewer (BM/RO/dll) bisa
+  /// membuka berkas yang diunggah RM. [fallbackName] dipakai bila header tak
+  /// menyertakan nama berkas.
+  Future<({List<int> bytes, String fileName, String contentType})> downloadFile(
+      String fileUrl, {String fallbackName = 'dokumen'}) async {
+    final res = await apiClient.get(fileUrl);
+    if (res.statusCode == 200) {
+      final cd = res.headers['content-disposition'] ?? '';
+      final m = RegExp(r'filename="?([^";]+)"?').firstMatch(cd);
+      return (
+        bytes: res.bodyBytes,
+        fileName: m?.group(1) ?? fallbackName,
+        contentType: res.headers['content-type'] ?? 'application/octet-stream',
+      );
+    }
+    throw Exception(_message(res.body, 'Gagal mengunduh berkas'));
   }
 
   /// Admin uploads/replaces a template file (PUT /api/agent-templates/{code}).

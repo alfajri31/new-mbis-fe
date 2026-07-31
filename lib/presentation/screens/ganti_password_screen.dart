@@ -251,6 +251,7 @@ class _GantiPasswordScreenState extends ConsumerState<GantiPasswordScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      style: AppInput.fieldText,
       obscureText: obscure,
       validator: validator,
       decoration: InputDecoration(

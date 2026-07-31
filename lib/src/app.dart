@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../core/providers/app_providers.dart';
 
 import 'auth/auth_repository.dart';
+import '../core/observability/crash_reporter.dart';
 import 'auth/auth_session.dart';
 import 'network/api_client.dart';
 import 'notification/push_service.dart';
@@ -104,6 +105,10 @@ class MbisAppState extends ConsumerState<MbisApp> {
         PushService.instance.registerForCurrentSession();
       }
     });
+
+    // Kaitkan laporan crash dengan akun yang sesinya dipulihkan. Hanya id akun —
+    // bukan NIP/nama/surel — lihat CrashReporter.setUser.
+    CrashReporter.setUser(_session?.user.id);
   }
 
   @override
@@ -177,9 +182,13 @@ class MbisAppState extends ConsumerState<MbisApp> {
     _setSession(session);
     // Register this device for push now that we have a valid session.
     PushService.instance.registerForCurrentSession();
+    CrashReporter.setUser(session.user.id);
   }
 
   Future<void> handleLogout() async {
+    // Lepas kaitan akun sebelum sesi dibuang, supaya crash setelah logout tidak
+    // lagi tercatat atas nama akun yang baru saja keluar.
+    CrashReporter.setUser(null);
     final session = _session;
     // Unregister the device while the session is still valid (the endpoint needs auth).
     if (session != null) {

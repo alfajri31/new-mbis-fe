@@ -4,13 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
 import '../../src/agent/agent_repository.dart';
+import '../../src/common/file_opener.dart';
 import '../../core/providers/repository_providers.dart';
 import '../providers/agent_detail_provider.dart';
 import '../widgets/back_app_bar.dart';
-import '../widgets/dispose_callback.dart';
-import '../widgets/missing_fields_notice.dart';
-import 'agent_management_screen.dart' show agentStatusLabel, agentStatusColor, agentTypeLabel;
+import 'agent_management_screen.dart' show agentStatusLabel, agentStatusColor, agentTypeLabel, agentDocLabel;
 import 'ajukan_agen_screen.dart';
+import 'atur_pks_screen.dart';
 
 /// S-151 — Agent detail + back-office actions. Buttons shown depend on the
 /// caller's role and the agent's status in the onboarding workflow.
@@ -136,6 +136,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
               _row('No. PKS', a.pksNumber),
               _row('Masa PKS',
                   a.pksStart.isEmpty && a.pksEnd.isEmpty ? '' : '${a.pksStart} s/d ${a.pksEnd}'),
+              _row('Rate Komisi', _rateLabel(a.commissionRate)),
               _row('Terdaftar', a.createdAt),
             ]),
             const SizedBox(height: 12),
@@ -146,6 +147,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
               _row('Kecamatan', a.ktpDistrict),
               _row('Kelurahan', a.ktpSubdistrict),
               _row('RT/RW', _rtRw(a.ktpRt, a.ktpRw)),
+              _row('Kode Pos', a.ktpPostalCode),
             ]),
             const SizedBox(height: 12),
             _infoCard('Alamat Domisili', [
@@ -155,6 +157,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
               _row('Kecamatan', a.domicileDistrict),
               _row('Kelurahan', a.domicileSubdistrict),
               _row('RT/RW', _rtRw(a.domicileRt, a.domicileRw)),
+              _row('Kode Pos', a.domicilePostalCode),
             ]),
             const SizedBox(height: 12),
             _documentsCard(a),
@@ -257,8 +260,24 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     return '${rt.trim().isEmpty ? '-' : rt.trim()} / ${rw.trim().isEmpty ? '-' : rw.trim()}';
   }
 
+  /// 4 dokumen wajib pasca-lisensi (diunggah RM saat WAITING_RM_DOCS).
+  static const _postLicenseDocs = <String>['PAKTA_INTEGRITAS', 'PKS', 'SMAP', 'MEMO_2'];
+
+  /// Semua dokumen tersimpan sudah disetujui Admin (gate Input Lisensi / CIF).
+  bool get _allDocsApproved =>
+      _docs.isNotEmpty && _docs.every((d) => d.isApproved);
+
   Widget _documentsCard(AgentModel a) {
-    final canUpload = _roles.contains('RM');
+    final isRm = _roles.contains('RM');
+    final isAdmin = _roles.contains('ADMIN');
+    final reviewing = isAdmin && (a.status == 'WAITING_LICENSE' || a.status == 'WAITING_CIF');
+    // Slot dok pasca-lisensi yang BELUM diunggah → field unggah inline (intuitif,
+    // ganti tombol "Unggah" dropdown lama).
+    final uploaded = _docs.map((d) => d.docType).toSet();
+    final missingPostLicense = (isRm && a.status == 'WAITING_RM_DOCS')
+        ? _postLicenseDocs.where((t) => !uploaded.contains(t)).toList()
+        : const <String>[];
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -269,42 +288,143 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
         boxShadow: const [AppShadows.level1],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Expanded(
-            child: Text('Dokumen', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryNavy)),
-          ),
-          if (canUpload)
-            TextButton.icon(
-              onPressed: _busy ? null : () => _uploadDocument(a),
-              icon: const Icon(Icons.upload_file, size: 16),
-              label: const Text('Unggah'),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primaryNavy),
-            ),
-        ]),
-        if (_docs.isEmpty)
+        const Text('Dokumen',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryNavy)),
+        if (_docs.isEmpty && missingPostLicense.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text('Belum ada dokumen.', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
           )
-        else
-          ..._docs.map((d) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(children: [
-                  const Icon(Icons.description_outlined, size: 18, color: AppColors.grayStage),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(d.docType, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      if (d.fileName.isNotEmpty)
-                        Text(d.fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    ]),
-                  ),
-                ]),
-              )),
+        else ...[
+          for (final d in _docs) _docRow(a, d, isRm: isRm, isAdmin: isAdmin),
+          for (final t in missingPostLicense) _emptyDocSlot(a, t),
+        ],
+        if (reviewing && !_allDocsApproved)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Setujui semua dokumen dulu untuk melanjutkan.',
+                style: TextStyle(fontSize: 11, color: AppColors.secondaryOrange, fontStyle: FontStyle.italic)),
+          ),
       ]),
     );
   }
+
+  Widget _docRow(AgentModel a, AgentDocumentModel d, {required bool isRm, required bool isAdmin}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.description_outlined, size: 18, color: AppColors.grayStage),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(agentDocLabel(d.docType),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              if (d.fileName.isNotEmpty)
+                Text(d.fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            ]),
+          ),
+          _statusBadge(d),
+          if (d.fileUrl.isNotEmpty)
+            IconButton(
+              onPressed: _busy ? null : () => _downloadDoc(d),
+              icon: const Icon(Icons.download_rounded, size: 20),
+              color: AppColors.primaryNavy,
+              tooltip: 'Unduh / lihat',
+              visualDensity: VisualDensity.compact,
+            ),
+        ]),
+        if (d.isRejected && (d.rejectionReason ?? '').isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 26, top: 2),
+            child: Text('Alasan ditolak: ${d.rejectionReason}',
+                style: const TextStyle(fontSize: 11, color: AppColors.errorRed)),
+          ),
+        // Aksi Admin: setujui / tolak per-dokumen.
+        if (isAdmin && (!d.isApproved || !d.isRejected))
+          Padding(
+            padding: const EdgeInsets.only(left: 26, top: 6),
+            child: Wrap(spacing: 8, children: [
+              if (!d.isApproved)
+                _miniBtn('Setujui', AppColors.successGreen, () => _approveDoc(a, d)),
+              if (!d.isRejected)
+                _miniBtn('Tolak', AppColors.errorRed, () => _rejectDoc(a, d)),
+            ]),
+          ),
+        // RM: unggah ulang dokumen yang ditolak.
+        if (isRm && d.isRejected)
+          Padding(
+            padding: const EdgeInsets.only(left: 26, top: 6),
+            child: _miniBtn('Unggah Ulang', AppColors.primaryNavy, () => _pickAndUpload(a, d.docType)),
+          ),
+      ]),
+    );
+  }
+
+  Widget _emptyDocSlot(AgentModel a, String docType) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(children: [
+        const Icon(Icons.upload_file_outlined, size: 18, color: AppColors.grayStage),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${agentDocLabel(docType)} *',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            const Text('Belum diunggah',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          ]),
+        ),
+        _miniBtn('Unggah', AppColors.primaryNavy, () => _pickAndUpload(a, docType)),
+      ]),
+    );
+  }
+
+  Widget _statusBadge(AgentDocumentModel d) {
+    Color c;
+    String t;
+    IconData ic;
+    if (d.isApproved) {
+      c = AppColors.successGreen;
+      t = 'Disetujui';
+      ic = Icons.check_circle;
+    } else if (d.isRejected) {
+      c = AppColors.errorRed;
+      t = 'Ditolak';
+      ic = Icons.cancel;
+    } else {
+      c = AppColors.secondaryOrange;
+      t = 'Menunggu';
+      ic = Icons.schedule;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: AppRadius.radiusSm,
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(ic, size: 12, color: c),
+        const SizedBox(width: 4),
+        Text(t, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c)),
+      ]),
+    );
+  }
+
+  Widget _miniBtn(String label, Color color, VoidCallback onTap) => OutlinedButton(
+        onPressed: _busy ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color, width: 1.2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusSm),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      );
 
   // ── Action bar ────────────────────────────────────────────────────────────
 
@@ -320,7 +440,8 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
           () => _run(() => _repo.approve(a.id).then((_) {}), 'Pengajuan disetujui.')));
     }
     if (isAdmin && a.status == 'WAITING_LICENSE') {
-      buttons.add(_btn('Input Lisensi', Icons.badge_outlined, AppColors.primaryNavy, () => _licenseFlow(a)));
+      buttons.add(_btn('Input Lisensi', Icons.badge_outlined, AppColors.primaryNavy,
+          () => _licenseFlow(a), enabled: _allDocsApproved));
     }
     if (isRm && (a.status == 'DRAFT' || a.status == 'REJECTED')) {
       buttons.add(_btn('Edit Data', Icons.edit_outlined, AppColors.primaryNavy, () => _editFlow(a), outlined: true));
@@ -338,7 +459,8 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
       buttons.add(_btn('Hapus', Icons.delete_outline, AppColors.errorRed, () => _deleteFlow(a), outlined: true));
     }
     if (isAdmin && a.status == 'WAITING_CIF') {
-      buttons.add(_btn('Terbitkan CIF', Icons.key_outlined, AppColors.secondaryOrange, () => _issueCifFlow(a)));
+      buttons.add(_btn('Terbitkan CIF', Icons.key_outlined, AppColors.secondaryOrange,
+          () => _issueCifFlow(a), enabled: _allDocsApproved));
     }
     if (isAdmin && a.status == 'WAITING_RENEWAL') {
       buttons.add(_btn('Setujui Perpanjangan', Icons.autorenew, AppColors.successGreen, () => _licenseFlow(a, renewal: true)));
@@ -358,12 +480,14 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     );
   }
 
-  Widget _btn(String label, IconData icon, Color color, VoidCallback onTap, {bool outlined = false}) {
+  Widget _btn(String label, IconData icon, Color color, VoidCallback onTap,
+      {bool outlined = false, bool enabled = true}) {
+    final active = enabled && !_busy;
     final child = SizedBox(
       height: 46,
       child: outlined
           ? OutlinedButton.icon(
-              onPressed: _busy ? null : onTap,
+              onPressed: active ? onTap : null,
               icon: Icon(icon, size: 18),
               label: Text(label),
               style: OutlinedButton.styleFrom(
@@ -373,7 +497,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
               ),
             )
           : ElevatedButton.icon(
-              onPressed: _busy ? null : onTap,
+              onPressed: active ? onTap : null,
               icon: Icon(icon, size: 18),
               label: Text(label),
               style: ElevatedButton.styleFrom(
@@ -444,6 +568,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
         title: const Text('Tolak Agen'),
         content: TextField(
           controller: ctrl,
+          style: AppInput.fieldText,
           maxLines: 3,
           decoration: const InputDecoration(hintText: 'Alasan penolakan (opsional)'),
         ),
@@ -488,7 +613,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
             scrollable: true,
             title: Text(renewal ? 'Setujui Perpanjangan' : 'Input Lisensi'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: ctrl, decoration: const InputDecoration(hintText: 'Nomor lisensi / izin keagenan')),
+              TextField(controller: ctrl, style: AppInput.fieldText, decoration: const InputDecoration(hintText: 'Nomor lisensi / izin keagenan')),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(child: OutlinedButton(onPressed: () => pick(true), child: Text('Mulai: ${fmt(start)}', style: const TextStyle(fontSize: 12)))),
@@ -514,84 +639,65 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     await _run(() => future.then((_) {}), renewal ? 'Perpanjangan disetujui.' : 'Lisensi disimpan.');
   }
 
-  Future<void> _pksFlow(AgentModel a) async {
-    // Prefill dari data tersimpan: membuka "Atur PKS" pada agen yang PKS-nya
-    // sudah diisi dulu selalu tampil kosong, seolah belum pernah disimpan.
-    final numberCtrl = TextEditingController(text: a.pksNumber);
-    DateTime? start = DateTime.tryParse(a.pksStart);
-    DateTime? end = DateTime.tryParse(a.pksEnd);
-    final messenger = ScaffoldMessenger.of(context);
-    final saved = await showDialog<bool>(
-      context: context,
-      // Controller dibuang saat dialog benar-benar lepas dari tree, bukan tepat
-      // setelah await — lihat dispose_callback.dart.
-      builder: (ctx) => DisposeCallback(
-        onDispose: numberCtrl.dispose,
-        child: StatefulBuilder(
-        builder: (ctx, setLocal) {
-          String fmt(DateTime? d) => d == null ? 'Pilih tanggal' : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-          Future<void> pick(bool isStart) async {
-            // Dulu di-hardcode DateTime(2026, 6, 26) — kalender selalu terbuka
-            // di tanggal itu, bukan di hari ini.
-            final now = DateTime.now();
-            final picked = await showDatePicker(
-              context: ctx,
-              initialDate: (isStart ? start : end) ?? now,
-              firstDate: DateTime(2015),
-              lastDate: DateTime(2035),
-            );
-            if (picked != null) setLocal(() => isStart ? start = picked : end = picked);
-          }
-
-          return AlertDialog(
-            // Layar landscape sangat pendek: tanpa ini isi dialog yang lebih
-            // tinggi dari layar meluber (overflow) alih-alih bisa digulung.
-            scrollable: true,
-            title: const Text('Atur PKS'),
-            content: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: numberCtrl, decoration: const InputDecoration(labelText: 'Nomor PKS')),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: OutlinedButton(onPressed: () => pick(true), child: Text('Mulai: ${fmt(start)}', style: const TextStyle(fontSize: 12)))),
-                const SizedBox(width: 8),
-                Expanded(child: OutlinedButton(onPressed: () => pick(false), child: Text('Selesai: ${fmt(end)}', style: const TextStyle(fontSize: 12)))),
-              ]),
-            ]),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Simpan')),
-            ],
-          );
-        },
-        ),
-      ),
-    );
-    if (saved != true) return;
-    if (numberCtrl.text.trim().isEmpty) {
-      // Dulu diam-diam batal — user mengira PKS tersimpan.
-      showMissingFieldsNotice(messenger, const ['Nomor PKS']);
-      return;
-    }
-    String? iso(DateTime? d) => d == null ? null : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    await _run(
-      () => _repo.setPks(a.id, pksNumber: numberCtrl.text.trim(), pksStart: iso(start), pksEnd: iso(end)).then((_) {}),
-      'PKS disimpan.',
-    );
+  /// Label rate komisi agen (pecahan → persen). Null = belum di-set (pakai default).
+  String _rateLabel(double? frac) {
+    if (frac == null) return 'Sesuai default';
+    // Pecahan → persen, dibulatkan 2 desimal lewat integer agar tak ada noise FP
+    // (mis. 0.1 * 100 = 10.000000000000002).
+    final p = (frac * 10000).round() / 100;
+    final txt = p == p.roundToDouble() ? p.toStringAsFixed(0) : p.toString();
+    return '$txt%';
   }
 
-  Future<void> _uploadDocument(AgentModel a) async {
-    const types = ['PAKTA_INTEGRITAS', 'PKS', 'KTP', 'NPWP'];
-    final docType = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Jenis Dokumen'),
-        children: [
-          for (final t in types)
-            SimpleDialogOption(onPressed: () => Navigator.pop(ctx, t), child: Text(t)),
-        ],
-      ),
+  /// "Atur PKS": buka layar form PKS (nomor + periode + rate komisi per grup
+  /// produk, semua wajib). Detail agen di-reload bila tersimpan.
+  Future<void> _pksFlow(AgentModel a) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AturPksScreen(agent: a)),
     );
-    if (docType == null) return;
+    if (saved == true && mounted) await _load();
+  }
+
+  /// Unduh/lihat sebuah dokumen agen. Berkas diambil lewat apiClient (token auth)
+  /// lalu dibuka di tab baru — di web, [openPendingTab] dibuka lebih dulu agar
+  /// tidak diblokir popup-blocker.
+  Future<void> _downloadDoc(AgentDocumentModel d) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final pending = openPendingTab();
+    setState(() => _busy = true);
+    try {
+      final f = await _repo.downloadFile(
+        d.fileUrl,
+        fallbackName: d.fileName.isNotEmpty ? d.fileName : agentDocLabel(d.docType),
+      );
+      final ok = await openBytes(f.bytes, f.contentType, f.fileName, pending: pending);
+      if (!ok) {
+        closePendingTab(pending);
+        if (mounted) {
+          messenger.showSnackBar(const SnackBar(
+            content: Text('Tak bisa membuka berkas di perangkat ini.'),
+            backgroundColor: AppColors.errorRed,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      }
+    } catch (e) {
+      closePendingTab(pending);
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: AppColors.errorRed,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Pilih berkas & unggah untuk [docType] tertentu (slot pasca-lisensi / unggah
+  /// ulang dokumen yang ditolak). Status backend otomatis kembali ke PENDING.
+  Future<void> _pickAndUpload(AgentModel a, String docType) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
@@ -601,7 +707,45 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     final file = result.files.first;
     await _run(
       () => _repo.uploadDocument(a.id, docType: docType, fileBytes: file.bytes!, fileName: file.name).then((_) {}),
-      'Dokumen $docType diunggah.',
+      'Dokumen ${agentDocLabel(docType)} diunggah.',
+    );
+  }
+
+  /// Admin menyetujui sebuah dokumen.
+  Future<void> _approveDoc(AgentModel a, AgentDocumentModel d) => _run(
+        () => _repo.approveDocument(a.id, d.docType).then((_) {}),
+        'Dokumen ${agentDocLabel(d.docType)} disetujui.',
+      );
+
+  /// Admin menolak sebuah dokumen — minta alasan dulu (wajib).
+  Future<void> _rejectDoc(AgentModel a, AgentDocumentModel d) async {
+    final ctrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Tolak "${agentDocLabel(d.docType)}"'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Alasan penolakan (mis. berkas buram / salah dokumen)',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.errorRed),
+            child: const Text('Tolak'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || reason.isEmpty) return;
+    await _run(
+      () => _repo.rejectDocument(a.id, d.docType, reason).then((_) {}),
+      'Dokumen ${agentDocLabel(d.docType)} ditolak.',
     );
   }
 

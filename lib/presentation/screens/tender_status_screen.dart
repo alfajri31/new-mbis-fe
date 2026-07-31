@@ -303,6 +303,7 @@ class _TenderStatusScreenState extends ConsumerState<TenderStatusScreen> {
             const SizedBox(height: 10),
             TextField(
               controller: ctrl,
+              style: AppInput.fieldText,
               maxLines: 2,
               decoration: InputDecoration(
                   hintText: 'mis. kalah harga / tidak lolos scoring',
@@ -616,11 +617,42 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
 
   // Inline validation messages shown under each field on Save.
   String? _polisErr;
+  DateTime? _polisMulai;
+  DateTime? _polisSelesai;
+  String? _periodeErr;
   String? _shareAskrindoErr;
   String? _premiErr;
   String? _membersErr;
 
+  /// Ringkasan isian wajib yang kurang — dirender DI DALAM sheet.
+  /// Dulu ini snackbar; lihat [_sharesErr] untuk alasannya.
+  List<String> _missing = const [];
+
+  /// Total share sudah pernah diperiksa (user menekan Simpan). Sebelum itu
+  /// jangan menyalakan pesan: form yang baru dibuka memang totalnya 0%.
+  bool _totalChecked = false;
+
   bool get _isLeaderRole => widget.role == 'LEADER';
+
+  /// TEMUAN-01 (SIT-34) — pesan "total share harus 100%" dulu dikirim lewat
+  /// SnackBar. Sheet ini modal bottom sheet, sedangkan SnackBar dirender
+  /// `ScaffoldMessenger` milik halaman DI BELAKANG sheet: pesannya tertutup
+  /// selama sheet terbuka dan baru muncul setelah sheet ditutup — user melihat
+  /// penolakan tanpa alasan, lalu alasannya datang justru saat datanya sudah
+  /// benar.
+  ///
+  /// Sekarang pesannya diturunkan dari [_totalPct] saat build, bukan disimpan
+  /// sebagai state: begitu angkanya dibetulkan sampai 100% pesan hilang sendiri
+  /// (setiap field share memanggil setState di `onChanged`), tanpa perlu
+  /// menekan Simpan lagi.
+  String? get _sharesErr {
+    if (!_totalChecked) return null;
+    final selisih = _totalPct - 100;
+    if (selisih.abs() <= 0.001) return null;
+    final arah = selisih < 0 ? 'kurang' : 'lebih';
+    return 'Total share harus 100% (sekarang ${_totalPct.toStringAsFixed(2)}%, '
+        '$arah ${selisih.abs().toStringAsFixed(2)}%)';
+  }
 
   @override
   void initState() {
@@ -666,12 +698,13 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
   }
 
   Future<void> _save() async {
-    final messenger = ScaffoldMessenger.of(context);
-    void warn(String m) => messenger.showSnackBar(SnackBar(content: Text(m), backgroundColor: AppColors.errorRed));
+    // Semua penolakan di sheet ini WAJIB inline — jangan pakai SnackBar /
+    // ScaffoldMessenger di sini, pesannya tertutup sheet (TEMUAN-01).
 
     // Reset, then validate semua field sekaligus supaya hint "Harus diisi"
     // muncul di bawah setiap field yang kosong (bukan satu-satu via snackbar).
-    _polisErr = _shareAskrindoErr = _premiErr = _membersErr = null;
+    _polisErr = _shareAskrindoErr = _premiErr = _membersErr = _periodeErr = null;
+    _missing = const [];
     if (_leader != null) {
       _leader!.nameErr = null;
       _leader!.pctErr = null;
@@ -719,19 +752,28 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
         missing.add('Persentase Member ${i + 1}');
       }
     }
+    if (_polisMulai == null || _polisSelesai == null) {
+      _periodeErr = 'Periode polis harus diisi';
+      missing.add('Periode Polis');
+    } else if (_polisSelesai!.isBefore(_polisMulai!)) {
+      _periodeErr = 'Tanggal selesai tidak boleh sebelum tanggal mulai';
+      missing.add('Periode Polis');
+    }
     if (_isLeaderRole && _members.isEmpty) {
       _membersErr = 'Tambahkan minimal 1 member';
       missing.add('Member (minimal 1)');
     }
 
     if (missing.isNotEmpty) {
-      setState(() {});
-      showMissingFieldsNotice(messenger, missing);
+      setState(() => _missing = missing);
       return;
     }
 
+    // Total share ≠ 100% → tolak, dan tandai supaya [_sharesErr] menyala di
+    // dekat indikator "Total: xx%". Datanya tidak ikut dikirim.
     if ((_totalPct - 100).abs() > 0.001) {
-      return warn('Total share harus 100% (sekarang ${_totalPct.toStringAsFixed(2)}%)');
+      setState(() => _totalChecked = true);
+      return;
     }
 
     // Konfirmasi kalau premi WON berbeda dari nilai premi awal (estimasi saat
@@ -754,6 +796,8 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
 
     Navigator.of(context).pop(<String, dynamic>{
       'policyNumber': _polisCtrl.text.trim(),
+      'policyStart': _isoDate(_polisMulai!),
+      'policyEnd': _isoDate(_polisSelesai!),
       'shareAskrindo': _num(_shareAskrindoCtrl),
       'tsiIdr': _money(_tsiCtrl),
       'premi': enteredPremi,
@@ -814,6 +858,20 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
               const SizedBox(height: 14),
               _field(_polisCtrl, 'No. Polis', errorText: _polisErr, onEdited: () => _polisErr = null),
               const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: _tanggalPolis('Mulai Polis', _polisMulai,
+                    (d) => setState(() { _polisMulai = d; _periodeErr = null; }))),
+                const SizedBox(width: 8),
+                Expanded(child: _tanggalPolis('Selesai Polis', _polisSelesai,
+                    (d) => setState(() { _polisSelesai = d; _periodeErr = null; }))),
+              ]),
+              if (_periodeErr != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(_periodeErr!,
+                      style: const TextStyle(fontSize: 12, color: AppColors.errorRed)),
+                ),
+              const SizedBox(height: 10),
               _field(_shareAskrindoCtrl, 'Share Askrindo (%)',
                   keyboard: const TextInputType.numberWithOptions(decimal: true),
                   suffix: '%',
@@ -844,6 +902,15 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
                           color: (_totalPct - 100).abs() < 0.001 ? AppColors.successGreen : AppColors.errorRed)),
                 ],
               ),
+              // Pesan total share, tepat di bawah indikator "Total: xx%" —
+              // inline supaya terlihat selama sheet terbuka (TEMUAN-01).
+              if (_sharesErr != null) ...[
+                const SizedBox(height: 8),
+                InlineErrorNotice(
+                  child: Text(_sharesErr!,
+                      style: const TextStyle(fontSize: 12, color: AppColors.errorRed)),
+                ),
+              ],
               const SizedBox(height: 8),
               for (int i = 0; i < _members.length; i++) _shareRow(_members[i], removable: true, index: i),
               if (_membersErr != null)
@@ -860,6 +927,15 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
                 style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.primaryNavy)),
               ),
               const SizedBox(height: 16),
+              // Ringkasan isian wajib yang kurang — inline tepat di atas tombol
+              // Simpan. Versi snackbar-nya tertutup sheet, sama seperti pesan
+              // total share (TEMUAN-01).
+              if (_missing.isNotEmpty) ...[
+                InlineErrorNotice(
+                  child: missingFieldsContent(_missing, color: AppColors.errorRed),
+                ),
+                const SizedBox(height: 12),
+              ],
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -889,7 +965,10 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
       controller: c,
       keyboardType: money ? TextInputType.number : (keyboard ?? TextInputType.text),
       inputFormatters: money ? [ThousandsInputFormatter()] : null,
-      onChanged: (_) => setState(() => onEdited?.call()),
+      onChanged: (_) => setState(() {
+        onEdited?.call();
+        _missing = const []; // ringkasan ikut hilang begitu user membetulkan
+      }),
       style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
@@ -903,7 +982,44 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
     );
   }
 
+  static String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// Isian tanggal periode polis. Nomor dan masa berlaku polis sama-sama berasal
+  /// dari sistem penerbitan di luar aplikasi, jadi keduanya diminta sekaligus.
+  Widget _tanggalPolis(String label, DateTime? value, ValueChanged<DateTime> onPicked) {
+    return InkWell(
+      borderRadius: AppRadius.radiusMd,
+      onTap: () async {
+        final now = DateTime.now();
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? now,
+          firstDate: DateTime(now.year - 5),
+          lastDate: DateTime(now.year + 5),
+        );
+        if (picked != null) onPicked(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 13),
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
+        ),
+        child: Text(value == null ? 'Pilih tanggal' : _isoDate(value),
+            style: TextStyle(
+                fontSize: 14,
+                color: value == null ? AppColors.grayStage : AppColors.textPrimary)),
+      ),
+    );
+  }
+
   Widget _shareRow(_ShareInput s, {required bool removable, int index = 0}) {
+    // Kedua field di baris ini tak bisa dibedakan lewat teksnya: hint '%' sama
+    // dengan suffix field Share Askrindo. Key-nya dipakai test (dan otomasi
+    // bukti UAT) untuk menunjuk field yang tepat.
+    final slot = '${s.partyType.toLowerCase()}-$index';
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -912,8 +1028,12 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
           Expanded(
             flex: 3,
             child: TextField(
+              key: ValueKey('share-name-$slot'),
               controller: s.nameCtrl,
-              onChanged: (_) => setState(() => s.nameErr = null),
+              onChanged: (_) => setState(() {
+                s.nameErr = null;
+                _missing = const [];
+              }),
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                   hintText: 'Nama',
@@ -926,9 +1046,13 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
           Expanded(
             flex: 2,
             child: TextField(
+              key: ValueKey('share-pct-$slot'),
               controller: s.pctCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (_) => setState(() => s.pctErr = null),
+              onChanged: (_) => setState(() {
+                s.pctErr = null;
+                _missing = const [];
+              }),
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                   hintText: '%',
