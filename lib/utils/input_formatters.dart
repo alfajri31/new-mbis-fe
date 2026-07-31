@@ -23,21 +23,28 @@ class ThousandsInputFormatter extends TextInputFormatter {
 class NpwpInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final capped = digits.length > 15 ? digits.substring(0, 15) : digits;
-    final buf = StringBuffer();
-    for (int i = 0; i < capped.length; i++) {
-      if (i == 2 || i == 5 || i == 8 || i == 12) {
-        buf.write('.');
-      } else if (i == 9) {
-        buf.write('-');
-      }
-      buf.write(capped[i]);
-    }
-    final formatted = buf.toString();
+    final formatted = maskNpwp(newValue.text);
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
+}
+
+/// Terapkan mask NPWP `XX.XXX.XXX.X-XXX.XXX` pada string apa pun (hanya angka
+/// yang dipakai, dipotong 15 digit). Dipakai formatter live & saat prefill nilai
+/// tersimpan (yang disimpan sebagai angka murni).
+String maskNpwp(String raw) {
+  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+  final capped = digits.length > 15 ? digits.substring(0, 15) : digits;
+  final buf = StringBuffer();
+  for (int i = 0; i < capped.length; i++) {
+    if (i == 2 || i == 5 || i == 8 || i == 12) {
+      buf.write('.');
+    } else if (i == 9) {
+      buf.write('-');
+    }
+    buf.write(capped[i]);
+  }
+  return buf.toString();
 }
