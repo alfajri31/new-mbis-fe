@@ -553,6 +553,14 @@ class DashboardCategoryStat {
     return realisasiYtd > 0 ? 1.0 : 0.0;
   }
 
+  /// Rasio realisasi (YTD berjalan) terhadap target SETAHUN penuh. Dipakai kartu
+  /// headline: admin meng-upload target setahun, jadi progress diukur ke target
+  /// tahunan, bukan target YTD.
+  double get progressFullYear {
+    if (targetFullYear > 0) return realisasiYtd / targetFullYear;
+    return realisasiYtd > 0 ? 1.0 : 0.0;
+  }
+
   factory DashboardCategoryStat.fromJson(Map<String, dynamic> json) => DashboardCategoryStat(
         category: json['category'] ?? '',
         label: json['label'] ?? '',
@@ -620,14 +628,17 @@ class DashboardRepository {
     }
   }
 
-  /// 11 target (target + realisasi YTD + rincian bulan) untuk scope pemanggil.
-  Future<DashboardCategories> getCategories() async {
-    final response = await apiClient.get('/api/dashboard/categories');
+  /// 11 target (target + realisasi + rincian bulan) untuk scope pemanggil.
+  /// [year] opsional: bila diisi, angka mengikuti tahun tsb (C2).
+  Future<DashboardCategories> getCategories({int? year}) async {
+    final response = await apiClient.get('/api/dashboard/categories${_yearQuery(year)}');
     if (response.statusCode == 200) {
       return DashboardCategories.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to load dashboard categories');
   }
+
+  String _yearQuery(int? year) => year == null ? '' : '?year=$year';
 
   /// 11 target untuk satu RM (supervisor drilldown di manajemen RM).
   Future<DashboardCategories> getRmCategories(String rmId) async {
@@ -638,16 +649,16 @@ class DashboardRepository {
     throw Exception('Failed to load RM categories');
   }
 
-  Future<DashboardDrilldown> getDrilldown() async {
-    final response = await apiClient.get('/api/dashboard/drilldown');
+  Future<DashboardDrilldown> getDrilldown({int? year}) async {
+    final response = await apiClient.get('/api/dashboard/drilldown${_yearQuery(year)}');
     if (response.statusCode == 200) {
       return DashboardDrilldown.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to load dashboard drilldown');
   }
 
-  Future<DashboardSummary> getSummary() async {
-    final response = await apiClient.get('/api/dashboard/summary');
+  Future<DashboardSummary> getSummary({int? year}) async {
+    final response = await apiClient.get('/api/dashboard/summary${_yearQuery(year)}');
     if (response.statusCode == 200) {
       return DashboardSummary.fromJson(jsonDecode(response.body));
     } else {
@@ -739,6 +750,66 @@ class DashboardRepository {
       throw Exception('Failed to load scope offices');
     }
   }
+
+  /// Target / Realisasi / Visit headline for the Customer cards, over the caller's
+  /// scope narrowed by optional [regionId]/[branchId]/[rmId] and optional [cob]
+  /// (target-category name). No filter → equals the dashboard headline.
+  Future<CustomerScopedSummary> getCustomerSummary({
+    String? regionId,
+    String? branchId,
+    String? rmId,
+    String? cob,
+  }) async {
+    final params = <String, String>{
+      if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
+      if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+      if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
+      if (cob != null && cob.isNotEmpty) 'cob': cob,
+    };
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final path = query.isEmpty
+        ? '/api/dashboard/customer-summary'
+        : '/api/dashboard/customer-summary?$query';
+    final response = await apiClient.get(path);
+    if (response.statusCode == 200) {
+      return CustomerScopedSummary.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to load customer summary');
+    }
+  }
+}
+
+/// Target / Realisasi / Visit headline for the Customer screen cards, over the
+/// caller's scope narrowed by optional region/branch/RM and an optional COB. With
+/// no filter these equal the dashboard headline cards.
+class CustomerScopedSummary {
+  final String? cob;
+  final double premiTarget;
+  final double realisasi; // WON YTD
+  final double realisasiMtd;
+  final int visitCountYtd;
+  final int visitCountMtd;
+
+  CustomerScopedSummary({
+    this.cob,
+    this.premiTarget = 0,
+    this.realisasi = 0,
+    this.realisasiMtd = 0,
+    this.visitCountYtd = 0,
+    this.visitCountMtd = 0,
+  });
+
+  factory CustomerScopedSummary.fromJson(Map<String, dynamic> json) =>
+      CustomerScopedSummary(
+        cob: json['cob'],
+        premiTarget: (json['premiTarget'] ?? 0).toDouble(),
+        realisasi: (json['realisasi'] ?? 0).toDouble(),
+        realisasiMtd: (json['realisasiMtd'] ?? 0).toDouble(),
+        visitCountYtd: json['visitCountYtd'] ?? 0,
+        visitCountMtd: json['visitCountMtd'] ?? 0,
+      );
 }
 
 /// Opsi RM untuk picker (id + nama + kantor). Mirror item `/api/dashboard/rm-options`.

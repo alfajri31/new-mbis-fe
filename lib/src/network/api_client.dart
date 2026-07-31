@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../auth/auth_session.dart';
 import '../config/app_config.dart';
+import 'ssl_pinning.dart';
 
 class ApiClient {
   /// Global hook invoked whenever any request returns 401 Unauthorized.
@@ -20,7 +21,12 @@ class ApiClient {
   static String? Function()? currentAccessToken;
 
   final AuthSession? session;
-  final http.Client _inner = http.Client();
+
+  /// Klien bersama, bukan instance baru per [ApiClient]. Dua alasan: connection
+  /// pool TLS tidak dibangun ulang tiap layar membuat ApiClient, dan certificate
+  /// pinning (bila dinyalakan) otomatis berlaku di seluruh pemanggil.
+  /// Lihat `ssl_pinning.dart`.
+  final http.Client _inner = AppHttpClient.instance;
 
   ApiClient({this.session});
 

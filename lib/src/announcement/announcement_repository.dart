@@ -6,7 +6,10 @@ class Announcement {
   final String id;
   final String title;
   final String? body;
-  final String type; // POLICY | RECOGNITION
+  /// Kolom backend (POLICY | RECOGNITION). TIDAK dipakai lagi di UI: pengumuman
+  /// tidak dibagi per jenis, jadi form selalu mengirim nilai yang sudah tersimpan
+  /// (default POLICY untuk pengumuman baru).
+  final String type;
 
   /// Kategori bebas-ketik (huruf besar), terpisah dari [type]. Null bila tak diisi.
   final String? category;
@@ -61,11 +64,6 @@ class Announcement {
         createdByName: j['createdByName'] as String?,
         createdAt: j['createdAt'] as String?,
       );
-
-  bool get isRecognition => type == 'RECOGNITION';
-
-  /// Human label for the announcement type.
-  String get typeLabel => isRecognition ? 'Apresiasi' : 'Kebijakan';
 
   /// Who can see this — for the management list.
   String get audienceLabel =>

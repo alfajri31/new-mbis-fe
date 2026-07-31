@@ -29,7 +29,13 @@ import '../presentation/screens/kelola_master_data_screen.dart';
 import '../presentation/screens/kelola_akun_screen.dart';
 import '../presentation/screens/kelola_aktivitas_ai_screen.dart';
 import '../presentation/screens/export_data_screen.dart';
+import '../presentation/screens/import_pipeline_screen.dart';
+import '../presentation/screens/import_target_screen.dart';
 import '../presentation/screens/export_my_visits_screen.dart';
+import '../presentation/screens/privasi_akun_screen.dart';
+import '../presentation/screens/kebijakan_privasi_screen.dart';
+import '../presentation/screens/hapus_akun_screen.dart';
+import 'legal/legal_routes.dart';
 import '../presentation/screens/export_screen.dart';
 import '../presentation/screens/ganti_password_screen.dart';
 
@@ -84,8 +90,15 @@ GoRouter buildRouter({
         // login. This is what turns "hit an API while logged out -> 401
         // exception on a half-rendered screen" into a clean trip to the login
         // form: the screen never mounts and never fires its request.
+        //
+        // Dikecualikan: kedua halaman kebijakan. Google Play mensyaratkan
+        // kebijakan privasi dan jalur penghapusan akun dapat dibuka **tanpa
+        // memasang aplikasi dan tanpa login** — reviewer membukanya dari browser
+        // biasa, tanpa akun. Tanpa pengecualian ini yang dia lihat layar login,
+        // dan halaman kebijakan yang tidak terbuka dianggap sama dengan tidak
+        // ada. Isinya memang dokumen publik, jadi tidak ada yang bocor.
         if (session == null) {
-          if (goingToLogin) return null;
+          if (goingToLogin || rutePublikLegal.contains(loc)) return null;
           final dest = state.uri.toString();
           if (dest.isEmpty || dest == '/') return '/login';
           return '/login?from=${Uri.encodeComponent(dest)}';
@@ -120,6 +133,17 @@ GoRouter buildRouter({
         // SplashScreen is never actually shown. Kept so initialLocation resolves.
         GoRoute(path: '/', builder: (_, _) => const SplashScreen()),
         GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+
+        // Halaman kebijakan publik — dikecualikan dari gerbang auth di atas.
+        // URL inilah yang dilampirkan ke Play Console; reviewer membukanya dari
+        // browser biasa tanpa akun. `showBack: false` karena keduanya bisa
+        // mendarat sebagai halaman pertama, tanpa apa pun untuk dituju kembali.
+        GoRoute(
+            path: rutePublikKebijakan,
+            builder: (_, _) => const KebijakanPrivasiScreen(showBack: false)),
+        GoRoute(
+            path: rutePublikHapusAkun,
+            builder: (_, _) => const HapusAkunScreen(showBack: false)),
         // Mandatory first-login password change (see the redirect gate above).
         GoRoute(
             path: '/ganti-password-wajib',
@@ -164,6 +188,8 @@ GoRouter buildRouter({
               GoRoute(
                   path: 'export',
                   builder: (_, _) => const ExportScreen()),
+              // Kebijakan privasi + jalur hapus akun (kewajiban Google Play).
+              _privasiRoute(),
             ]),
         // "Kelola" hub as its own tab (index 6), for ADMIN and BM. The hub's cards
         // are role-filtered, so BM sees only what it is allowed.
@@ -193,7 +219,12 @@ GoRouter buildRouter({
         _tabRoute(
             '/agent/komisi', 'agent-shell', 2, (i) => AgentMainScreen(index: i)),
         _tabRoute(
-            '/agent/profil', 'agent-shell', 3, (i) => AgentMainScreen(index: i)),
+            '/agent/profil', 'agent-shell', 3, (i) => AgentMainScreen(index: i),
+            subRoutes: [
+              // Salinan untuk shell Agen, supaya back-nya kembali ke tab profil
+              // Agen — bukan ke shell RM.
+              _privasiRoute(),
+            ]),
 
         // Reached only from the (imperatively pushed) agent-management tool, so
         // it stays a top-level route.
@@ -226,6 +257,33 @@ GoRoute _tabRoute(
         child: build(index),
       ),
       routes: subRoutes,
+    );
+
+/// "Privasi & Akun" plus the full privacy policy nested under it.
+///
+/// Declared once and reused under both /profil (RM shell) and /agent/profil, so
+/// back returns to the shell the user actually came from.
+///
+/// The policy is a *route*, not a `Navigator.push`: on web that gives it a real
+/// URL (`/profil/privasi/kebijakan`) that survives a refresh and can be linked
+/// to directly — Play requires the policy to be reachable from inside the app,
+/// and a signed-in web user gets there without leaving it.
+///
+/// The store-listing URL is the separate, auth-exempt `/kebijakan-privasi`
+/// declared at the top level. Same screen, same source text — only the entry
+/// point and the back button differ.
+GoRoute _privasiRoute() => GoRoute(
+      path: 'privasi',
+      // matchedLocation is the *resolved* path, so the same declaration yields
+      // '/profil/privasi' under the RM shell and '/agent/profil/privasi' under
+      // the agent shell — the screen links onward without knowing which shell
+      // it was opened from.
+      builder: (_, s) => PrivasiAkunScreen(basePath: s.matchedLocation),
+      routes: [
+        GoRoute(
+            path: 'kebijakan',
+            builder: (_, _) => const KebijakanPrivasiScreen()),
+      ],
     );
 
 /// The field tools, as a reusable sub-route list. Nested under the /tools tab
@@ -273,6 +331,11 @@ List<RouteBase> _konsolSubRoutes() => [
           path: 'aktivitas-ai',
           builder: (_, _) => const KelolaAktivitasAiScreen()),
       GoRoute(path: 'export-data', builder: (_, _) => const ExportDataScreen()),
+      GoRoute(
+          path: 'import-pipeline',
+          builder: (_, _) => const ImportPipelineScreen()),
+      GoRoute(
+          path: 'import-target', builder: (_, _) => const ImportTargetScreen()),
     ];
 
 /// Customer detail (and the pipeline detail reachable from within it). Reused

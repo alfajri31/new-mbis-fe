@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/observability/crash_reporter.dart';
 import 'core/providers/app_providers.dart';
 import 'src/app.dart';
 import 'src/auth/auth_repository.dart';
 import 'src/auth/auth_session.dart';
+import 'src/network/ssl_pinning.dart';
 import 'src/notification/push_service.dart';
 
 /// Compile-time flag for the automated screenshot harness. FALSE in every normal
@@ -23,8 +25,21 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Clean web URLs (/dashboard, not /#/dashboard). No-op off web.
   usePathUrlStrategy();
-  await _initFirebase();
-  final sharedPreferences = await SharedPreferences.getInstance();
+  // Keduanya SALING BEBAS (tidak ada nilai dari yang satu dipakai yang lain), jadi
+  // dijalankan berbarengan alih-alih seri — keduanya ada di jalur kritis sebelum
+  // runApp(). _initFirebase() menangkap error-nya sendiri, jadi semantik error
+  // Future.wait tidak mengubah apa pun di sini.
+  // AppHttpClient.initialize() ikut di sini karena juga tidak bergantung pada
+  // keduanya, DAN harus selesai sebelum permintaan HTTP pertama — yaitu
+  // _restoreFreshSession() di bawah. Bila certificate pinning dinyalakan tetapi
+  // aset sertifikatnya tidak ikut ter-bundle, panggilan ini sengaja melempar
+  // galat di sini (gagal-tertutup) alih-alih diam-diam berjalan tanpa proteksi.
+  final bootstrap = await Future.wait([
+    _initFirebase(),
+    SharedPreferences.getInstance(),
+    AppHttpClient.initialize(),
+  ]);
+  final sharedPreferences = bootstrap[1] as SharedPreferences;
   final authRepository = AuthRepository(sharedPreferences: sharedPreferences);
   var session = await authRepository.loadSession();
   // Access token pendek (30 menit) sengaja — sesi diperpanjang lewat refresh
@@ -77,7 +92,13 @@ Future<AuthSession?> _restoreFreshSession(
     return null;
   }
   try {
-    return await authRepository.refresh(refreshToken); // persists itself
+    // Timeout 8 detik (bukan 30 detik default): panggilan ini berada SEBELUM
+    // runApp(), jadi selama menunggu belum ada satu frame pun — layar kosong.
+    // TimeoutException jatuh ke `catch (_)` di bawah dan menghasilkan perilaku
+    // "unreachable" yang sudah didokumentasikan di atas: pakai sesi lama, biarkan
+    // handler 401 global yang memutuskan.
+    return await authRepository.refresh(refreshToken,
+        timeout: const Duration(seconds: 8)); // persists itself
   } catch (_) {
     return session;
   }
@@ -109,13 +130,18 @@ Future<AuthSession?> _screenshotAutoLogin(
 }
 
 /// Best-effort Firebase init. If Firebase isn't configured (missing/placeholder
-/// google-services.json), push is simply disabled — the rest of the app still runs.
+/// google-services.json), push and crash reporting are simply disabled — the rest
+/// of the app still runs.
 Future<void> _initFirebase() async {
   if (kIsWeb) return;
   try {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    // Dipasang di sini, bukan sebelum init: Crashlytics butuh FirebaseApp yang
+    // sudah hidup. Sengaja setelah `onBackgroundMessage` supaya kegagalan
+    // pemasangan push tidak ikut mematikan pelaporan crash — keduanya terpisah.
+    CrashReporter.install();
   } catch (e) {
-    debugPrint('Firebase init skipped (push disabled): $e');
+    debugPrint('Firebase init skipped (push & crash reporting disabled): $e');
   }
 }

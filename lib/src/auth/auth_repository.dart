@@ -96,12 +96,23 @@ class AuthRepository {
     return _handleAuthResponse(response);
   }
 
-  Future<AuthSession> refresh(String refreshToken) async {
-    final response = await http.post(
-      _endpoint('/refresh'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'refreshToken': refreshToken}),
-    );
+  /// Batas waktu default, disamakan dengan [ApiClient] (30 detik) supaya perilaku
+  /// jaringan seragam di seluruh aplikasi.
+  static const Duration _refreshTimeout = Duration(seconds: 30);
+
+  /// [timeout] bisa dipersingkat oleh pemanggil yang berada di JALUR KRITIS startup
+  /// (lihat `main.dart`): di sana `http.post` tanpa batas waktu menahan `runApp()`,
+  /// sehingga sinyal yang "nyangkut" (TCP menggantung, bukan gagal) membuat layar
+  /// kosong sampai timeout OS — dan di iOS berisiko dibunuh watchdog peluncuran.
+  Future<AuthSession> refresh(String refreshToken,
+      {Duration timeout = _refreshTimeout}) async {
+    final response = await http
+        .post(
+          _endpoint('/refresh'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'refreshToken': refreshToken}),
+        )
+        .timeout(timeout);
     return _handleAuthResponse(response);
   }
 

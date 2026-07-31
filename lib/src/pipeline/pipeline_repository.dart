@@ -392,11 +392,17 @@ class PipelineRepository {
       {required String subStage,
       double? realisasiIdr,
       String? cancelReason,
-      String? policyNumber}) async {
+      String? policyNumber,
+      String? policyStart,
+      String? policyEnd}) async {
     final body = <String, dynamic>{'subStage': subStage};
     if (realisasiIdr != null) body['realisasiIdr'] = realisasiIdr;
     if (cancelReason != null) body['cancelReason'] = cancelReason;
     if (policyNumber != null) body['policyNumber'] = policyNumber;
+    // Periode polis menyertai nomornya: server memakai keduanya untuk menerbitkan
+    // baris polis, dasar pencatatan premi dan pelepasan komisi agen.
+    if (policyStart != null) body['policyStart'] = policyStart;
+    if (policyEnd != null) body['policyEnd'] = policyEnd;
     final response = await apiClient.put('/api/pipelines/$id/status', body: body);
     if (response.statusCode != 200) {
       throw Exception(_errorMessage(response.body) ?? 'Gagal mengubah status');

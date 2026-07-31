@@ -85,7 +85,9 @@ class ReferenceRepository {
 
   /// Agents/TPM the current RM may attach to a pipeline (region-scoped by backend).
   Future<List<AgentRef>> agents() async {
-    final res = await apiClient.get('/api/agents');
+    // scope=office: RM melihat agen aktif di subtree kantornya (dropdown sumber
+    // pipeline), bukan hanya agen yang ia ajukan sendiri.
+    final res = await apiClient.get('/api/agents?scope=office');
     if (res.statusCode != 200) return [];
     final List<dynamic> list = jsonDecode(res.body);
     return list.map((j) => AgentRef.fromJson(j)).toList();

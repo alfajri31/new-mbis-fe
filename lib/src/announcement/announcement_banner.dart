@@ -13,8 +13,12 @@ import 'announcement_repository.dart';
 /// cleanly. Tapping a banner opens a sheet with the full text.
 ///
 /// The banner is full-bleed (edge-to-edge rectangle) and the page indicator dots
-/// float over its lower edge — the home screens then pull the main card up so it
-/// slightly overlaps the banner just beneath the dots.
+/// float over its lower edge. Semua pengumuman memakai satu tampilan yang sama —
+/// tidak ada pembagian jenis/kategori (dulu Apresiasi vs Kebijakan).
+///
+/// Layar yang menumpuk kartu utamanya di atas banner (mis. beranda Agen) harus
+/// memakai posisi layout NYATA (Stack + padding), bukan `Transform.translate`:
+/// dengan transform, sentuhan pada bagian kartu yang naik tetap jatuh ke banner.
 class AnnouncementBanner extends StatefulWidget {
   final ApiClient apiClient;
   final List<Announcement> announcements;
@@ -22,8 +26,9 @@ class AnnouncementBanner extends StatefulWidget {
   /// Height of the full-bleed banner area.
   final double height;
 
-  /// Distance of the page-indicator dots from the banner's bottom edge. Keep
-  /// this above the amount the main card overlaps so the dots stay visible.
+  /// Distance of the page-indicator dots from the banner's bottom edge. When a
+  /// screen pulls its main card over the banner, keep this above the overlap so
+  /// the dots stay visible.
   final double dotsBottomInset;
 
   const AnnouncementBanner({
@@ -31,7 +36,7 @@ class AnnouncementBanner extends StatefulWidget {
     required this.apiClient,
     required this.announcements,
     this.height = 158,
-    this.dotsBottomInset = 34,
+    this.dotsBottomInset = 10,
   });
 
   @override
@@ -140,22 +145,11 @@ class _AnnouncementBannerState extends State<AnnouncementBanner> {
   }
 }
 
-/// Visual identity (color + icon) for an announcement type. [color] leads the
-/// banner gradient, [colorDark] ends it.
-class _TypeStyle {
-  final Color color;
-  final Color colorDark;
-  final IconData icon;
-  const _TypeStyle(this.color, this.colorDark, this.icon);
-
-  factory _TypeStyle.of(Announcement a) => a.isRecognition
-      ? const _TypeStyle(
-          AppColors.secondaryOrange, Color(0xFFCC6A24), Icons.emoji_events_outlined)
-      // Steel blue — brighter than the dark navy home top bar, so the banner
-      // stays distinct and doesn't blend into it.
-      : const _TypeStyle(
-          Color(0xFF2A5C90), Color(0xFF17416F), Icons.campaign_outlined);
-}
+/// Warna gradien banner. Pengumuman tidak dibagi per jenis/kategori, jadi semua
+/// banner memakai satu identitas visual. Steel blue — lebih terang dari top bar
+/// navy beranda, supaya banner tetap terbaca sebagai pita terpisah.
+const Color _bannerColor = Color(0xFF2A5C90);
+const Color _bannerColorDark = Color(0xFF17416F);
 
 class _BannerCard extends StatelessWidget {
   final ApiClient apiClient;
@@ -170,11 +164,10 @@ class _BannerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _TypeStyle.of(announcement);
     final hasImage = announcement.imageUrl != null;
     return GestureDetector(
       onTap: onTap,
-      child: hasImage ? _imageBanner(context, style) : _gradientBanner(context, style),
+      child: hasImage ? _imageBanner(context) : _gradientBanner(context),
     );
   }
 
@@ -193,14 +186,14 @@ class _BannerCard extends StatelessWidget {
     );
   }
 
-  /// No image: full type-colour gradient with the content on top.
-  Widget _gradientBanner(BuildContext context, _TypeStyle style) {
+  /// No image: full gradient with the content on top.
+  Widget _gradientBanner(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [style.color, style.colorDark],
+          colors: [_bannerColor, _bannerColorDark],
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -212,7 +205,7 @@ class _BannerCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
-            children: _contentChildren(style),
+            children: _contentChildren(),
           ),
         ),
       ),
@@ -221,7 +214,7 @@ class _BannerCard extends StatelessWidget {
 
   /// With image: the photo fills the banner (dimmed so it reads as a background)
   /// and the content sits in a frosted "glass" card near the bottom.
-  Widget _imageBanner(BuildContext context, _TypeStyle style) {
+  Widget _imageBanner(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -257,7 +250,7 @@ class _BannerCard extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _contentChildren(style),
+                    children: _contentChildren(),
                   ),
                 ),
               ),
@@ -269,39 +262,13 @@ class _BannerCard extends StatelessWidget {
     );
   }
 
-  /// Badge + title + body (white text) — shared by both banner variants.
-  List<Widget> _contentChildren(_TypeStyle style) {
+  /// Title + body (white text) — shared by both banner variants. Tanpa badge
+  /// jenis/kategori: pengumuman tampil sebagai satu jenis saja.
+  List<Widget> _contentChildren() {
     return [
-      Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(50),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(style.icon, size: 13, color: Colors.white),
-                const SizedBox(width: 4),
-                Text(
-                  announcement.typeLabel,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 8),
       Text(
         announcement.title,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontSize: 14,
@@ -334,7 +301,6 @@ class _AnnouncementDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _TypeStyle.of(announcement);
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.8,
@@ -360,33 +326,6 @@ class _AnnouncementDetailSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: style.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(style.icon, size: 14, color: style.color),
-                      const SizedBox(width: 5),
-                      Text(
-                        announcement.typeLabel,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: style.color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
             Text(
               announcement.title,
               style: const TextStyle(
