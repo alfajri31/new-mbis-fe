@@ -1,0 +1,38 @@
+name: CI
+
+# Gerbang PR MBIS-App (mobile-only). Analisis statik + unit/widget test.
+# Build APK rilis dilakukan terpisah (manual / job rilis) memakai scripts/build-apk.
+# Dijalankan pada SETIAP push branch (lihat catatan sama di MBIS-Backend):
+# masalah yang lahir dari gabungan dua branch harus ketahuan sebelum masuk main.
+on:
+  push:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Samakan dengan constraint pubspec (Dart ^3.12 → Flutter 3.44.x).
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
