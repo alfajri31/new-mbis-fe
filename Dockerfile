@@ -72,7 +72,7 @@ ARG API_URL=
 # third-party DNS+TLS round-trip and lets the files be compressed & hard-cached.
 RUN flutter build web --wasm --release --no-web-resources-cdn \
     --base-href /app/ \
-    --dart-define=API_URL=$API_URL \
+    --dart-define=API_URL=/v2/api \
     --dart-define=ENTRA_TENANT_ID=$ENTRA_TENANT_ID \
     --dart-define=ENTRA_CLIENT_ID=$ENTRA_CLIENT_ID
 
