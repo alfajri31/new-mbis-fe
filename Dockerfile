@@ -33,13 +33,27 @@ ARG ENTRA_CLIENT_ID=
 # nginx (stage 2) mem-proxy-nya ke backend, sehingga ganti domain tidak perlu rebuild. Itu
 # yang masih dipakai staging (mbis.askrindo.net) dan wajib tetap begitu.
 #
-# PROD memakai topologi lain: API publik di https://mbis.askrindo.co.id/v2 sementara web
-# dilayani terpisah di IP privat — beda origin, jadi bundle harus tahu alamat penuh API:
+# PROD memakai topologi lain: satu domain dibagi per prefix path oleh reverse proxy host
+# (/etc/nginx/sites-available/mbis), BUKAN per hostname —
+#   https://mbis.askrindo.co.id/v2/    -> backend v2 kita (:3023), prefix DIBUANG proxy
+#   https://mbis.askrindo.co.id/app/   -> web ini (:3024), prefix DIBUANG proxy
+# Karena itu bundle prod wajib tahu prefix API-nya:
 #   docker build --build-arg API_URL=https://mbis.askrindo.co.id/v2 ...
 # TANPA akhiran '/api' dan tanpa garis miring di akhir; kode fitur menempelkan '/api/...'
-# sendiri. Konsekuensi yang tidak boleh dilupakan: begitu ini diisi, backend WAJIB
-# mengizinkan origin web di MBIS_CORS_ALLOWED_ORIGINS — kalau tidak seluruh web kena 403
-# padahal aplikasi HP tetap normal. Lihat docs/MIGRASI-DOMAIN-PROD-V2.md.
+# sendiri (root-absolute), sehingga hasilnya https://mbis.askrindo.co.id/v2/api/...
+#
+# Kalau ARG ini dibiarkan KOSONG saat build prod, bundle memanggil '/api/...' di root
+# domain -> proxy host mencocokkannya ke `location /` -> nyasar ke BACKEND V1 dan seluruh
+# aplikasi kena 403. Itu bukan masalah CORS; gejalanya mirip tapi penyebabnya routing.
+#
+# CORS TIDAK diperlukan di topologi ini: web (/app) dan API (/v2) berbagi origin yang
+# sama (skema+host+port identik), jadi browser tidak memperlakukannya lintas-origin dan
+# MBIS_CORS_ALLOWED_ORIGINS tidak perlu diisi. Ini berbeda dari rencana awal di
+# docs/MIGRASI-DOMAIN-PROD-V2.md yang menaruh web di IP privat (beda origin -> CORS wajib);
+# rencana itu tidak jadi dipakai.
+#
+# Nilai yang sama dipakai aplikasi Android/iOS (`--dart-define=API_URL`), jadi jangan
+# ubah prefix '/v2' tanpa memperhitungkan APK yang sudah terpasang di HP pengguna.
 #
 # Sengaja diletakkan SETELAH `flutter pub get`: nilainya berubah tiap ganti target, dan
 # ARG di atas COPY pubspec akan membatalkan cache dependensi setiap kali.
