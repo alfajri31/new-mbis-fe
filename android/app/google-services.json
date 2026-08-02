@@ -7,7 +7,7 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:436844402963:android:f300beef0ef6d6179ee2e6",
+        "mobilesdk_app_id": "1:436844402963:android:5313728d05fe6ddd9ee2e6",
         "android_client_info": {
           "package_name": "com.askrindo.mbis.mobile"
         }
@@ -28,7 +28,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:436844402963:android:f300beef0ef6d6179ee2e6",
         "android_client_info": {
-          "package_name": "com.askrindo.mbis.mobile.staging"
+          "package_name": "com.example.mbis"
         }
       },
       "oauth_client": [],
