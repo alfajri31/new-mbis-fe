@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../network/ssl_pinning.dart';
 import 'auth_session.dart';
 
 /// The verified Microsoft account has no MBIS mapping yet and has been queued for
@@ -29,11 +30,27 @@ class AuthRepository {
   AuthRepository({
     required this.sharedPreferences,
     FlutterSecureStorage? secureStorage,
-  }) : secureStorage = secureStorage ?? const FlutterSecureStorage();
+    http.Client? httpClient,
+  })  : secureStorage = secureStorage ?? const FlutterSecureStorage(),
+        _http = httpClient ?? AppHttpClient.instance;
 
   static const String _sessionKey = 'mbis.auth.session';
   final SharedPreferences sharedPreferences;
   final FlutterSecureStorage secureStorage;
+
+  /// Klien bersama dari [AppHttpClient] — BUKAN fungsi `http.post` tingkat-atas.
+  ///
+  /// `http.post` membuat `Client` sekali pakai sendiri, sehingga tidak pernah
+  /// melewati `_HostRoutingClient` dan certificate pinning TIDAK berlaku di sana.
+  /// Kelas ini justru memegang tiga panggilan paling sensitif — login (kata sandi),
+  /// tukar id_token Entra, dan refresh token — jadi memakai `http.post` di sini
+  /// berarti build yang tampak "pinning aktif" sebenarnya membiarkan kredensial
+  /// lewat jalur tanpa proteksi, tanpa error dan tanpa tes merah.
+  ///
+  /// [AppHttpClient.initialize] sudah selesai sebelum kelas ini dibuat
+  /// (`main.dart` menunggunya di `Future.wait` sebelum `AuthRepository(...)`),
+  /// jadi field ini menangkap klien yang sudah ter-pin, bukan yang polos.
+  final http.Client _http;
 
   // Base URL dari satu pintu [AppConfig] (sebelumnya diduplikasi di sini & ApiClient).
   Uri _endpoint(String path) => Uri.parse('${AppConfig.apiBaseUrl}/api/auth$path');
@@ -70,7 +87,7 @@ class AuthRepository {
   }
 
   Future<AuthSession> login({required String identifier, required String password}) async {
-    final response = await http.post(
+    final response = await _http.post(
       _endpoint('/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'identifier': identifier, 'password': password}),
@@ -82,7 +99,7 @@ class AuthRepository {
   /// two "not a hard error" outcomes so the UI can react: 202 -> queued for admin
   /// ([EntraPendingException]); 403 -> denied by admin ([EntraDeniedException]).
   Future<AuthSession> exchangeEntra(String idToken) async {
-    final response = await http.post(
+    final response = await _http.post(
       _endpoint('/entra/exchange'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'idToken': idToken}),
@@ -106,7 +123,7 @@ class AuthRepository {
   /// kosong sampai timeout OS — dan di iOS berisiko dibunuh watchdog peluncuran.
   Future<AuthSession> refresh(String refreshToken,
       {Duration timeout = _refreshTimeout}) async {
-    final response = await http
+    final response = await _http
         .post(
           _endpoint('/refresh'),
           headers: {'Content-Type': 'application/json'},
@@ -117,7 +134,7 @@ class AuthRepository {
   }
 
   Future<void> logout(String refreshToken) async {
-    final response = await http.post(
+    final response = await _http.post(
       _endpoint('/logout'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'refreshToken': refreshToken}),
