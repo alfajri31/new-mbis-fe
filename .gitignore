@@ -36,6 +36,11 @@ build/
 app.*.symbols
 app.*.map.json
 
+# Arsip rilis per-versi (mapping.txt R8 ±17 MB, AAB, dsb). Artefak build —
+# jangan di-commit. Simpan di penyimpanan rilis / password manager organisasi;
+# mapping juga terunggah otomatis ke Play Console & Crashlytics (RILIS-ANDROID §4a).
+/rilis/
+
 # Coverage
 coverage/
 
