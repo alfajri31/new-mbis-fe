@@ -67,6 +67,8 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   String? get _cob => _cs.cob;
   List<DashboardCategoryStat> get _cobOptions => _cs.cobOptions;
   CustomerScopedSummary? get _summary => _cs.summary;
+  bool get _summaryFailed => _cs.summaryFailed;
+  bool get _summaryIsFallback => _cs.summaryIsFallback;
 
   /// Agents use a small, server-fixed book — keep it client-side; everyone else
   /// is server-paginated so a supervisor's customer base never loads all at once.
@@ -819,6 +821,9 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   /// Target-vs-Realisasi progress bar with the COB picker embedded in its
   /// header, mirroring the front dashboard's "Pencapaian Target" card.
   Widget _buildTargetRealisasiBar(CustomerScopedSummary? s) {
+    // Gagal memuat ≠ realisasi nol. Tanpa cabang ini kartu menggambar "Rp 0 / 0%"
+    // untuk keduanya, dan masalah deploy/jaringan menyaru jadi bug data.
+    if (_summaryFailed) return _buildTargetRealisasiUnavailable();
     final double target = s?.premiTarget ?? 0;
     final double real = s?.realisasi ?? 0;
     // Same business rule as the dashboard's DashboardCategoryStat.progress:
@@ -918,6 +923,121 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Angka cadangan dari dashboard tidak mengikuti filter (endpoint-nya
+          // hanya menerima `year`). Wajib dinyatakan: angka yang diam saat
+          // difilter tanpa keterangan akan disangka bug perhitungan.
+          if (_summaryIsFallback) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 12,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                const Expanded(
+                  child: Text(
+                    'Angka lingkup penuh — filter belum diterapkan',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Kartu Target/Realisasi saat `customer-summary` gagal dimuat.
+  ///
+  /// Bentuknya sengaja sama persis dengan kartu normal (ukuran, border, dropdown
+  /// COB tetap bisa dipakai) supaya tata letak baris kartu tidak melompat —
+  /// hanya bar dan angkanya diganti pesan yang jujur beserta tombol ulang.
+  Widget _buildTargetRealisasiUnavailable() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [AppShadows.level1],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _cobOptions.isNotEmpty
+                    ? _buildCobDropdownInline()
+                    : const Text(
+                        'Realisasi vs Target',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryNavy,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                '–',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(
+                Icons.cloud_off_rounded,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'Gagal memuat target & realisasi',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _notifier.reloadSummary(),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Coba lagi',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryNavy,
                   ),
                 ),
               ),
