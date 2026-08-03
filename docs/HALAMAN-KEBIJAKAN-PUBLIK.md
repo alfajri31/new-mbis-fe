@@ -18,68 +18,90 @@ dikerjakan di sisi server**.
 > `*.askrindo.co.id`, berlaku s/d 11 Apr 2027), diverifikasi dari luar jaringan
 > kantor. Peringatan lama soal sertifikat *self-signed* **sudah tidak berlaku**.
 >
-> Yang tersisa: **backend M-BIS belum dideploy di domain itu** — semua path masih
-> dijawab aplikasi lain dengan 403. Rinciannya di §3.
+> ✅ **Diperbarui 3 Agustus 2026 — aplikasinya sudah tayang.** Backend menjawab di
+> `/v2` (`/v2/actuator/health` → `200 {"status":"UP"}`) dan **web sudah punya
+> alamat publik sendiri di `/app`**. Catatan lama "backend belum dideploy" di §3
+> sudah tidak berlaku.
+>
+> ⚠️ **Halamannya pindah dari backend ke frontend** pada tanggal yang sama, dan
+> bentuknya kembali menjadi **HTML statis**. Lihat §1 & 2.
 
 ---
 
-## 1 & 2. Kedua halaman kebijakan — SELESAI, keduanya rute Flutter publik
+## 1 & 2. Kedua halaman kebijakan — HTML statis di repo ini (3 Agustus 2026)
 
 | | Kebijakan privasi | Permintaan hapus akun |
 |---|---|---|
 | Naskah | `lib/src/legal/kebijakan_privasi_content.dart` | `lib/src/legal/hapus_akun_content.dart` |
-| Layar | `presentation/screens/kebijakan_privasi_screen.dart` | `presentation/screens/hapus_akun_screen.dart` |
-| URL publik (disajikan backend) | `https://mbis.askrindo.co.id/v2/kebijakan-privasi` | `https://mbis.askrindo.co.id/v2/hapus-akun` |
-| Rute Flutter publik (in-app + web internal) | `/kebijakan-privasi` | `/hapus-akun` |
+| Layar (in-app) | `presentation/screens/kebijakan_privasi_screen.dart` | `presentation/screens/hapus_akun_screen.dart` |
+| Berkas HTML publik (turunan) | `web/kebijakan-privasi.html` | `web/hapus-akun.html` |
+| **URL publik (prod)** | `https://mbis.askrindo.co.id/app/kebijakan-privasi` | `https://mbis.askrindo.co.id/app/hapus-akun` |
+| URL publik (staging) | `https://mbis.askrindo.net/kebijakan-privasi` | `https://mbis.askrindo.net/hapus-akun` |
+| Rute Flutter publik | `/kebijakan-privasi` | `/hapus-akun` |
 | Rute dalam aplikasi | `/profil/privasi/kebijakan` (+ salinan shell Agen) | dibuka dari Privasi & Akun dan dari kebijakan bagian 11 |
 
-Tata letak keduanya dirender `presentation/widgets/policy_view.dart`; rute dan
+Tata letak versi in-app dirender `presentation/widgets/policy_view.dart`; rute dan
 konstantanya di `lib/src/legal/legal_routes.dart`.
 
-### HTML kembali dipakai — untuk alamat publik (31 Juli 2026)
+### Kenapa HTML statis lagi, dan kenapa di frontend
 
-Keputusan 27 Juli di bawah **masih berlaku untuk versi in-app**, tapi tidak lagi cukup untuk
-alamat publik. Alasannya bukan berubah pikiran, melainkan asumsinya patah:
+Dua asumsi lama patah sekaligus:
 
-| | 27 Juli | 30 Juli (topologi prod ditetapkan) |
+| | 30 Juli (halaman ditaruh di backend) | 3 Agustus (kenyataan prod) |
 |---|---|---|
-| Web M-BIS | diasumsikan punya alamat publik | hanya di **IP privat** jaringan internal |
-| Backend | — | satu-satunya komponen **publik** (`/v2`) |
+| Alamat publik web | tidak ada — web di IP privat | **ada**: proxy host memetakan `/app/` ke web (`:3024`) |
+| Cukupkah rute Flutter? | — | **tidak**, lihat di bawah |
 
-Rute Flutter publik tidak bisa dibuka reviewer kalau webnya sendiri tidak punya alamat publik.
-Karena itu kedua halaman kini **juga** disajikan backend sebagai HTML:
+**Alasan pindah ke frontend:** web sudah punya alamat publik sendiri, jadi tidak ada
+lagi sebab menyeberangkan naskah ke repo backend. Halamannya kini satu tempat dengan
+sumbernya, dan generator tidak lagi butuh repo tetangga ter-checkout.
 
-| | URL publik (prod) |
-|---|---|
-| Kebijakan privasi | `https://mbis.askrindo.co.id/v2/kebijakan-privasi` |
-| Permintaan hapus akun | `https://mbis.askrindo.co.id/v2/hapus-akun` |
+**Alasan tetap HTML, bukan rute Flutter saja:** aplikasi web ini dibangun sebagai
+**SPA WasmGC**. Pengambil HTTP yang tidak menjalankan JS/WASM — **pemeriksa otomatis
+Google Play** dan mesin pencari — hanya menerima cangkang `index.html` (±5,6 KB) tanpa
+satu kata pun naskah kebijakan. Halaman yang tampil kosong bagi mereka dianggap sama
+saja dengan tidak ada kebijakan. Ini persis yang tidak diperhitungkan keputusan
+27 Juli di bawah, yang menimbang hanya reviewer manusia dengan browser sungguhan.
 
-Prefix `/v2` ikut `MBIS_CONTEXT_PATH`; di staging & lokal (context-path kosong) URL-nya di root.
-
-**Naskahnya tetap satu.** Yang dihindari keputusan 27 Juli adalah *salinan kedua yang bisa
-menyimpang* — dan itu tetap dihindari:
+**Naskahnya tetap satu:**
 
 | Berkas | Peran |
 |---|---|
-| `lib/src/legal/*_content.dart` | **satu-satunya sumber naskah** (tidak berubah) |
+| `lib/src/legal/*_content.dart` | **satu-satunya sumber naskah** |
 | `tool/policy_html.dart` | renderer HTML, memakai `parseInline` yang sama dengan aplikasi |
 | `tool/gen_policy_html.dart` | CLI: `dart run tool/gen_policy_html.dart` |
-| `MBIS-backend/.../resources/legal/*.html` | **berkas turunan** — berbanner "JANGAN DIEDIT TANGAN" |
-| `test/src/legal/policy_html_drift_test.dart` | gagal bila HTML di backend ≠ hasil render naskah |
-| `MBIS-backend/.../LegalPageController.java` | menyajikannya; gagal-cepat saat boot bila berkasnya hilang |
+| `web/*.html` | **berkas turunan** — berbanner "JANGAN DIEDIT TANGAN" |
+| `test/src/legal/policy_html_drift_test.dart` | gagal bila HTML di `web/` ≠ hasil render naskah |
+| `nginx.conf` | blok `location =` memetakan URL bersih (tanpa `.html`) ke berkasnya |
 
-Test drift-nya **melewat** bila repo backend tidak ada di sebelah (CI satu repo), dan **berjalan**
-di mesin pengembang tempat kedua repo bersebelahan — yaitu tempat naskah sebenarnya diubah.
-Sudah diuji dengan sengaja mengubah HTML di backend: test-nya gagal seperti seharusnya.
+Test drift-nya kini **selalu berjalan**, termasuk di CI — dulu di-skip karena berkasnya
+ada di repo backend tetangga yang tidak ikut ter-checkout.
 
-Kedua path di-`permitAll` di `SecurityConfig` untuk **semua profil termasuk prod** — kebalikan
-dari Swagger yang justru ditutup di prod. `LegalPageE2ETest` menjaganya, sekaligus memastikan
-endpoint bisnis tetap 401.
+**Rute Flutter publik TIDAK dihapus.** Tombol di layar Privasi & Akun memanggilnya lewat
+`context.push`, jadi navigasi di dalam aplikasi tetap merender naskah dari Dart — terbaca
+luring dan tanpa muat ulang halaman. Yang berubah hanya penyajian saat URL-nya **dimuat
+langsung**: nginx menjawabnya dengan HTML statis sebelum aplikasi sempat jalan.
 
-**Rute Flutter publik TIDAK dihapus.** Versi in-app tetap dirender aplikasi, tetap terbaca luring,
-dan tetap dikecualikan dari gerbang auth. Yang bertambah hanyalah alamat publik lewat backend.
+### Backend sudah tidak terlibat
 
-### Kenapa bukan HTML statis (keputusan 27 Juli 2026 — konteks historis)
+Dihapus 3 Agustus 2026 dari `be-new-mbis` **dan** `MBIS-backend`:
+
+| Yang dihapus | Dulu perannya |
+|---|---|
+| `src/main/resources/legal/*.html` | berkas turunan yang disajikan backend |
+| `controller/LegalPageController.java` | menyajikan `/kebijakan-privasi` & `/hapus-akun` |
+| `LEGAL_PAGE_PATHS` di `SecurityConfig` | mem-`permitAll` kedua path di semua profil |
+| `e2e/LegalPageE2ETest.java` | menjaga keduanya tetap publik |
+
+Komentar penanda ditinggalkan di `SecurityConfig` supaya tidak ditambahkan kembali.
+
+### Kenapa bukan HTML statis (keputusan 27 Juli 2026 — SUDAH DIBATALKAN, disimpan sebagai riwayat)
+
+> Keputusan di bawah dibatalkan dua kali: 30 Juli (halaman HTML dihidupkan lagi di
+> backend) dan 3 Agustus (dipindah ke frontend). Yang terlewat dari penalarannya:
+> "dapat dibuka tanpa memasang aplikasi" juga berlaku bagi **pengambil otomatis**
+> yang tidak menjalankan JS/WASM, bukan hanya reviewer manusia dengan browser.
+> Disimpan supaya alasannya tidak diputar ulang untuk ketiga kalinya.
 
 Semula keduanya berkas HTML statis di `web/`, disajikan blok `location =` di
 nginx. Halaman kebijakan privasi bahkan **dibangkitkan** dari naskah Dart oleh
@@ -106,9 +128,15 @@ tidak berakhir di layar kosong.
   kegagalan yang sunyi, karena aplikasi tetap jalan.
   `test/src/legal/rute_publik_test.dart` menjaganya, sekaligus memastikan
   pengecualiannya **tidak kebablasan** (rute bisnis harus tetap dipagari).
-- **`nginx.conf` sengaja tidak punya blok `location =`** untuk kedua path. Blok
-  seperti itu akan menang atas SPA fallback dan mengembalikan 404 karena berkas
-  HTML-nya sudah tidak ada. Komentar di berkasnya menjelaskan ini.
+- **`nginx.conf` WAJIB punya blok `location =`** untuk kedua path — itulah yang
+  memetakan URL bersih ke berkas `.html`-nya, dan yang membuat isinya terbaca
+  pengambil otomatis. Tautan silang di dalam naskah (`href="hapus-akun"`) juga
+  bergantung pada bentuk tanpa akhiran ini. Komentar panjang di berkasnya
+  menjelaskan ini, termasuk kenapa peringatan lama "jangan tambahkan blok ini"
+  sudah tidak berlaku.
+- **Drift test** (`policy_html_drift_test.dart`) menolak lulus bila `web/*.html`
+  tidak lagi sama dengan hasil render naskah Dart. Ini yang mencegah versi publik
+  diam-diam tertinggal saat Legal merevisi naskah.
 - **Status draf** kebijakan (`kebijakanMasihDraf`) memunculkan spanduk peringatan
   dan memblokir `scripts/build-aab.*`. Sekarang `false` — disahkan Legal,
   berlaku 3 Agustus 2026.
@@ -118,15 +146,19 @@ tidak berakhir di layar kosong.
 1. Codemagic → `mbis-prod`:
 
    ```
-   PRIVACY_POLICY_URL   = https://mbis.askrindo.co.id/v2/kebijakan-privasi
-   ACCOUNT_DELETION_URL = https://mbis.askrindo.co.id/v2/hapus-akun
+   PRIVACY_POLICY_URL   = https://mbis.askrindo.co.id/app/kebijakan-privasi
+   ACCOUNT_DELETION_URL = https://mbis.askrindo.co.id/app/hapus-akun
    ```
 
-   Keduanya kini hanya dipakai untuk kolom Play Console dan tombol "buka versi
-   web" — bukan lagi satu-satunya jalan pengguna membaca kebijakan.
+   ⚠️ Prefiksnya **`/app`**, bukan `/v2`. `/v2` adalah backend, dan sejak 3 Agustus
+   backend tidak lagi menyajikan halaman ini — nilai lama akan 401.
+
+   Keduanya hanya dipakai untuk kolom Play Console dan tombol "buka versi web" —
+   bukan satu-satunya jalan pengguna membaca kebijakan.
 2. Isi URL yang sama di Play Console (kebijakan privasi + Data deletion URL).
-3. **Beresi TLS `mbis.askrindo.co.id` lebih dulu** (§3). Tanpa itu kedua URL gagal
-   dibuka reviewer, apa pun bentuk halamannya.
+3. **Deploy ulang web** supaya `web/*.html` dan `nginx.conf` yang baru ikut terbawa.
+   Sebelum itu, kedua URL `/app/...` masih dijawab SPA fallback (200, tapi kosong
+   bagi pengambil otomatis).
 
 ### Yang SENGAJA tidak ikut dari draft ke halaman terbit
 
@@ -178,23 +210,63 @@ tidak berlaku lagi.**
 > pastikan tim infra memasukkannya ke pengingat, karena kedaluwarsa akan
 > mematikan URL kebijakan **dan** seluruh API sekaligus.
 
-### Yang tersisa: aplikasinya belum dideploy di sana
+### Deployment — sudah beres (3 Agustus 2026)
 
-Sertifikatnya beres, tapi **backend M-BIS belum ada di domain itu.** Pemeriksaan
-31 Juli: seluruh path (`/`, `/v1`, `/v2`, `/v2/actuator/health`,
-`/v2/kebijakan-privasi`) membalas **403 dengan badan kosong**.
+Catatan 31 Juli "backend belum ada di domain itu" **sudah tidak berlaku**.
+Pemeriksaan 3 Agustus 2026:
 
-Itu bukan M-BIS. Sidik jarinya tidak cocok — backend M-BIS membalas `200`
-`{"status":"UP",...}` di `/actuator/health` dan `401` `{"message":"Authentication
-required"}` untuk endpoint terproteksi, bukan 403 kosong. Header responsnya
-(`X-XSS-Protection: 0`, `X-Frame-Options: DENY`, `Cache-Control: no-store`) khas
-Spring Security, jadi yang menjawab adalah **aplikasi Spring lain** — kemungkinan
-besar aplikasi pemilik `/v1` — dan `/v2` belum dipetakan ke M-BIS.
+| Permintaan | Hasil |
+|---|---|
+| `GET /v2/actuator/health` | `200` `{"status":"UP","groups":["liveness","readiness"]}` — sidik jari M-BIS |
+| `GET /v2/api/visits?pipelineId=x` | `401` `{"message":"Authentication required"}` — M-BIS, terproteksi |
+| `GET /actuator/health` (tanpa `/v2`) | `403` — masih aplikasi tetangga pemilik `/v1` |
+| `GET /app/` | `200` `text/html` — cangkang aplikasi web |
+| `GET /app/favicon.png` | `200` `image/png` — membuktikan proxy **membuang** prefix `/app` |
+| `GET /app/auth.html` | `200`, 1025 B — berkas asli dari `web/`, bukan cangkang |
 
-Jadi langkah berikutnya murni deployment: deploy backend M-BIS dengan
-`MBIS_CONTEXT_PATH=/v2` dan minta infra meneruskan `/v2` ke sana. Begitu itu
-selesai, kedua URL kebijakan langsung hidup — semua prasyarat lain sudah terbukti
-terpenuhi.
+Dua hal penting yang dibuktikan pemeriksaan itu:
+
+1. **Proxy host membuang prefix `/app`** sebelum meneruskan ke nginx kita. Karena
+   itu blok nginx ditulis `location = /kebijakan-privasi`, bukan `/app/kebijakan-privasi`.
+2. **Berkas di `web/` tersaji apa adanya** di bawah `/app/` — jalur yang sama persis
+   dengan `auth.html`, jadi `kebijakan-privasi.html` tidak butuh perlakuan khusus.
+
+### ✅ `/app` terbukti terekspos publik (3 Agustus 2026)
+
+Diverifikasi ulang dari **hotspot seluler pribadi**, di luar jaringan kantor.
+Sertifikat lolos **tanpa** `-k`, dan resolusinya ke alamat publik:
+
+| Permintaan | Hasil | IP |
+|---|---|---|
+| `GET /v2/actuator/health` | `200` JSON aktuator | `9.154.64.93` |
+| `GET /app/` | `200` `text/html` | `9.154.64.93` |
+| `GET /app/kebijakan-privasi` | `200` `text/html` | `9.154.64.93` |
+| `GET /app/hapus-akun` | `200` `text/html` | `9.154.64.93` |
+| `GET /v2/kebijakan-privasi` | `401` JSON — salinan backend memang sudah mati | `9.154.64.93` |
+
+Jadi **web punya alamat publik sendiri**, dan dasar pemindahan halaman ke frontend
+terbukti benar, bukan sekadar asumsi dari komentar Dockerfile.
+
+### Sekaligus terbukti: kenapa rute Flutter saja tidak cukup
+
+Pemeriksaan yang sama menunjukkan masalahnya secara langsung. Ini yang **masih**
+diterima pengambil otomatis di `/app/kebijakan-privasi` hari ini, sebelum perubahan
+ini dideploy:
+
+```
+$ curl -s https://mbis.askrindo.co.id/app/kebijakan-privasi | grep -c "Pengendali Data"
+0
+$ curl -s https://mbis.askrindo.co.id/app/kebijakan-privasi | grep -c "Kebijakan Privasi"
+0
+$ curl -s https://mbis.askrindo.co.id/app/kebijakan-privasi | grep -iE "<title>|<base href"
+  <base href="/app/">
+  <title>M-BIS</title>
+```
+
+`200 OK`, 5.648 byte, judul `M-BIS`, dan **nol** kemunculan naskah kebijakan. URL-nya
+"hidup" bagi pemantau uptime, tapi bagi pemeriksa Google Play halaman itu **tidak
+memuat kebijakan privasi sama sekali**. Setelah deploy, permintaan yang sama harus
+mengembalikan 19.360 byte berisi naskah.
 
 ### Temuan lama 27 Juli 2026 (sudah tidak berlaku — disimpan sebagai riwayat)
 
@@ -236,21 +308,73 @@ Perbaikannya ada di sisi tim infrastruktur, bukan di repo ini:
 sesi, judul dokumennya benar-benar terender, tombol kembali tidak muncul di rute
 publik, dan rute bisnis (`/customer`) **tetap** dilempar ke `/login`.
 
-**nginx** diuji dengan image `nginx:1.27-alpine` memakai `nginx.conf` **asli** dari
-repo, bukan konfigurasi sederhana buatan sendiri (`nginx -t` lolos):
+**nginx (27 Juli 2026 — konfigurasi saat itu, tanpa blok `location =`)** diuji dengan
+image `nginx:1.27-alpine` memakai `nginx.conf` **asli** dari repo (`nginx -t` lolos).
+Semua path jatuh ke SPA fallback dan membalas `200` berisi shell aplikasi. Uji itu
+membuktikan tidak ada sisa blok statis yang 404 — benar untuk konfigurasi saat itu,
+tapi **tidak lagi menggambarkan keadaan sekarang**: sejak 3 Agustus blok
+`location = /kebijakan-privasi` dan `= /hapus-akun` sengaja ada kembali.
+
+### Verifikasi 3 Agustus 2026 (pemindahan ke frontend)
+
+**Kode & tes:**
+
+| Yang diuji | Hasil |
+|---|---|
+| `flutter analyze` (kedua repo FE) | **exit 0**, `No issues found!` |
+| `flutter test` (kedua repo FE) | **86/86 lulus** di masing-masing repo |
+| `mvn test` (MBIS-backend, Postgres nyata) | **164/164 lulus**, `BUILD SUCCESS` — pembuktian penghapusan `LegalPageController` + entri `SecurityConfig` tidak mengubah perilaku lain |
+| `mvn test-compile` (be-new-mbis) | exit 0 — tidak ada sisa rujukan ke `LegalPageE2ETest` yang dihapus |
+| Generator di kedua repo FE | `web/kebijakan-privasi.html` (19.332 char) + `web/hapus-akun.html` (7.110 char), **identik antar repo** |
+| Drift test benar-benar menjaga | disabotase dengan menambah satu komentar ke HTML → test **gagal** dengan pesan yang benar; dipulihkan generator → lulus lagi |
+| Backend tidak lagi merujuk halaman kebijakan | `grep` di `src/` kedua repo BE bersih (sisa hanya komentar penanda) |
+
+**nginx — diuji dengan `nginx.conf` ASLI dari repo** di container `nginx:1.27-alpine`
+(`nginx -t` lolos), berkas `web/` dipasang sebagai root. Cangkang `index.html` = 5.661 B,
+jadi ukuran respons langsung membedakan naskah dari cangkang:
 
 | Permintaan | Hasil |
 |---|---|
-| `GET /kebijakan-privasi` | `200` — shell aplikasi (SPA fallback) |
-| `GET /hapus-akun` | `200` — shell aplikasi |
-| `GET /dashboard` | `200` — shell aplikasi |
-| `GET /profil/privasi/kebijakan` | `200` — shell aplikasi |
+| `GET /kebijakan-privasi` | `200`, **19.360 B** — naskah, `grep "Pengendali Data"` → 1 |
+| `GET /hapus-akun` | `200`, **7.122 B** — naskah |
+| `GET /kebijakan-privasi.html` | `200`, 19.360 B — berkasnya juga tetap terjangkau langsung |
+| `GET /dashboard` | `200`, 5.661 B — cangkang (SPA fallback masih benar) |
+| `GET /profil/privasi/kebijakan` | `200`, 5.661 B — cangkang, seperti seharusnya |
+| `GET /` | `200`, 5.661 B — cangkang |
 
-Sejak kedua halaman jadi rute Flutter, yang benar justru **tidak ada** blok
-`location =` untuk keduanya — semuanya jatuh ke SPA fallback seperti rute lain.
-Uji ini yang memastikan tidak ada sisa blok statis yang mengembalikan 404.
+Header pada halaman kebijakan:
 
-> Uji di atas membuktikan nginx menyajikan shell aplikasinya. Yang **belum**
-> diuji: browser sungguhan merender kebijakan di URL itu tanpa login. Itu perlu
-> `flutter build web` lalu dibuka dari luar jaringan kantor — dan bergantung pada
-> perbaikan TLS di §3.
+```
+Content-Type: text/html; charset=utf-8
+Cache-Control: max-age=3600
+X-Content-Type-Options: nosniff        <- pengerasan level server TETAP ikut
+X-Frame-Options: SAMEORIGIN
+Referrer-Policy: strict-origin-when-cross-origin
+```
+
+Header pengerasan itu ikut **karena** blok memakai `expires`, bukan `add_header`.
+Bandingkan dengan `location = /index.html` yang memakai `add_header` dan karenanya
+**kehilangan** ketiganya — masalah lama yang sengaja tidak ditiru di sini.
+
+Tautan silang terverifikasi: satu-satunya `href` non-mailto di halaman kebijakan
+adalah `href="hapus-akun"`, yang relatif terhadap `/app/kebijakan-privasi` mendarat
+di `/app/hapus-akun`. Karakter non-ASCII juga utuh (`Profil → Privasi &amp; Akun`).
+
+**Yang masih harus diuji setelah deploy** (butuh build & deploy ulang web):
+
+1. URL prod sungguhan menyajikan naskah — uji dengan `curl` polos, bukan browser,
+   supaya benar-benar meniru pengambil otomatis Play:
+
+   ```bash
+   curl -s https://mbis.askrindo.co.id/app/kebijakan-privasi | grep -c "Pengendali Data"
+   # harus >= 1; kalau 0, yang tersaji masih cangkang SPA
+   ```
+
+   Baseline sebelum deploy sudah diukur dari hotspot seluler: hasilnya **0** (lihat
+   §3). Kalau setelah deploy masih 0, berarti `web/*.html` atau `nginx.conf` yang
+   baru tidak ikut terbawa ke image.
+
+2. Navigasi in-app (Privasi & Akun → Kebijakan Privasi) tetap merender layar
+   Flutter, bukan memuat ulang halaman.
+
+Akses dari luar jaringan kantor **sudah terbukti** (§3) — itu bukan lagi item terbuka.

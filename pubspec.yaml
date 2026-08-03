@@ -99,6 +99,43 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # Membangkitkan ikon launcher Android dari satu berkas sumber. DEV-dependency:
+  # hanya dipakai saat generate, nol pengaruh ke ukuran & runtime aplikasi.
+  flutter_launcher_icons: ^0.14.4
+
+# Ikon launcher Android — bangkitkan ulang dengan:
+#     dart run flutter_launcher_icons
+#
+# **Kenapa ini ada.** Sebelum 3 Agustus 2026 ikonnya rusak dan tidak ada yang
+# menyadari: satu berkas 582x393 (TIDAK persegi, logo apa adanya) disalin identik
+# ke kelima folder mipmap. Akibatnya launcher meregangkan/memotong ikon, kelima
+# densitas memuat berkas 160 KB yang sama (±820 KB percuma di APK), dan tidak ada
+# adaptive icon sama sekali — padahal targetSdk 36, sehingga Android 8+ membungkus
+# ikon lawas itu dengan latar abu-abu dan mengecilkannya.
+#
+# Sumbernya logo aplikasi yang memang sudah dipakai (`assets/images/logo-mbis.webp`
+# — MB monogram, sama dengan yang tampil di splash, login, dan header). Berkas di
+# `assets/icon/` dibangkitkan dari salinan resolusi tertinggi logo itu; keduanya
+# SENGAJA tidak didaftarkan di `flutter: assets:` karena hanya dipakai saat build
+# ikon, bukan saat aplikasi berjalan — mendaftarkannya justru menambah ukuran APK
+# tanpa guna.
+#
+# `adaptive_icon_foreground` memakai logo yang diperkecil agar muat di *safe zone*
+# adaptive icon: kanvas 108dp, tapi yang dijamin terlihat hanya lingkaran tengah
+# 72dp. Karena logo ini melebar (rasio 1,48), yang membatasi adalah DIAGONAL-nya,
+# bukan lebarnya — logo 560x378 px pada kanvas 1024 berdiagonal 676 px, tepat di
+# bawah batas 683 px. Membesarkannya akan memotong ujung huruf M dan B pada
+# launcher bermask lingkaran.
+flutter_launcher_icons:
+  android: true
+  # iOS sengaja dilewati: rilis iOS belum mungkin (Apple Team ID belum ada) dan
+  # ikon iOS punya aturan sendiri (tanpa alpha, tanpa sudut membulat sendiri).
+  # Nyalakan bersamaan saat jalur App Store benar-benar disiapkan.
+  ios: false
+  image_path: "assets/icon/ic_launcher.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/ic_launcher_foreground.png"
+  min_sdk_android: 24
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

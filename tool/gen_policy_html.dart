@@ -1,54 +1,51 @@
-/// Membangkitkan halaman kebijakan HTML ke repo backend.
+/// Membangkitkan halaman kebijakan HTML ke folder `web/` repo ini.
 ///
-/// Jalankan dari folder MBIS-Frontend setiap kali naskah di `lib/src/legal/`
-/// berubah:
+/// Jalankan dari akar repo setiap kali naskah di `lib/src/legal/` berubah:
 ///
 ///     dart run tool/gen_policy_html.dart
 ///
-/// Keluarannya masuk ke repo TETANGGA (MBIS-backend), yang menyajikannya sebagai
-/// halaman publik — lihat `LegalPageController` di sana. Backend adalah satu-satunya
-/// komponen M-BIS yang punya alamat publik di topologi prod, sementara Google
-/// mensyaratkan kebijakan privasi & jalur hapus akun dapat dibuka tanpa memasang
-/// aplikasi.
+/// Tambahkan `--check` untuk memeriksa tanpa menulis (dipakai saat ingin tahu
+/// apakah ada yang belum dibangkitkan ulang; drift test melakukan hal setara).
 ///
-/// Kalau repo backend tidak ada di sebelah, perintah ini berhenti dengan pesan
-/// jelas alih-alih diam-diam tidak menulis apa pun.
+/// Keluarannya masuk ke `web/`, ikut tersalin oleh `flutter build web` ke
+/// `build/web/`, lalu disajikan nginx sebagai halaman publik — lihat blok
+/// `location = /kebijakan-privasi` di `nginx.conf`. Halaman ini wajib berupa HTML
+/// jadi karena pemeriksa otomatis Google Play mengambilnya tanpa menjalankan
+/// JS/WASM; alasan lengkapnya di `tool/policy_html.dart`.
+///
+/// Sebelum 3 Agustus 2026 keluarannya menyeberang ke repo backend. Sejak web
+/// punya alamat publik sendiri (`https://mbis.askrindo.co.id/app/`), halamannya
+/// pulang ke repo ini dan perintah ini tidak lagi bergantung pada repo tetangga.
 library;
 
 import 'dart:io';
 
 import 'policy_html.dart';
 
-/// Nama folder repo tempat perintah ini dijalankan, dipakai memilih pasangan
-/// backend yang benar (lihat [folderLegalBackendPerRepo]).
-String namaRepoIni() =>
-    Directory.current.absolute.path.replaceAll('\\', '/').split('/').where((s) => s.isNotEmpty).last;
-
 void main(List<String> args) {
   final cek = args.contains('--check');
-  final repo = namaRepoIni();
-  final tujuan = folderLegalBackendPerRepo[repo];
 
-  if (tujuan == null) {
+  // Gagal-cepat kalau dijalankan dari folder yang salah. Tanpa ini perintahnya
+  // akan dengan senang hati membuat `web/` di sembarang tempat lalu melaporkan
+  // sukses, dan berkas yang dibangkitkan tidak pernah sampai ke bundel.
+  if (!File('pubspec.yaml').existsSync()) {
     stderr.writeln(
-      'Repo "$repo" tidak dikenal. Jalankan dari salah satu folder berikut:\n'
-      '${folderLegalBackendPerRepo.keys.map((k) => '  - $k').join('\n')}\n'
-      'Kalau ada pasangan repo baru, tambahkan di folderLegalBackendPerRepo '
-      '(tool/policy_html.dart).',
+      'Jalankan dari AKAR repo frontend (tempat pubspec.yaml berada).\n'
+      'Sekarang di: ${Directory.current.absolute.path}',
     );
     exit(2);
   }
 
-  final dir = Directory(tujuan);
-  if (!dir.existsSync() && !dir.parent.existsSync()) {
+  final dir = Directory(folderKeluaranWeb);
+  if (!dir.existsSync()) {
     stderr.writeln(
-      'Repo backend pasangan "$repo" tidak ada di sebelah.\n'
-      'Dicari di: ${dir.absolute.path}',
+      'Folder "$folderKeluaranWeb/" tidak ada di repo ini. '
+      'Itu folder bawaan target web Flutter — kalau benar-benar hilang, '
+      'jalankan: flutter create --platforms=web .',
     );
     exit(2);
   }
-  stdout.writeln('Repo ini: $repo  ->  backend: ${dir.parent.absolute.path}');
-  if (!cek) dir.createSync(recursive: true);
+  stdout.writeln('Menulis ke: ${dir.absolute.path}');
 
   var berubah = 0;
   renderSemuaHalaman().forEach((rute, html) {
@@ -77,5 +74,5 @@ void main(List<String> args) {
   }
   stdout.writeln(berubah == 0
       ? '\nSemua halaman sudah sinkron.'
-      : '\n$berubah halaman diperbarui. Commit juga perubahan di repo MBIS-backend.');
+      : '\n$berubah halaman diperbarui. Commit juga berkas di web/.');
 }

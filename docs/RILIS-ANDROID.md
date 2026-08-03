@@ -18,29 +18,60 @@ Identitas paket yang sudah dikunci (jangan diubah, permanen setelah rilis pertam
 
 ## 1. Keystore rilis
 
-**Dibuat sekali seumur aplikasi.** Kalau hilang setelah publish, Anda tidak bisa
-lagi menerbitkan update untuk `com.askrindo.mbis.mobile` — kecuali lewat proses
-pemulihan key Google yang panjang. Simpan di password manager organisasi, bukan
-di laptop perorangan.
+> **Ini upload key, bukan app signing key.** Aplikasi baru yang diunggah sebagai
+> AAB memakai **Play App Signing**: Google yang memegang kunci penandatangan
+> final, sementara kunci yang Anda buat di bawah dipakai untuk *mengunggah*.
+> Artinya kehilangan kunci ini **tidak** mematikan aplikasi — Anda bisa meminta
+> reset upload key ke Google dan mendaftarkan yang baru.
+>
+> Versi sebelumnya dokumen ini menulis "kalau hilang, Anda tidak bisa lagi
+> menerbitkan update". Itu benar untuk model penandatanganan lama, dan salah kalau
+> Play App Signing aktif — pastikan statusnya di Play Console → Setup → App signing
+> saat mendaftarkan aplikasi. Tetap backup dengan benar, tapi jangan biarkan
+> ketakutan itu menunda rilis.
+
+Dibuat **sekali**, di folder **di luar repo** (folder proyek ada di bawah OneDrive,
+jadi apa pun di dalamnya ikut tersinkron ke cloud):
 
 ```bash
 keytool -genkeypair -v \
-  -keystore mbis-release.jks -storetype PKCS12 \
+  -keystore mbis-upload.jks -storetype PKCS12 \
   -keyalg RSA -keysize 4096 -validity 10000 \
   -alias mbis \
-  -dname "CN=PT Askrindo (Persero), OU=PJD, O=PT Askrindo (Persero), L=Jakarta, C=ID"
+  -dname "CN=PT Asuransi Kredit Indonesia (Persero), OU=Divisi Pengelolaan Jaringan, O=PT Asuransi Kredit Indonesia (Persero), L=Jakarta, C=ID"
 ```
 
-Lalu buat `android/key.properties` (gitignored, **jangan** di-commit):
+Kata sandi ditanyakan interaktif — **jangan** menaruhnya di baris perintah, nanti
+tersimpan di riwayat shell. Pakai kata sandi yang **sama** untuk store dan key:
+PKCS12 tidak mendukung kata sandi terpisah dengan baik, dan bila dibedakan Gradle
+gagal dengan pesan yang menyesatkan.
+
+Lalu salin [`android/key.properties.example`](../android/key.properties.example)
+menjadi `android/key.properties` (gitignored, **jangan** di-commit) dan isi:
 
 ```properties
-storeFile=C:/path/absolut/ke/mbis-release.jks
+storeFile=C:/Users/<user>/Secure/mbis-upload.jks
 storePassword=...
 keyAlias=mbis
 keyPassword=...
 ```
 
-Yang harus dibackup: berkas `.jks`, `storePassword`, `keyPassword`, dan `keyAlias`.
+⚠️ **Wajib garis miring depan pada `storeFile`.** Berkas `.properties` memperlakukan
+`\` sebagai karakter escape, jadi `C:\Users\...` terbaca rusak. `build.gradle.kts`
+kini memeriksa hal ini dan berhenti dengan pesan yang menyebut dugaan tersebut —
+sebelumnya kegagalannya tidak menyebut sebab sama sekali.
+
+**Pastikan kuncinya benar-benar terpakai** setelah build AAB pertama:
+
+```bash
+keytool -printcert -jarfile build/app/outputs/bundle/prodRelease/app-prod-release.aab
+```
+
+Harus memunculkan `CN=PT Asuransi Kredit Indonesia (Persero)`. Kalau yang muncul
+`CN=Android Debug`, `key.properties` tidak terbaca.
+
+Yang harus dibackup: berkas `.jks`, `storePassword`, `keyPassword`, dan `keyAlias`
+— di password manager organisasi, bukan laptop perorangan.
 
 > `android/app/build.gradle.kts` **menolak** menjalankan task `bundle*Release`
 > kalau `key.properties` tidak ada. Ini disengaja: sebelumnya build diam-diam
@@ -69,8 +100,8 @@ dan gerbang yang sama di `codemagic.yaml`.
 | Variabel | Wajib | Kenapa |
 |---|---|---|
 | `API_URL` | ✅ | Base URL backend produksi. Harus HTTPS; `network_security_config` prod menolak cleartext |
-| `PRIVACY_POLICY_URL` | ✅ | URL kebijakan privasi untuk **Play Console**. Halamannya rute Flutter publik `/kebijakan-privasi`, dikecualikan dari gerbang auth. Kewajiban "dapat dibuka dari dalam aplikasi" dipenuhi terpisah: naskahnya terbundel dan dirender di `/profil/privasi/kebijakan`, jadi tidak bergantung pada variabel ini |
-| `ACCOUNT_DELETION_URL` | ✅ | Halaman permintaan hapus akun yang bisa diakses **tanpa memasang aplikasi**; URL-nya dilampirkan di Data safety form. Halamannya rute Flutter publik `/hapus-akun`. Lihat [HALAMAN-KEBIJAKAN-PUBLIK.md](HALAMAN-KEBIJAKAN-PUBLIK.md) |
+| `PRIVACY_POLICY_URL` | ✅ | URL kebijakan privasi untuk **Play Console**. Prod: `https://mbis.askrindo.co.id/app/kebijakan-privasi` — HTML statis dari `web/kebijakan-privasi.html`, terbaca pengambil otomatis Play tanpa menjalankan JS/WASM. Kewajiban "dapat dibuka dari dalam aplikasi" dipenuhi terpisah: naskahnya terbundel dan dirender di `/profil/privasi/kebijakan`, jadi tidak bergantung pada variabel ini |
+| `ACCOUNT_DELETION_URL` | ✅ | Halaman permintaan hapus akun yang bisa diakses **tanpa memasang aplikasi**; URL-nya dilampirkan di Data safety form. Prod: `https://mbis.askrindo.co.id/app/hapus-akun`. Lihat [HALAMAN-KEBIJAKAN-PUBLIK.md](HALAMAN-KEBIJAKAN-PUBLIK.md) |
 | `PRIVACY_CONTACT_EMAIL` | — | Ditampilkan di layar Privasi & Akun kalau diisi |
 
 Ketiganya dibaca `AppConfig` lewat `--dart-define` dan tampil di layar
@@ -101,8 +132,8 @@ Isi halaman itu harus konsisten dengan teks di layar Privasi & Akun.
 ## 3. Build AAB
 
 ```bash
-export PRIVACY_POLICY_URL="https://.../kebijakan-privasi"
-export ACCOUNT_DELETION_URL="https://.../hapus-akun"
+export PRIVACY_POLICY_URL="https://mbis.askrindo.co.id/app/kebijakan-privasi"
+export ACCOUNT_DELETION_URL="https://mbis.askrindo.co.id/app/hapus-akun"
 export PRIVACY_CONTACT_EMAIL="..."          # opsional
 
 scripts/build-aab.sh https://mbis.askrindo.co.id/v2
@@ -111,8 +142,8 @@ scripts/build-aab.sh https://mbis.askrindo.co.id/v2
 Windows:
 
 ```bat
-set PRIVACY_POLICY_URL=https://.../kebijakan-privasi
-set ACCOUNT_DELETION_URL=https://.../hapus-akun
+set PRIVACY_POLICY_URL=https://mbis.askrindo.co.id/app/kebijakan-privasi
+set ACCOUNT_DELETION_URL=https://mbis.askrindo.co.id/app/hapus-akun
 scripts\build-aab.bat https://mbis.askrindo.co.id/v2
 ```
 
@@ -218,6 +249,59 @@ Bagian ini belum tersentuh kode dan biasanya paling lama; lihat
 - [ ] Tabel inventaris Data safety per SDK
 - [ ] Akun demo aktif untuk reviewer Google
 - [ ] Bukti afiliasi resmi BUMN atas nama pemilik akun Play Console
-- [ ] Aset grafis: icon 512×512, feature graphic 1024×500, screenshot ponsel + tablet
-- [ ] Adaptive icon (`mipmap-anydpi-v26`) — sekarang icon masih PNG persegi biasa,
-      butuh aset logo dengan safe-zone yang benar dari tim desain
+- [x] ~~Adaptive icon (`mipmap-anydpi-v26`)~~ — **SELESAI 3 Agustus 2026**, lihat §6.
+- [x] ~~Icon 512×512~~ — dibangkitkan ke
+      [`docs/play-store/icon-512.png`](play-store/icon-512.png), tinggal diunggah.
+- [ ] Aset grafis sisanya: feature graphic 1024×500, screenshot ponsel + tablet
+
+---
+
+## 6. Ikon aplikasi
+
+Dibangkitkan dari **logo aplikasi yang sudah dipakai** (`assets/images/logo-mbis.webp`
+— monogram MB yang juga tampil di splash, login, dan header), bukan aset baru.
+
+```bash
+dart run flutter_launcher_icons     # konfigurasinya di pubspec.yaml
+```
+
+### Apa yang diperbaiki
+
+Sebelumnya ikonnya rusak tanpa ada yang menyadari: **satu berkas 582×393 — tidak
+persegi — disalin identik ke kelima folder mipmap.**
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Bentuk | 582×393 (melebar) → diregangkan/dipotong launcher | persegi, sesuai densitas |
+| Ukuran per densitas | sama semua (160 KB × 5) | 48/72/96/144/192 px |
+| Total di APK | ±820 KB | ±43 KB (legacy) + ±199 KB (foreground adaptive) |
+| Adaptive icon | **tidak ada** | ada (`mipmap-anydpi-v26/ic_launcher.xml`) |
+
+Tanpa adaptive icon, Android 8+ membungkus ikon lawas dengan latar abu-abu lalu
+mengecilkannya — dan `targetSdk` di sini 36, jadi itu yang selama ini terjadi.
+
+### Safe zone — jangan asal membesarkan logonya
+
+Kanvas adaptive icon 108dp, tapi yang **dijamin** terlihat hanya lingkaran tengah
+72dp (66,7%); sisanya bisa terpotong tergantung bentuk mask launcher. Karena logo
+MB melebar (rasio 1,48), yang membatasi adalah **diagonal**-nya, bukan lebarnya.
+
+`flutter_launcher_icons` juga menambahkan `inset="16%"` sendiri pada foreground,
+jadi ada dua penyusutan yang bertumpuk. Perhitungan yang dipakai:
+
+```
+logo 783 px pada kanvas 1024
+  → setelah inset 16%   : 52,0% kanvas
+  → diagonal            : 62,8%   (batas aman 66,7%)  ✓
+```
+
+Percobaan pertama memakai 560 px dan hasilnya hanya 44,9% — muat, tapi logonya
+tampak kekecilan dengan ruang kosong berlebih. Kalau nanti logonya diganti,
+hitung ulang: perbesar sampai diagonalnya mendekati 66,7%, jangan lewat.
+
+> `assets/icon/*.png` **sengaja tidak** didaftarkan di `flutter: assets:`. Keduanya
+> hanya dibaca saat membangkitkan ikon, bukan saat aplikasi berjalan —
+> mendaftarkannya cuma menambah ukuran APK tanpa guna.
+
+iOS sengaja dilewati (`ios: false`): rilis iOS belum mungkin dan ikon iOS punya
+aturan sendiri (tanpa alpha). Nyalakan bersamaan saat jalur App Store disiapkan.
