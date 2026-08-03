@@ -5,20 +5,33 @@ import 'ssl_pinning_stub.dart'
 
 /// Certificate pinning untuk API M-BIS.
 ///
-/// ## Status: KERANGKA — nonaktif secara bawaan
+/// ## Status: menyala untuk build yang menuju `askrindo.co.id`
 ///
-/// Belum ada domain maupun berkas sertifikat yang dikunci. Pinning baru menyala
-/// bila [SslPinningConfig.pinnedHosts] diisi lewat `--dart-define`. Tanpa itu,
-/// [createAppHttpClient] mengembalikan `http.Client()` biasa dan perilaku
-/// aplikasi sama persis seperti sebelum berkas ini ada.
+/// Pinning aktif bila [SslPinningConfig.pinnedHosts] diisi lewat `--dart-define`.
+/// `scripts/build-apk.*`, `scripts/build-aab.*`, dan `codemagic.yaml` mengisinya
+/// otomatis dari host `API_URL`, terbatas pada domain `askrindo.co.id`. Build lain
+/// (dev terhadap backend lokal, staging non-Askrindo) tetap memakai trust store
+/// sistem tanpa perubahan perilaku.
 ///
-/// ## Kenapa opt-in, bukan langsung menyala
+/// ## Kenapa ini bukan sekadar pengerasan keamanan
 ///
-/// Sertifikat staging (Coolify) dan produksi (server internal) BERBEDA, dan
-/// domain produksi belum ditetapkan. Mengunci sekarang berarti mengunci ke
-/// target yang masih bergerak — begitu endpoint berpindah, aplikasi yang sudah
-/// terpasang di HP pengguna tidak bisa lagi terhubung sampai mereka memperbarui.
-/// Karena itu penyalaannya ditunda sampai TLS produksi final.
+/// `mbis.askrindo.co.id` mengirim sertifikat **leaf saja** — intermediate Sectigo
+/// R36 dan R46 tidak ikut. Browser, `curl`, dan Secure Transport menutupi itu
+/// dengan menjemput issuer lewat AIA; Dart/BoringSSL tidak. Jadi build tanpa
+/// rantai bundled gagal `CERTIFICATE_VERIFY_FAILED: unable to get local issuer
+/// certificate` sejak layar login, sementara `curl` dari laptop yang sama
+/// terlihat sehat — kombinasi yang sangat mudah salah dibaca sebagai "server
+/// gangguan". Rantai di `assets/ssl` memasok intermediate yang hilang itu.
+///
+/// Selama server belum dikonfigurasi mengirim fullchain, mematikan pinning berarti
+/// mematikan aplikasi. Rinciannya di `assets/ssl/README.md`.
+///
+/// ## Harga yang dibayar
+///
+/// Sertifikat leaf berlaku sampai 10 April 2027. Sesudah diperpanjang, aplikasi
+/// terpasang yang mem-pin berkas lama tidak dapat terhubung sampai pengguna
+/// memperbarui — jadwalkan rilis pengganti sebelum tanggal itu, atau minta server
+/// mengirim fullchain lebih dulu supaya ketergantungan ini hilang.
 ///
 /// ## Yang dilindungi dan yang tidak
 ///
@@ -37,6 +50,72 @@ import 'ssl_pinning_stub.dart'
 /// global akan mematikan ketiganya. [createAppHttpClient] karena itu merutekan
 /// per host: hanya host yang terdaftar memakai trust store terbatas, sisanya
 /// memakai CA bawaan sistem.
+/// Kegagalan verifikasi sertifikat TLS, sudah diterjemahkan jadi pesan yang bisa
+/// ditindaklanjuti.
+///
+/// `HandshakeException` mentah dari `dart:io` berbunyi seperti
+/// `Handshake error in client (OS Error: CERTIFICATE_VERIFY_FAILED: self signed
+/// certificate(handshake.cc:393))` — bagi pengguna maupun pelapor bug, itu tidak
+/// membedakan "server salah pasang sertifikat", "pinning ke berkas yang keliru",
+/// dan "jaringan disadap". Ketiganya butuh penanganan berbeda, jadi jalur ini
+/// menyimpan host tujuan dan status pinning agar laporan langsung menunjuk
+/// penyebabnya.
+///
+/// Kasus nyata yang memunculkan kelas ini: `mbis.askrindo.co.id` mengirim
+/// sertifikat leaf tanpa intermediate Sectigo, sehingga build tanpa rantai
+/// bundled gagal merangkai sertifikat — sementara `curl` di laptop yang sama
+/// lancar karena OS menjemput issuer lewat AIA. Gejalanya terbaca seperti "server
+/// gangguan" padahal server sehat, dan waktu terbuang mencari di tempat yang
+/// salah. Kelas ini membuat penyebabnya tertulis di pesan galatnya sendiri.
+class TlsTrustException implements Exception {
+  const TlsTrustException({
+    required this.host,
+    required this.pinned,
+    required this.cause,
+  });
+
+  /// Host yang sertifikatnya ditolak.
+  final String host;
+
+  /// True bila host ini memakai trust store terbatas (pinning aktif). Membedakan
+  /// "sertifikat server memang tidak tepercaya" dari "berkas pin sudah usang".
+  final bool pinned;
+
+  /// Galat asli, dipertahankan utuh untuk log dan laporan bug.
+  final Object cause;
+
+  /// Pesan untuk layar. Sengaja pendek: `login_screen.dart` menaruh
+  /// `e.toString()` apa adanya di banner error, dan paragraf teknis di sana tidak
+  /// terbaca. Yang perlu diketahui pengguna hanya bahwa ini masalah sertifikat
+  /// server — bukan salah kata sandi, dan bukan sesuatu yang bisa mereka
+  /// perbaiki dengan mencoba ulang.
+  @override
+  String toString() =>
+      'Koneksi aman ke $host gagal: sertifikat server tidak tepercaya. '
+      'Hubungi tim infrastruktur — bukan masalah akun atau kata sandi.';
+
+  /// Uraian lengkap untuk log, laporan bug, dan `debugPrint`.
+  ///
+  /// Terpisah dari [toString] karena pembacanya berbeda: yang ini menyebut
+  /// hipotesis penyebab dan perintah verifikasinya, dan hanya berguna bagi orang
+  /// yang bisa menindaklanjutinya.
+  String get details {
+    final sebab = pinned
+        ? 'Sertifikat $host tidak cocok dengan rantai yang dikunci di aplikasi. '
+              'Kemungkinan sertifikat server sudah diperpanjang/diganti sementara '
+              'berkas di assets/ssl belum diperbarui, atau host ini menyajikan '
+              'sertifikat berbeda dari dalam jaringan kantor (split-horizon DNS).'
+        : 'Sertifikat $host tidak tepercaya menurut CA sistem. Umumnya server '
+              'menyajikan sertifikat self-signed / bawaan perangkat (mis. cert '
+              'pabrikan pada WAF atau load balancer), atau rantai intermediate '
+              'tidak ikut dikirim.';
+    return 'TlsTrustException: koneksi aman ke $host gagal. $sebab '
+        'Verifikasi dengan: openssl s_client -servername $host -connect $host:443 '
+        '</dev/null | openssl x509 -noout -subject -issuer -dates. '
+        'Galat asli: $cause';
+  }
+}
+
 class SslPinningConfig {
   const SslPinningConfig({
     required this.pinnedHosts,

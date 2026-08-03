@@ -14,6 +14,9 @@
 # =============================================================================
 set -euo pipefail
 
+# Flutter yang di-pin .fvmrc, bukan yang kebetulan ada di PATH. Lihat _flutter.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_flutter.sh"
+
 API_URL="${1:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -46,9 +49,46 @@ POLICY_SRC="$REPO_ROOT/lib/src/legal/kebijakan_privasi_content.dart"
             Tanpa itu AAB ditandatangani debug key dan ditolak Play Console.
             Lihat docs/RILIS-ANDROID.md §1."
 
-flutter build appbundle --release --flavor prod \
+# Host yang trust store-nya dipersempit ke assets/ssl (lib/src/network/ssl_pinning.dart).
+#
+# Wajib untuk rilis Play, bukan pilihan: `mbis.askrindo.co.id` mengirim sertifikat
+# leaf SAJA — intermediate Sectigo R36 dan R46 tidak ikut. Browser dan `curl`
+# menutupi itu dengan menjemput issuer lewat AIA; Dart/BoringSSL tidak. AAB tanpa
+# rantai bundled akan gagal `CERTIFICATE_VERIFY_FAILED: unable to get local issuer
+# certificate` di HP pengguna sejak layar login, walau server terlihat sehat dari
+# laptop. Berkas di assets/ssl memasok rantai yang hilang itu.
+#
+# Set SSL_PINNED_HOSTS="" secara eksplisit hanya bila server sudah dipastikan
+# mengirim fullchain dan pinning memang ingin dilepas.
+API_HOST="$(sed -E 's#^[a-z]+://##; s#[/:?].*$##' <<<"$API_URL")"
+case "$API_HOST" in
+  *askrindo.co.id) SSL_PINNED_HOSTS="${SSL_PINNED_HOSTS-$API_HOST}" ;;
+  *)               SSL_PINNED_HOSTS="${SSL_PINNED_HOSTS-}" ;;
+esac
+
+# Preflight: buktikan rantai bundled memvalidasi sertifikat host tujuan sebelum
+# AAB dibuat. Berbeda dari gerbang lain di script ini, kegagalannya TIDAK
+# menghentikan build — mesin rilis belum tentu punya rute ke host produksi, dan
+# menolak rilis karena jaringan build lebih merugikan daripada peringatan ini.
+if [[ -n "$SSL_PINNED_HOSTS" ]] && command -v openssl >/dev/null 2>&1; then
+  CERT_ASSET="$REPO_ROOT/assets/ssl/askrindo-fullchain-2026-2027.crt"
+  if PROBE="$(openssl s_client -servername "$API_HOST" -connect "$API_HOST:443" \
+       -CAfile "$CERT_ASSET" -verify_return_error </dev/null 2>&1)"; then
+    echo "[build-aab] pinning: rantai bundled cocok untuk $API_HOST"
+  elif grep -q "verify error" <<<"$PROBE"; then
+    echo "[build-aab] PERINGATAN: sertifikat $API_HOST TIDAK divalidasi oleh" >&2
+    echo "            assets/ssl/askrindo-fullchain-2026-2027.crt. AAB ini akan" >&2
+    echo "            gagal handshake saat login di HP pengguna. Perbarui berkas" >&2
+    echo "            rantai sebelum mengunggah ke Play Console." >&2
+  else
+    echo "[build-aab] pinning: $API_HOST tak terjangkau dari mesin ini, preflight dilewati" >&2
+  fi
+fi
+
+"${FLUTTER[@]}" build appbundle --release --flavor prod \
   --dart-define=API_URL="$API_URL" \
   --dart-define=APP_ENV=prod \
+  --dart-define=SSL_PINNED_HOSTS="$SSL_PINNED_HOSTS" \
   --dart-define=PRIVACY_POLICY_URL="$PRIVACY_POLICY_URL" \
   --dart-define=ACCOUNT_DELETION_URL="$ACCOUNT_DELETION_URL" \
   --dart-define=PRIVACY_CONTACT_EMAIL="${PRIVACY_CONTACT_EMAIL:-}"

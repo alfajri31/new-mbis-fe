@@ -75,9 +75,22 @@ workflows:
         # iOS TIDAK memakai --flavor: skema flavor hanya dikonfigurasi di Android
         # (prod/staging), sisi iOS cuma punya skema `Runner`.
         script: |
+          set -e
+          # Host yang trust store-nya dipersempit ke assets/ssl. Bukan pengerasan
+          # opsional: mbis.askrindo.co.id mengirim sertifikat leaf SAJA, tanpa
+          # intermediate Sectigo R36/R46. Browser dan curl menjemput issuer lewat
+          # AIA, Dart tidak — IPA tanpa rantai bundled gagal
+          # CERTIFICATE_VERIFY_FAILED sejak layar login. Dibatasi ke domain
+          # askrindo.co.id supaya host lain tidak ikut terkunci ke rantai ini.
+          API_HOST="$(printf '%s' "$API_URL" | sed -E 's#^[a-z]+://##; s#[/:?].*$##')"
+          case "$API_HOST" in
+            *askrindo.co.id) SSL_PINNED_HOSTS="${SSL_PINNED_HOSTS-$API_HOST}" ;;
+            *)               SSL_PINNED_HOSTS="${SSL_PINNED_HOSTS-}" ;;
+          esac
           flutter build ipa --release \
             --dart-define=API_URL="$API_URL" \
             --dart-define=APP_ENV="$APP_ENV" \
+            --dart-define=SSL_PINNED_HOSTS="$SSL_PINNED_HOSTS" \
             --build-number=$PROJECT_BUILD_NUMBER \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
@@ -135,9 +148,18 @@ workflows:
               exit 1
             fi
           done
+          # Rantai sertifikat: lihat penjelasan di workflow ios-release. Server prod
+          # tidak mengirim intermediate Sectigo, jadi AAB tanpa pinning gagal
+          # handshake di HP pengguna meski server sehat dilihat dari browser.
+          API_HOST="$(printf '%s' "$API_URL" | sed -E 's#^[a-z]+://##; s#[/:?].*$##')"
+          case "$API_HOST" in
+            *askrindo.co.id) SSL_PINNED_HOSTS="${SSL_PINNED_HOSTS-$API_HOST}" ;;
+            *)               SSL_PINNED_HOSTS="${SSL_PINNED_HOSTS-}" ;;
+          esac
           flutter build appbundle --release --flavor prod \
             --dart-define=API_URL="$API_URL" \
             --dart-define=APP_ENV="$APP_ENV" \
+            --dart-define=SSL_PINNED_HOSTS="$SSL_PINNED_HOSTS" \
             --dart-define=PRIVACY_POLICY_URL="$PRIVACY_POLICY_URL" \
             --dart-define=ACCOUNT_DELETION_URL="$ACCOUNT_DELETION_URL" \
             --dart-define=PRIVACY_CONTACT_EMAIL="${PRIVACY_CONTACT_EMAIL:-}" \
