@@ -24,7 +24,13 @@ import 'ssl_pinning.dart';
 /// konsekuensinya menambah dependensi `dio` — keputusan terpisah.
 Future<http.Client> createAppHttpClient(SslPinningConfig config) async {
   if (!config.enabled) {
-    return http.Client();
+    // Pembungkus diagnostik tetap dipasang meski pinning mati: kegagalan
+    // verifikasi sertifikat jauh lebih sering berasal dari sisi server
+    // (sertifikat bawaan perangkat, rantai intermediate tidak dikirim) daripada
+    // dari pinning, dan justru pada build tanpa pinning-lah pesan mentah
+    // `CERTIFICATE_VERIFY_FAILED` paling menyesatkan — terbaca seperti server
+    // sedang mati, padahal sertifikatnya yang salah.
+    return _TlsDiagnosticClient(inner: http.Client(), pinnedHosts: const {});
   }
 
   final Uint8List certBytes;
@@ -51,11 +57,53 @@ Future<http.Client> createAppHttpClient(SslPinningConfig config) async {
 
   debugPrint('SSL pinning aktif untuk: ${config.pinnedHosts.join(", ")}');
 
-  return _HostRoutingClient(
+  return _TlsDiagnosticClient(
+    inner: _HostRoutingClient(
+      pinnedHosts: config.pinnedHosts,
+      pinned: IOClient(HttpClient(context: pinnedContext)),
+      fallback: http.Client(),
+    ),
     pinnedHosts: config.pinnedHosts,
-    pinned: IOClient(HttpClient(context: pinnedContext)),
-    fallback: http.Client(),
   );
+}
+
+/// Menerjemahkan `HandshakeException` menjadi [TlsTrustException].
+///
+/// Membungkus, bukan menggantikan, verifikasi TLS: tidak ada sertifikat yang
+/// jadi diterima karenanya. Satu-satunya yang berubah adalah bentuk galat yang
+/// sampai ke pemanggil — dari teks BoringSSL yang menyebut nomor baris C++
+/// menjadi kalimat yang menyebut host, status pinning, dan perintah untuk
+/// memeriksanya.
+class _TlsDiagnosticClient extends http.BaseClient {
+  _TlsDiagnosticClient({required this.inner, required this.pinnedHosts});
+
+  final http.Client inner;
+  final Set<String> pinnedHosts;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    try {
+      return await inner.send(request);
+    } on HandshakeException catch (e) {
+      final host = request.url.host;
+      final failure = TlsTrustException(
+        host: host,
+        pinned: pinnedHosts.contains(host),
+        cause: e,
+      );
+      // Uraian teknisnya hanya ada di sini: `toString()` sengaja pendek karena
+      // langsung tampil di banner login, sedangkan yang memperbaikinya butuh
+      // host, status pinning, dan galat BoringSSL aslinya.
+      debugPrint(failure.details);
+      throw failure;
+    }
+  }
+
+  @override
+  void close() {
+    inner.close();
+    super.close();
+  }
 }
 
 /// Merutekan tiap permintaan ke klien yang tepat berdasarkan host tujuan.

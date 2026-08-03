@@ -16,19 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-# Nomor versi SENGAJA dibiarkan di 1.0.0+1 (keputusan user, 2026-08-03) — belum
-# dinaikkan sampai ada keputusan penomoran resmi. Paket `com.askrindo.mbis.mobile`
-# adalah aplikasi BARU di Play dengan riwayat unggahan kosong, jadi 1.0.0+1 sah
-# sebagai titik awal.
-#
-# versionCode (angka setelah `+`) WAJIB naik tiap unggahan dan tidak pernah bisa
-# diturunkan atau dipakai ulang. Di CI, `--build-number=$PROJECT_BUILD_NUMBER`
-# menimpanya dengan nomor build Codemagic; untuk build manual, naikkan di sini.
-#
-# Bagian sebelum `+` dijaga `test/src/config/app_version_drift_test.dart` supaya
-# tetap sama dengan `versiAplikasi` di lib/src/config/app_version.dart — dulu
-# keduanya sempat menyimpang (pubspec 1.0.0 vs layar profil "v2.1.0").
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   # ^3.12.0 (not 3.12.2) so the Docker build can use the cirruslabs flutter:3.44.0
@@ -154,6 +142,23 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # iOS/macOS memakai CocoaPods, BUKAN Swift Package Manager.
+  #
+  # SwiftPM gagal di lintasan yang mengandung spasi — lintasan repo ini
+  # ("mbis tandingan") ter-encode dua kali menjadi `mbis%2520tandingan`, dan
+  # resolusi paket berhenti dengan:
+  #   Failed to load configuration: fileNotFound("Error loading or parsing
+  #   pubspec.yaml ... /ios/Flutter/ephemeral/Packages/.packages/
+  #   firebase_core-3.15.2/../../pubspec.yaml")
+  # Gejalanya menyebut pubspec.yaml yang "hilang", padahal berkasnya ada —
+  # yang salah lintasannya, bukan berkasnya.
+  #
+  # Ditaruh di pubspec (bukan `flutter config --no-enable-swift-package-manager`)
+  # supaya berlaku untuk semua mesin dan CI, bukan hanya milik satu orang.
+  # Boleh dicabut kalau repo dipindah ke lintasan tanpa spasi.
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

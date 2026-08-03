@@ -58,9 +58,24 @@ if not exist "%~dp0..\android\key.properties" (
   exit /b 1
 )
 
+REM Host yang trust store-nya dipersempit ke assets\ssl (lib\src\network\ssl_pinning.dart).
+REM Wajib untuk rilis Play: mbis.askrindo.co.id mengirim sertifikat leaf SAJA,
+REM intermediate Sectigo R36/R46 tidak ikut. Browser dan curl menjemput issuer lewat
+REM AIA, Dart tidak — AAB tanpa rantai bundled gagal handshake di HP pengguna sejak
+REM layar login walau server terlihat sehat dari laptop.
+REM Tanpa kurung: variabel yang di-set di dalam `if (...)` baru terbaca setelah blok
+REM selesai, jadi versi berkurung akan mengirim nilai kosong tanpa galat.
+REM Untuk mematikan: set SSL_PINNED_HOSTS=off sebelum menjalankan script ini.
+if defined SSL_PINNED_HOSTS goto :pin_siap
+echo %API_URL% | findstr /I /C:"askrindo.co.id" >nul || goto :pin_siap
+for /f "tokens=2 delims=/" %%h in ("%API_URL%") do set SSL_PINNED_HOSTS=%%h
+:pin_siap
+if /I "%SSL_PINNED_HOSTS%"=="off" set SSL_PINNED_HOSTS=
+
 flutter build appbundle --release --flavor prod ^
   --dart-define=API_URL=%API_URL% ^
   --dart-define=APP_ENV=prod ^
+  --dart-define=SSL_PINNED_HOSTS=%SSL_PINNED_HOSTS% ^
   --dart-define=PRIVACY_POLICY_URL=%PRIVACY_POLICY_URL% ^
   --dart-define=ACCOUNT_DELETION_URL=%ACCOUNT_DELETION_URL% ^
   --dart-define=PRIVACY_CONTACT_EMAIL=%PRIVACY_CONTACT_EMAIL%
