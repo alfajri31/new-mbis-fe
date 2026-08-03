@@ -369,30 +369,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-
-          // Forgot Password Link
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () {
-                // Link placeholder
-              },
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text(
-                'Lupa Password?',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.secondaryOrange,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
+          // Tidak ada tautan "Lupa Password?" di sini, dan itu disengaja.
+          //
+          // Dulu ada, tapi `onPressed`-nya kosong — tombol mati di layar PERTAMA
+          // yang dibuka reviewer Play, dan elemen mati persis jenis temuan yang
+          // mereka tandai. Dihapus 3 Agustus 2026, bukan diperbaiki, karena
+          // M-BIS tidak punya alur reset mandiri: akun dibuat Administrator
+          // (Divisi Pengelolaan Jaringan) dan kata sandi juga direset lewat
+          // mereka. Menautkannya ke halaman apa pun akan menjanjikan sesuatu
+          // yang tidak ada.
+          //
+          // Kalau nanti alur reset mandiri benar-benar dibuat, tautannya boleh
+          // kembali — beserta layar tujuannya, bukan placeholder.
           const SizedBox(height: 24),
 
           // Button Masuk
