@@ -40,6 +40,22 @@ class CustomerListState {
   final List<DashboardCategoryStat> cobOptions; // opsi dropdown COB
   final CustomerScopedSummary? summary; // headline Target/Realisasi/Visit
 
+  /// Panggilan `customer-summary` terakhir gagal (jaringan/404/5xx).
+  ///
+  /// Dibedakan dari `summary == null` yang belum sempat dimuat, supaya kartu bisa
+  /// menyatakan "gagal memuat" alih-alih menggambar Rp 0 / 0% — nol yang sah dan
+  /// nol karena gagal tidak boleh terlihat sama.
+  final bool summaryFailed;
+
+  /// [summary] berasal dari cadangan `/api/dashboard/summary`, bukan dari
+  /// `customer-summary`.
+  ///
+  /// Angkanya benar untuk SELURUH scope pemakai, tetapi **tidak mengikuti filter**
+  /// region/cabang/RM/COB — endpoint dashboard hanya menerima `year`. Kartu wajib
+  /// menyatakan ini secara eksplisit; kalau tidak, angka yang tidak bergerak saat
+  /// difilter akan disangka bug perhitungan.
+  final bool summaryIsFallback;
+
   const CustomerListState({
     this.items = const [],
     this.page = 0,
@@ -62,6 +78,8 @@ class CustomerListState {
     this.cob,
     this.cobOptions = const [],
     this.summary,
+    this.summaryFailed = false,
+    this.summaryIsFallback = false,
   });
 
   CustomerListState copyWith({
@@ -86,6 +104,8 @@ class CustomerListState {
     Object? cob = _keep,
     List<DashboardCategoryStat>? cobOptions,
     Object? summary = _keep,
+    bool? summaryFailed,
+    bool? summaryIsFallback,
   }) {
     return CustomerListState(
       items: items ?? this.items,
@@ -110,6 +130,8 @@ class CustomerListState {
       cob: cob == _keep ? this.cob : cob as String?,
       cobOptions: cobOptions ?? this.cobOptions,
       summary: summary == _keep ? this.summary : summary as CustomerScopedSummary?,
+      summaryFailed: summaryFailed ?? this.summaryFailed,
+      summaryIsFallback: summaryIsFallback ?? this.summaryIsFallback,
     );
   }
 
@@ -132,6 +154,10 @@ final customerListProvider =
 /// Perilaku (paging, filter, guard stale-load, jalur agent) DIPINDAH APA ADANYA.
 class CustomerListNotifier extends Notifier<CustomerListState> {
   bool _agentScoped = false;
+
+  /// Cache hasil cadangan `/api/dashboard/summary` (lihat [_loadSummaryFallback]).
+  /// Nilainya tidak dipengaruhi filter, jadi cukup diambil sekali per sesi layar.
+  CustomerScopedSummary? _fallbackSummary;
 
   /// Token load monotonik: perubahan filter/search memulai load baru; halaman
   /// lama yang masih in-flight diabaikan saat kembali. (Dulu `_loadSeq`.)
@@ -203,10 +229,75 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         rmId: state.rmId,
         cob: state.cob,
       );
-      state = state.copyWith(summary: s);
+      state = state.copyWith(
+        summary: s,
+        summaryFailed: false,
+        summaryIsFallback: false,
+      );
     } catch (_) {
-      // Kartu dekoratif; biarkan "–" bila gagal.
+      // Kegagalan TIDAK boleh ditelan diam-diam. Sebelumnya blok ini kosong dan
+      // kartu tetap menggambar Rp 0 / 0%, sehingga endpoint yang belum ter-deploy
+      // (`customer-summary` membalas 404 di prod, Agustus 2026) tampak seperti
+      // realisasi yang memang nol — bug data palsu yang mahal didiagnosis.
+      await _loadSummaryFallback();
     }
+  }
+
+  /// Cadangan kartu Target/Realisasi saat `customer-summary` tak tersedia.
+  ///
+  /// Memakai `/api/dashboard/summary` — endpoint yang sama dengan kartu dashboard
+  /// depan, sehingga realisasi & bar tetap terisi (bukan Rp 0) walau endpoint
+  /// khusus Customer belum ter-deploy. Batasannya nyata dan harus ditandai di UI:
+  /// endpoint dashboard **hanya menerima `year`**, tidak ada region/cabang/RM/COB,
+  /// jadi angkanya adalah lingkup penuh pemakai dan TIDAK ikut berubah saat
+  /// difilter. Tanpa filter, angka ini memang identik dengan `customer-summary`.
+  ///
+  /// Hasilnya di-cache: `/summary` menghitung agregat berat (mis. scope nasional
+  /// DPJ) dan nilainya tidak dipengaruhi filter, jadi memanggilnya ulang setiap
+  /// kali filter berubah hanya membebani server tanpa mengubah angka.
+  Future<void> _loadSummaryFallback() async {
+    final cached = _fallbackSummary;
+    if (cached != null) {
+      state = state.copyWith(
+        summary: cached,
+        summaryFailed: false,
+        summaryIsFallback: true,
+      );
+      return;
+    }
+    try {
+      final d = await _dashRepo.getSummary();
+      final mapped = CustomerScopedSummary(
+        premiTarget: d.premiTarget,
+        realisasi: d.totalRealization,
+        realisasiMtd: d.realisasiMtd,
+        visitCountYtd: d.visitCountYtd,
+        visitCountMtd: d.visitCountMtd,
+      );
+      _fallbackSummary = mapped;
+      state = state.copyWith(
+        summary: mapped,
+        summaryFailed: false,
+        summaryIsFallback: true,
+      );
+    } catch (_) {
+      // Dua-duanya gagal → nyatakan gagal, jangan menggambar Rp 0. `summary`
+      // dikosongkan agar angka dari filter SEBELUMNYA tidak tertinggal di layar
+      // dan disangka hasil filter yang baru.
+      state = state.copyWith(
+        summary: null,
+        summaryFailed: true,
+        summaryIsFallback: false,
+      );
+    }
+  }
+
+  /// Memuat ulang kartu Target/Realisasi saja (tombol "Coba lagi" di kartu),
+  /// tanpa menyentuh daftar customer, paginasi, maupun filter yang aktif.
+  /// Cache cadangan dibuang supaya tombol ini benar-benar mencoba ulang jaringan.
+  Future<void> reloadSummary() {
+    _fallbackSummary = null;
+    return _loadSummary();
   }
 
   Future<void> _loadEntityOptions() async {
