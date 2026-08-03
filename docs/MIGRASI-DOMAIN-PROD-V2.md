@@ -114,22 +114,34 @@ Keduanya rute **Flutter Web**. Dengan topologi baru, web hanya ada di jaringan i
 root domain milik aplikasi `/v1` — artinya **tidak ada satu pun alamat publik** yang menyajikan
 halaman itu. Tautan mati di Data safety form berisiko kena penolakan review Play.
 
-### SELESAI (31 Juli 2026) — halaman ikut disajikan backend
+### ~~SELESAI (31 Juli 2026) — halaman ikut disajikan backend~~ — DIGANTI 3 Agustus 2026
 
-Backend adalah satu-satunya komponen M-BIS yang punya alamat publik, jadi kedua halaman kini
-**juga** disajikan dari sana sebagai HTML. URL barunya:
+> Solusi 31 Juli menaruh kedua halaman di **backend** (`/v2/kebijakan-privasi`,
+> `/v2/hapus-akun`) karena saat itu web direncanakan hanya hidup di IP privat.
+> **Premis itu tidak jadi kenyataan**: proxy host memetakan `/app/` ke aplikasi web,
+> jadi web punya alamat publik sendiri. Halamannya dipindahkan kembali ke frontend
+> dan salinan backend dihapus. URL `/v2/...` kini **401** — jangan dipakai lagi.
 
-- `https://mbis.askrindo.co.id/v2/kebijakan-privasi`
-- `https://mbis.askrindo.co.id/v2/hapus-akun`
+### SELESAI (3 Agustus 2026) — halaman kembali ke frontend, sebagai HTML statis
 
-Perhatikan prefix `/v2` — tidak bisa di root, karena root domain milik aplikasi `/v1`. Google
-menerima URL apa pun, tapi **nilai di Play Console dan Codemagic harus memakai bentuk di atas.**
+URL yang berlaku:
 
-Naskahnya **tidak diduplikasi**: HTML-nya dibangkitkan dari sumber Dart yang sama dengan yang
-dirender aplikasi (`dart run tool/gen_policy_html.dart`), dan
-`test/src/legal/policy_html_drift_test.dart` menolak lulus bila berkas di repo backend tidak
-lagi sama dengan naskahnya. Rute Flutter publik tetap ada dan tetap dipakai untuk versi in-app
-(terbaca luring). Rinciannya di [`HALAMAN-KEBIJAKAN-PUBLIK.md`](HALAMAN-KEBIJAKAN-PUBLIK.md).
+- `https://mbis.askrindo.co.id/app/kebijakan-privasi`
+- `https://mbis.askrindo.co.id/app/hapus-akun`
+
+Perhatikan prefix **`/app`** (web), bukan `/v2` (backend) dan bukan root (milik aplikasi
+`/v1`). **Nilai di Play Console dan Codemagic harus memakai bentuk di atas.**
+
+Bentuknya **HTML statis di `web/`**, bukan sekadar rute Flutter: aplikasi web ini SPA
+WasmGC, sehingga pengambil HTTP yang tidak menjalankan JS/WASM — termasuk pemeriksa
+otomatis Google Play — hanya menerima cangkang `index.html` tanpa naskah kebijakan.
+nginx memetakan URL bersih tanpa akhiran `.html` lewat blok `location =`.
+
+Naskahnya **tidak diduplikasi**: HTML-nya dibangkitkan dari sumber Dart yang sama dengan
+yang dirender aplikasi (`dart run tool/gen_policy_html.dart` → `web/*.html`), dan
+`test/src/legal/policy_html_drift_test.dart` menolak lulus bila berkas di `web/` tidak
+lagi sama dengan naskahnya. Rute Flutter publik tetap ada dan tetap dipakai untuk navigasi
+in-app (terbaca luring). Rinciannya di [`HALAMAN-KEBIJAKAN-PUBLIK.md`](HALAMAN-KEBIJAKAN-PUBLIK.md).
 
 > **Masih bergantung pada TLS.** Ini hanya berhasil kalau `mbis.askrindo.co.id` menyajikan
 > sertifikat dari CA tepercaya ke internet publik. Selama sertifikatnya masih *self-signed*
@@ -212,7 +224,8 @@ tidak memakainya (browser langsung ke backend). Jangan dihapus.
 | `MBIS_CORS_ALLOW_ALL` | idem | tetap `false` (StartupSecretsValidator menolak boot kalau `true` di luar dev) |
 | `API_URL` (build arg) | Build image web | `https://mbis.askrindo.co.id/v2` |
 | `API_URL` (dart-define) | Build APK/AAB | `https://mbis.askrindo.co.id/v2` |
-| `PRIVACY_POLICY_URL`, `ACCOUNT_DELETION_URL` | Build AAB | Menunggu keputusan §1.5 |
+| `PRIVACY_POLICY_URL` | Build AAB | `https://mbis.askrindo.co.id/app/kebijakan-privasi` — prefix **`/app`**, bukan `/v2` |
+| `ACCOUNT_DELETION_URL` | Build AAB | `https://mbis.askrindo.co.id/app/hapus-akun` — idem |
 
 ## 4. Yang harus dikerjakan DI LUAR repo
 
@@ -222,7 +235,7 @@ tidak memakainya (browser langsung ke backend). Jangan dihapus.
 | 2 | **CORS backend** (§1.2) | **Blocker rilis.** Isi `MBIS_CORS_ALLOWED_ORIGINS` dengan origin web. |
 | 3 | **Proxy `/v2` → container backend** | Pastikan infra merutekan `mbis.askrindo.co.id/v2/*` ke container `mbis-backend:8080` **tanpa memotong prefix** (sesuai konfirmasi 2026-07-30) dan mengizinkan `OPTIONS` (preflight) lewat. |
 | 4 | **App Registration Entra** (§1.4) | Hanya bila SSO ditargetkan untuk prod: daftarkan `https://<host-web-internal>/auth.html` sebagai redirect SPA. `http://` + IP tidak diterima Microsoft. |
-| 5 | **Halaman publik Play** (§1.5) | Tentukan alamat publik pengganti, lalu perbarui Play Console + Data safety form. |
+| 5 | **Halaman publik Play** (§1.5) | Alamatnya sudah ditetapkan: `/app/kebijakan-privasi` & `/app/hapus-akun`. Tersisa: pastikan `/app` terekspos publik (uji dari luar jaringan kantor), deploy ulang web, lalu isi Play Console + Data safety form. |
 | 6 | **Sertifikat TLS `mbis.askrindo.co.id`** | Dianggap aman per 2026-07-30 (SAN mencakup host ini) — **belum diverifikasi langsung**, cek ulang sebelum rilis. |
 | 7 | **`SSL_PINNED_HOSTS`** (opsional) | Kalau pinning dinyalakan, isi **`mbis.askrindo.co.id`** — host BACKEND yang dihubungi aplikasi, **host saja tanpa `/v2`** (pencocokannya `Uri.host`, `ssl_pinning.dart:74-78`; menulis path mematikan pinning diam-diam). Kabar baiknya: berkas bundled `assets/ssl/askrindo-fullchain-2026-2027.crt` memang rantai `askrindo.co.id`, jadi host ini yang paling mungkin cocok tanpa aset baru. |
 
