@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
+import '../../src/config/app_version.dart';
 import '../../src/agent/agent_repository.dart';
 import '../../core/providers/repository_providers.dart';
 import '../providers/agent_profil_provider.dart';
@@ -83,7 +84,7 @@ class _AgentProfilScreenState extends ConsumerState<AgentProfilScreen> {
                     const SizedBox(height: AppSpacing.md),
                     _buildLogoutButton(context),
                     const SizedBox(height: AppSpacing.sm),
-                    const Text('M-BIS v2.1.0 • PT Askrindo (Persero)',
+                    const Text(labelVersiAplikasi,
                         style: TextStyle(fontSize: 12, color: AppColors.grayStage)),
                     const SizedBox(height: AppSpacing.lg),
                   ],
