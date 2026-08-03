@@ -340,15 +340,39 @@ setState(() {
 Kedua permasalahan di atas tidak terdeteksi oleh `flutter analyze` maupun `flutter test` dan hanya
 muncul saat aplikasi dijalankan pada perangkat.
 
-### Halaman legal mengembalikan 404 setelah perubahan Nginx
+### Halaman legal kosong atau 404 setelah perubahan Nginx
 
 Rute `/kebijakan-privasi` dan `/hapus-akun` wajib dapat diakses tanpa autentikasi sesuai persyaratan
 Google Play, dan dikecualikan dari pemeriksaan sesi melalui `rutePublikLegal` pada
 `lib/src/router.dart`. Ketentuan ini diverifikasi oleh `test/src/legal/rute_publik_test.dart`.
 
-Pada `nginx.conf`, blok `location =` tidak boleh didefinisikan untuk rute yang ditangani aplikasi,
-karena blok tersebut memiliki prioritas lebih tinggi dari SPA fallback. Setelah setiap perubahan
-konfigurasi Nginx, verifikasi rute `/`, `/dashboard`, `/kebijakan-privasi`, dan `/hapus-akun`.
+Keduanya disajikan **dua kali** dari satu naskah, dan keduanya harus tetap bekerja:
+
+| Cara diakses | Yang menjawab |
+|---|---|
+| URL dimuat langsung (reviewer, bot Play, mesin pencari) | berkas statis `web/*.html` lewat blok `location =` di `nginx.conf` |
+| Navigasi di dalam aplikasi (`context.push`) | layar Flutter, dirender dari naskah Dart |
+
+Pada `nginx.conf`, blok `location = /kebijakan-privasi` dan `= /hapus-akun` **wajib ada** — tanpa
+keduanya, URL jatuh ke SPA fallback dan pengambil HTTP yang tidak menjalankan JS/WASM hanya
+menerima cangkang `index.html` tanpa naskah kebijakan. Catatan lama di berkas ini yang melarang
+blok tersebut berasal dari periode 27–30 Juli 2026 saat berkas HTML-nya memang tidak ada.
+
+Setelah setiap perubahan konfigurasi Nginx, verifikasi rute `/`, `/dashboard`,
+`/kebijakan-privasi`, dan `/hapus-akun` — untuk dua yang terakhir, pastikan isinya **naskah**,
+bukan cangkang:
+
+```bash
+curl -s http://localhost:8081/kebijakan-privasi | grep -c "Pengendali Data"   # harus >= 1
+```
+
+Kalau naskah di `lib/src/legal/` diubah, bangkitkan ulang HTML-nya:
+
+```bash
+dart run tool/gen_policy_html.dart
+```
+
+`test/src/legal/policy_html_drift_test.dart` gagal kalau langkah ini terlewat.
 
 ### Perintah `adb` tidak dikenali
 

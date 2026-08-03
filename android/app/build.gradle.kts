@@ -34,6 +34,42 @@ val requestedTasks = gradle.startParameter.taskNames.joinToString(" ")
 val isBundleRequested = Regex("(^|:)bundle\\w*Release").containsMatchIn(requestedTasks)
 val isAssembleReleaseRequested = Regex("(^|:)assemble\\w*Release").containsMatchIn(requestedTasks)
 
+// Gerbang kedua: key.properties ADA, tapi isinya menunjuk berkas yang tidak ada.
+//
+// Ranjau yang paling sering kena di Windows: berkas .properties memperlakukan `\`
+// sebagai karakter escape, jadi `storeFile=C:\Users\x\mbis.jks` diam-diam terbaca
+// menjadi `C:Usersxmbis.jks`. Tanpa pemeriksaan ini, Gradle gagal jauh di belakang
+// dengan pesan yang tidak menyebut penyebabnya sama sekali — atau lebih buruk,
+// task assembleRelease jatuh ke debug key padahal pengembang yakin kuncinya sudah
+// terpasang. Path WAJIB memakai garis miring depan.
+if (hasReleaseKeystore && (isBundleRequested || isAssembleReleaseRequested)) {
+    val storeFileValue = (keystoreProperties["storeFile"] as String?)?.trim().orEmpty()
+    val storeFileResolved = if (storeFileValue.isEmpty()) null else file(storeFileValue)
+
+    if (storeFileValue.isEmpty() || storeFileResolved?.exists() != true) {
+        val petunjukBackslash = if (storeFileValue.contains(":") && !storeFileValue.contains("/")) {
+            "\n  |  DUGAAN KUAT: path memakai backslash. Di berkas .properties, `\\`\n" +
+                "  |  adalah karakter escape sehingga `C:\\Users\\...` terbaca rusak.\n" +
+                "  |  Tulis dengan garis miring depan: C:/Users/.../mbis-upload.jks"
+        } else {
+            ""
+        }
+        throw GradleException(
+            """
+            |
+            |╭─ RILIS DIBATALKAN ────────────────────────────────────────────────────╮
+            |  storeFile di android/key.properties tidak menunjuk berkas yang ada.
+            |
+            |  Dibaca sebagai : ${storeFileValue.ifEmpty { "(kosong)" }}
+            |  Dicari di      : ${storeFileResolved?.absolutePath ?: "-"}$petunjukBackslash
+            |
+            |  Lihat android/key.properties.example dan docs/RILIS-ANDROID.md §1.
+            |╰───────────────────────────────────────────────────────────────────────╯
+            """.trimMargin()
+        )
+    }
+}
+
 if (!hasReleaseKeystore) {
     if (isBundleRequested) {
         throw GradleException(

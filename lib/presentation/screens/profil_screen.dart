@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
+import '../../src/config/app_version.dart';
 import '../providers/profil_provider.dart';
 // Ajukan Agen is a one-shot form, so it stays an imperative push (a half-filled
 // form has nothing worth restoring on refresh). The management consoles below
@@ -113,7 +114,7 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
               _buildLogoutButton(context),
               const SizedBox(height: AppSpacing.sm),
               const Text(
-                'M-BIS v2.1.0 • PT Askrindo (Persero)',
+                labelVersiAplikasi,
                 style: TextStyle(fontSize: 12, color: AppColors.grayStage),
               ),
               const SizedBox(height: AppSpacing.lg),

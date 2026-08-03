@@ -1,19 +1,33 @@
 /// Merender naskah kebijakan (data terstruktur di `src/legal/`) menjadi HTML
-/// mandiri untuk disajikan backend sebagai halaman publik.
+/// mandiri yang disajikan nginx repo INI sebagai halaman publik.
 ///
-/// **Kenapa ada lagi HTML statis.** Versi HTML pernah dihapus 27 Juli 2026 dengan
-/// alasan rute Flutter publik sudah cukup — dan itu benar SELAMA web M-BIS punya
-/// alamat publik. Asumsi itu patah 30 Juli 2026: topologi prod menaruh web di IP
-/// privat sementara hanya backend (`mbis.askrindo.co.id/v2`) yang publik, sehingga
-/// tidak ada satu pun alamat publik yang menyajikan rute Flutter itu. Google
-/// mensyaratkan URL yang bisa dibuka siapa pun, jadi halamannya kini ikut
-/// disajikan backend.
+/// **Kenapa halaman ini harus HTML statis, bukan cuma rute Flutter.** Rute
+/// Flutter publik (`/kebijakan-privasi`, `/hapus-akun`) tetap ada dan tetap
+/// dipakai — tombol di layar Privasi & Akun memanggilnya lewat `context.push`.
+/// Tapi rute itu hanya terbaca oleh klien yang MENJALANKAN aplikasi: web M-BIS
+/// dibangun sebagai SPA WasmGC, sehingga pengambil HTTP biasa hanya menerima
+/// cangkang `index.html` tanpa satu kata pun naskah kebijakan. Pemeriksa otomatis
+/// Google Play (dan mesin pencari) mengambil URL persis seperti itu — tanpa
+/// menjalankan JS/WASM. Halaman yang tampil kosong bagi mereka dianggap sama saja
+/// dengan tidak ada kebijakan, dan itu memicu penolakan review.
 ///
-/// **Yang TIDAK diulangi dari percobaan lama:** naskahnya tidak disalin. Berkas
-/// ini membaca sumber Dart yang sama dengan yang dirender aplikasi, jadi tetap
-/// ada satu naskah. Keluarannya berkas turunan — lihat [bannerGenerated] — dan
-/// `test/src/legal/policy_html_drift_test.dart` menolak lulus bila berkas di repo
-/// backend tidak lagi sama dengan hasil render sumber ini.
+/// Karena itu ada dua penyajian dari SATU naskah:
+///   - muat langsung / bot  -> berkas statis di `web/` (dibangkitkan berkas ini),
+///     dipetakan nginx ke URL tanpa akhiran `.html`;
+///   - navigasi di dalam aplikasi -> layar Flutter, dirender dari naskah Dart.
+///
+/// **Riwayat, supaya tidak berputar lagi.** Versi HTML pernah dihapus 27 Juli
+/// 2026 ("rute Flutter sudah cukup"), lalu dihidupkan lagi 30 Juli 2026 di repo
+/// BACKEND karena saat itu web prod direncanakan hidup di IP privat dan hanya
+/// backend yang punya alamat publik. Rencana itu tidak jadi dipakai: proxy host
+/// kini memetakan `https://mbis.askrindo.co.id/app/` ke web ini, jadi web sudah
+/// punya alamat publik sendiri dan halamannya pulang ke repo ini — satu tempat
+/// dengan naskahnya, tanpa perlu repo tetangga ter-checkout.
+///
+/// **Naskahnya tidak disalin.** Berkas ini membaca sumber Dart yang sama dengan
+/// yang dirender aplikasi, jadi tetap ada satu naskah. Keluarannya berkas turunan
+/// — lihat [bannerGenerated] — dan `test/src/legal/policy_html_drift_test.dart`
+/// menolak lulus bila berkas di `web/` tidak lagi sama dengan hasil render ini.
 ///
 /// Berkas ini sengaja di `tool/` (bukan `lib/`) supaya tidak ikut terbundel ke
 /// aplikasi. Murni Dart, tanpa import Flutter.
@@ -24,23 +38,21 @@ import 'package:mbis/src/legal/kebijakan_privasi_content.dart';
 import 'package:mbis/src/legal/legal_routes.dart';
 import 'package:mbis/src/legal/policy_document.dart';
 
-/// Peta repo frontend -> lokasi folder `legal/` di repo backend PASANGANNYA.
+/// Folder keluaran: `web/` di repo INI.
 ///
-/// Ada DUA pasangan repo dengan layout berbeda:
-///   staging  : `MBIS-Frontend` + `MBIS-backend` (modul Maven di `backend/`)
-///   produksi : `fe-new-mbis`   + `be-new-mbis`  (modul Maven di root repo)
+/// Dulu berupa peta nama-repo-frontend -> folder `legal/` di repo backend
+/// pasangannya, karena keluarannya menyeberang repo. Pemetaan itu perlu supaya
+/// generator yang dijalankan dari repo produksi tidak diam-diam menulis ke repo
+/// staging (keempat repo biasanya ter-checkout bersebelahan, jadi "cari mana yang
+/// ada duluan" selalu menemukan yang salah).
 ///
-/// Dipetakan lewat NAMA FOLDER repo, bukan "cari mana yang ada duluan". Alasannya
-/// konkret: keempat repo itu biasanya ter-checkout bersebelahan di folder umbrella
-/// yang sama, sehingga pencarian berurutan akan selalu menemukan `MBIS-backend`
-/// lebih dulu — dan generator yang dijalankan dari repo produksi diam-diam menulis
-/// ke repo staging. Pemetaan eksplisit membuat itu tidak mungkin terjadi.
+/// Seluruh persoalan itu hilang begitu keluarannya pindah ke repo sendiri: tidak
+/// ada lagi repo tetangga yang bisa tertukar, dan drift test tidak lagi perlu
+/// di-skip di CI yang meng-checkout satu repo saja.
 ///
-/// Berkas ini tetap IDENTIK di kedua repo; menambah pasangan baru cukup satu baris.
-const Map<String, String> folderLegalBackendPerRepo = {
-  'MBIS-Frontend': '../MBIS-backend/backend/src/main/resources/legal',
-  'fe-new-mbis': '../be-new-mbis/src/main/resources/legal',
-};
+/// Isi `web/` disalin apa adanya oleh `flutter build web` ke `build/web/`, lalu
+/// disajikan nginx — jalur yang sama persis dengan `auth.html`.
+const String folderKeluaranWeb = 'web';
 
 /// Ditempel di awal tiap berkas keluaran. Satu-satunya pertahanan terhadap orang
 /// yang mengedit HTML-nya langsung lalu heran kenapa perubahannya hilang.
@@ -48,11 +60,11 @@ const String bannerGenerated = '''
 <!--
   BERKAS TURUNAN — JANGAN DIEDIT TANGAN.
 
-  Dibangkitkan dari naskah Dart di repo MBIS-Frontend:
+  Dibangkitkan dari naskah Dart di repo ini:
       lib/src/legal/kebijakan_privasi_content.dart
       lib/src/legal/hapus_akun_content.dart
 
-  Cara memperbarui (dari folder MBIS-Frontend):
+  Cara memperbarui (dari akar repo ini):
       dart run tool/gen_policy_html.dart
 
   Suntingan langsung di berkas ini akan tertimpa, dan
@@ -78,9 +90,14 @@ String inline(String source) => parseInline(source)
 
 /// Rute Flutter -> tautan relatif.
 ///
-/// Relatif, bukan absolut: kedua halaman disajikan bersebelahan di bawah
-/// context-path backend (`/v2` di prod, kosong di staging/lokal), jadi tautan
-/// relatif benar di semua environment tanpa ada domain yang di-hardcode.
+/// Relatif, bukan absolut, dan TANPA akhiran `.html`. Kedua halaman disajikan
+/// bersebelahan di bawah prefix yang berbeda-beda per environment (`/app/` di
+/// prod, akar di staging dan lokal), jadi tautan relatif benar di semua tempat
+/// tanpa ada domain atau prefix yang di-hardcode.
+///
+/// Tanpa `.html` karena nginx memetakan URL bersih itu ke berkasnya (lihat blok
+/// `location = /kebijakan-privasi` di `nginx.conf`). Kalau blok nginx itu hilang,
+/// tautan silang antar-halaman ikut mati — keduanya satu paket.
 String routeHref(String route) => route.startsWith('/') ? route.substring(1) : route;
 
 String _renderBlock(PolicyBlock block) {

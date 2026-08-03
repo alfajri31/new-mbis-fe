@@ -7,39 +7,33 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../tool/policy_html.dart';
 
-/// Menjaga halaman kebijakan HTML di repo backend tetap sama dengan naskah Dart.
+/// Menjaga halaman kebijakan HTML di `web/` tetap sama dengan naskah Dart.
 ///
 /// **Kenapa test ini ada.** Naskah kebijakan hidup satu kali, sebagai data
 /// terstruktur di `lib/src/legal/`. Aplikasi merendernya untuk versi in-app;
-/// backend menyajikan versi HTML-nya sebagai halaman publik (satu-satunya
-/// komponen M-BIS yang punya alamat publik di produksi). Berkas HTML itu
-/// **turunan**, dibangkitkan `dart run tool/gen_policy_html.dart`.
+/// berkas HTML di `web/` adalah **turunan**-nya, dibangkitkan
+/// `dart run tool/gen_policy_html.dart`, dan itulah yang dilihat pemeriksa
+/// otomatis Google Play — mereka mengambil URL-nya tanpa menjalankan JS/WASM,
+/// sehingga versi SPA tampil kosong bagi mereka.
 ///
 /// Tanpa penjaga ini, revisi Legal berikutnya akan memperbarui versi in-app
 /// sementara versi publik diam-diam tertinggal — dan yang tertinggal justru versi
 /// yang dibaca reviewer Google dan regulator.
 ///
-/// **Melewat bila repo backend tidak ada di sebelah.** CI meng-checkout satu repo
-/// saja, jadi di sana test ini di-skip. Di mesin pengembang (kedua repo
-/// bersebelahan di folder umbrella) ia berjalan — dan di situlah naskah diubah.
+/// **Selalu berjalan.** Dulu test ini di-skip di CI karena berkasnya ada di repo
+/// backend tetangga yang tidak ikut ter-checkout. Sejak keluarannya pindah ke
+/// `web/` repo ini, tidak ada lagi alasan melewat — dan justru CI-lah tempat
+/// penjaga ini paling berguna.
 void main() {
-  // Pasangan repo dipilih dari NAMA folder repo ini, bukan "cari yang ada
-  // duluan" — keempat repo biasanya bersebelahan, jadi pencarian berurutan akan
-  // menunjuk repo yang salah. Lihat folderLegalBackendPerRepo.
-  final repo = Directory.current.absolute.path
-      .replaceAll('\\', '/')
-      .split('/')
-      .where((s) => s.isNotEmpty)
-      .last;
-  final tujuan = folderLegalBackendPerRepo[repo];
-  final dir = tujuan == null ? null : Directory(tujuan);
+  final dir = Directory(folderKeluaranWeb);
 
-  group('halaman kebijakan HTML di backend', () {
-    if (dir == null || !dir.existsSync()) {
-      test('dilewati: repo backend pasangan tidak ada di sebelah', () {},
-          skip: 'repo "$repo" -> ${tujuan ?? "pasangan tidak terdaftar"}');
-      return;
-    }
+  group('halaman kebijakan HTML di web/', () {
+    test('folder keluaran ada', () {
+      expect(dir.existsSync(), isTrue,
+          reason: 'Folder "$folderKeluaranWeb/" tidak ditemukan dari '
+              '${Directory.current.absolute.path}. Test harus dijalankan dari '
+              'akar repo.');
+    });
 
     renderSemuaHalaman().forEach((rute, html) {
       final nama = berkasKeluaran[rute]!;
@@ -60,8 +54,7 @@ void main() {
           reason: 'Halaman publik $nama tidak lagi sama dengan naskah Dart.\n'
               'Naskah berubah tanpa membangkitkan ulang HTML-nya, atau HTML-nya '
               'diedit tangan.\n'
-              'Perbaiki dengan: dart run tool/gen_policy_html.dart '
-              '(lalu commit juga di repo MBIS-backend).',
+              'Perbaiki dengan: dart run tool/gen_policy_html.dart',
         );
       });
     });

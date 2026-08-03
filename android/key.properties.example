@@ -1,0 +1,57 @@
+# Template penandatanganan rilis Android. SALIN jadi `android/key.properties`
+# (tanpa akhiran .example) lalu isi nilainya. Berkas hasil salinannya gitignored
+# di dua tempat (.gitignore akar + android/.gitignore) — JANGAN pernah di-commit.
+#
+# Tanpa berkas ini, `bundle*Release` sengaja gagal keras: AAB yang ditandatangani
+# debug key pasti ditolak Play Console, dan tanpa gerbang itu kegagalannya baru
+# ketahuan setelah unggah.
+#
+# ---------------------------------------------------------------------------
+# Membuat keystore-nya (sekali saja, jalankan di folder DI LUAR repo ini)
+# ---------------------------------------------------------------------------
+#   keytool -genkeypair -v \
+#     -keystore mbis-upload.jks -storetype PKCS12 \
+#     -keyalg RSA -keysize 4096 -validity 10000 \
+#     -alias mbis \
+#     -dname "CN=PT Asuransi Kredit Indonesia (Persero), OU=Divisi Pengelolaan Jaringan, O=PT Asuransi Kredit Indonesia (Persero), L=Jakarta, C=ID"
+#
+# Pakai kata sandi yang SAMA untuk store dan key: format PKCS12 tidak mendukung
+# kata sandi terpisah dengan baik, dan bila dibedakan Gradle gagal dengan pesan
+# yang menyesatkan.
+#
+# Simpan .jks-nya di luar folder proyek. Bukan karena git (sudah diabaikan), tapi
+# karena folder proyek ini berada di bawah OneDrive — apa pun di dalamnya ikut
+# tersinkron ke cloud. Backup kata sandi di password manager organisasi, bukan di
+# laptop perorangan.
+#
+# ---------------------------------------------------------------------------
+# RANJAU PALING SERING: backslash pada storeFile
+# ---------------------------------------------------------------------------
+# Berkas .properties memperlakukan `\` sebagai karakter escape. Menulis
+#     storeFile=C:\Users\rakad\Secure\mbis-upload.jks
+# membuatnya terbaca sebagai `C:UsersrakadSecurembis-upload.jks` — berkasnya tidak
+# ketemu, dan dulu kegagalannya tidak menyebut sebabnya. Sekarang build.gradle.kts
+# memeriksanya dan berhenti dengan pesan yang menyebut dugaan ini.
+#
+# WAJIB garis miring depan, path absolut:
+storeFile=C:/Users/<user>/Secure/mbis-upload.jks
+
+# Kata sandi keystore. Sama dengan keyPassword di bawah (lihat catatan PKCS12).
+storePassword=
+
+# Alias kunci — harus sama dengan `-alias` saat keytool dijalankan.
+keyAlias=mbis
+
+# Kata sandi kunci. Isi sama persis dengan storePassword.
+keyPassword=
+
+# ---------------------------------------------------------------------------
+# Memastikan kuncinya benar-benar terpakai
+# ---------------------------------------------------------------------------
+#   keytool -printcert -jarfile build/app/outputs/bundle/prodRelease/app-prod-release.aab
+#
+# Harus memunculkan CN=PT Asuransi Kredit Indonesia (Persero).
+# Kalau yang muncul CN=Android Debug, berkas ini tidak terbaca.
+#
+# Di CI (Codemagic) berkas ini TIDAK dipakai — dirakit otomatis dari environment
+# group `mbis-android-keystore`. Lihat codemagic.yaml dan docs/RILIS-ANDROID.md §1.
