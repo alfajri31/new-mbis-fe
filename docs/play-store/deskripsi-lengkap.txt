@@ -1,0 +1,31 @@
+M-BIS (Marketing/Business Information System) adalah aplikasi INTERNAL PT Asuransi Kredit Indonesia (Persero) — Askrindo. Aplikasi ini digunakan oleh pegawai serta Agen dan Tenaga Pemasar resmi untuk mengelola aktivitas pemasaran penjaminan dan asuransi di lapangan.
+
+Aplikasi ini BUKAN untuk masyarakat umum. Tidak ada pendaftaran mandiri — seluruh akun dibuat oleh Administrator, dan akun Agen didaftarkan oleh Relationship Manager. Anda memerlukan akun resmi Askrindo untuk masuk.
+
+FITUR UTAMA
+
+• Pipeline & Nasabah — Catat dan kelola calon nasabah beserta tahapan pipeline penjaminan, dari prospek hingga terbit polis.
+• Kunjungan Lapangan — Rekam kunjungan nasabah lengkap dengan lokasi GPS dan foto dokumentasi. Lokasi hanya diambil saat Anda aktif merekam kunjungan.
+• Target & Realisasi — Pantau pencapaian target premi terhadap realisasi, dengan rincian per kategori produk dan per bulan.
+• Dashboard Kinerja — Ringkasan kinerja sesuai peran dan cakupan kantor: nasional, wilayah, cabang, hingga per Relationship Manager.
+• Manajemen Agen — Administrasi data keagenan, lisensi, dan perjanjian kerja sama.
+• Notifikasi — Pengingat jadwal kunjungan, pengumuman, dan informasi operasional.
+• Asisten AI — Bantuan analisis calon nasabah dan rekomendasi produk (opsional).
+• Ekspor Laporan — Unduh data pipeline, kunjungan, dan kinerja untuk pelaporan.
+
+PERAN PENGGUNA
+
+Divisi Penjaminan (DPJ), Regional Office (RO), Branch Manager (BM), Kepala Unit Penjaminan (KUP), Relationship Manager (RM), Agen, dan Administrator. Setiap peran hanya dapat mengakses data sesuai kewenangan dan penempatan kantornya.
+
+KEAMANAN & PRIVASI
+
+• Autentikasi berbasis token dengan masa berlaku terbatas.
+• Pembatasan akses per kantor dan per peran, dipaksakan di sisi server.
+• Komunikasi terenkripsi HTTPS; versi produksi menolak koneksi tanpa enkripsi.
+• Token disimpan pada penyimpanan terenkripsi perangkat (Android Keystore).
+
+PENGHAPUSAN AKUN & DATA
+
+Permintaan penghapusan akun diproses secara terverifikasi oleh Divisi Pengelolaan Jaringan, karena akun dibuat oleh Administrator (bukan pendaftaran mandiri). Langkah dan ketentuannya tersedia pada halaman permintaan penghapusan akun serta kebijakan privasi yang tertaut di listingan ini.
+
+Dikelola oleh PT Asuransi Kredit Indonesia (Persero), Jakarta.
