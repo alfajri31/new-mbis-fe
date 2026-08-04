@@ -146,6 +146,54 @@ class CustomerListState {
       .toList();
 }
 
+/// Angka cadangan untuk satu COB: ganti target & realisasi [base] dengan angka
+/// kategori [cob] dari payload `/api/dashboard/categories`.
+///
+/// Ini BUKAN perhitungan baru di klien — backend menghitung
+/// `customer-summary?cob=X` dari sumber yang persis sama
+/// (`DashboardService.getCustomerScopedSummary`, cabang COB: `targetFullYear`,
+/// `realisasiYtd`, dan realisasi bulan berjalan dari rincian bulanan kategori
+/// itu). Selama tidak ada filter wilayah/cabang/RM, hasilnya identik dengan
+/// endpoint yang belum ter-deploy tersebut, jadi tidak muncul "angka versi ketiga".
+///
+/// Hitungan visit tidak per-COB — backend pun mengembalikannya sama untuk semua
+/// COB — jadi nilainya diambil apa adanya dari [base].
+///
+/// COB tak dikenal → [base] dikembalikan utuh. Sengaja TIDAK memakai
+/// `DashboardCategories.byName`, yang jatuh ke kategori pertama saat tak ketemu:
+/// menampilkan angka kategori lain di bawah label COB terpilih jauh lebih
+/// berbahaya daripada menampilkan angka lingkup penuh.
+CustomerScopedSummary applyCobToFallback(
+  CustomerScopedSummary base,
+  DashboardCategories cats,
+  String? cob,
+) {
+  if (cob == null || cob.isEmpty) return base;
+  DashboardCategoryStat? stat;
+  for (final c in cats.categories) {
+    if (c.category == cob) {
+      stat = c;
+      break;
+    }
+  }
+  if (stat == null) return base;
+  double realisasiMtd = 0;
+  for (final m in stat.months) {
+    if (m.month == cats.currentMonth) {
+      realisasiMtd = m.realisasi;
+      break;
+    }
+  }
+  return CustomerScopedSummary(
+    cob: cob,
+    premiTarget: stat.targetFullYear,
+    realisasi: stat.realisasiYtd,
+    realisasiMtd: realisasiMtd,
+    visitCountYtd: base.visitCountYtd,
+    visitCountMtd: base.visitCountMtd,
+  );
+}
+
 final customerListProvider =
     NotifierProvider<CustomerListNotifier, CustomerListState>(
         CustomerListNotifier.new);
@@ -158,6 +206,16 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
   /// Cache hasil cadangan `/api/dashboard/summary` (lihat [_loadSummaryFallback]).
   /// Nilainya tidak dipengaruhi filter, jadi cukup diambil sekali per sesi layar.
   CustomerScopedSummary? _fallbackSummary;
+
+  /// Payload `/api/dashboard/categories` — sumber opsi dropdown COB SEKALIGUS
+  /// sumber angka per-COB pada jalur cadangan (lihat [applyCobToFallback]).
+  DashboardCategories? _cobCategories;
+
+  /// Token load monotonik khusus kartu Target/Realisasi. Mengganti COB dua kali
+  /// beruntun memulai dua panggilan; tanpa token ini yang mendarat belakangan
+  /// belum tentu yang terakhir diminta, dan kartu bisa menampilkan angka COB lama
+  /// di bawah label COB baru.
+  int _summarySeq = 0;
 
   /// Token load monotonik: perubahan filter/search memulai load baru; halaman
   /// lama yang masih in-flight diabaikan saat kembali. (Dulu `_loadSeq`.)
@@ -211,6 +269,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
   Future<void> _loadCobOptions() async {
     try {
       final cats = await _dashRepo.getCategories();
+      _cobCategories = cats;
       state = state.copyWith(cobOptions: cats.categories);
     } catch (_) {
       // Filter COB opsional; biarkan kosong bila gagal.
@@ -222,13 +281,16 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
   /// tanpa filter angkanya sama dengan dashboard depan.
   Future<void> _loadSummary() async {
     if (!state.isSupervisor) return;
+    final seq = ++_summarySeq; // klaim ini sbg permintaan kartu terbaru
+    final cob = state.cob; // dibekukan: jalur cadangan bisa menempuh 2 await
     try {
       final s = await _dashRepo.getCustomerSummary(
         regionId: state.regionId,
         branchId: state.branchId,
         rmId: state.rmId,
-        cob: state.cob,
+        cob: cob,
       );
+      if (seq != _summarySeq) return; // permintaan lebih baru sudah jalan
       state = state.copyWith(
         summary: s,
         summaryFailed: false,
@@ -239,32 +301,53 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
       // kartu tetap menggambar Rp 0 / 0%, sehingga endpoint yang belum ter-deploy
       // (`customer-summary` membalas 404 di prod, Agustus 2026) tampak seperti
       // realisasi yang memang nol — bug data palsu yang mahal didiagnosis.
-      await _loadSummaryFallback();
+      await _loadSummaryFallback(cob, seq);
     }
   }
 
   /// Cadangan kartu Target/Realisasi saat `customer-summary` tak tersedia.
   ///
-  /// Memakai `/api/dashboard/summary` — endpoint yang sama dengan kartu dashboard
-  /// depan, sehingga realisasi & bar tetap terisi (bukan Rp 0) walau endpoint
-  /// khusus Customer belum ter-deploy. Batasannya nyata dan harus ditandai di UI:
-  /// endpoint dashboard **hanya menerima `year`**, tidak ada region/cabang/RM/COB,
-  /// jadi angkanya adalah lingkup penuh pemakai dan TIDAK ikut berubah saat
-  /// difilter. Tanpa filter, angka ini memang identik dengan `customer-summary`.
+  /// Dirakit dari dua endpoint dashboard yang SUDAH ter-deploy:
   ///
-  /// Hasilnya di-cache: `/summary` menghitung agregat berat (mis. scope nasional
-  /// DPJ) dan nilainya tidak dipengaruhi filter, jadi memanggilnya ulang setiap
-  /// kali filter berubah hanya membebani server tanpa mengubah angka.
-  Future<void> _loadSummaryFallback() async {
-    final cached = _fallbackSummary;
-    if (cached != null) {
+  /// - `/api/dashboard/summary` → angka "Semua COB" + hitungan visit;
+  /// - `/api/dashboard/categories` → target & realisasi saat sebuah COB dipilih
+  ///   (lihat [applyCobToFallback]).
+  ///
+  /// Batasannya menyempit, tapi masih nyata dan tetap ditandai di UI: kedua
+  /// endpoint itu **hanya menerima `year`** — tidak ada region/cabang/RM. Jadi
+  /// filter COB kini ikut, sedangkan filter wilayah/cabang/RM belum, dan angkanya
+  /// tetap lingkup penuh pemakai sampai `customer-summary` ter-deploy.
+  ///
+  /// Kedua sumber di-cache: keduanya agregat berat (mis. scope nasional DPJ) dan
+  /// tak dipengaruhi filter, jadi memanggilnya ulang tiap kali filter berubah
+  /// hanya membebani server tanpa mengubah angka.
+  Future<void> _loadSummaryFallback(String? cob, int seq) async {
+    final base = await _baseFallbackSummary();
+    if (base == null) {
+      if (seq != _summarySeq) return;
+      // Dua-duanya gagal → nyatakan gagal, jangan menggambar Rp 0. `summary`
+      // dikosongkan agar angka dari filter SEBELUMNYA tidak tertinggal di layar
+      // dan disangka hasil filter yang baru.
       state = state.copyWith(
-        summary: cached,
-        summaryFailed: false,
-        summaryIsFallback: true,
+        summary: null,
+        summaryFailed: true,
+        summaryIsFallback: false,
       );
       return;
     }
+    final mapped = await _withCobFallback(base, cob);
+    if (seq != _summarySeq) return;
+    state = state.copyWith(
+      summary: mapped,
+      summaryFailed: false,
+      summaryIsFallback: true,
+    );
+  }
+
+  /// Angka cadangan tanpa COB (`/api/dashboard/summary`), `null` bila gagal.
+  Future<CustomerScopedSummary?> _baseFallbackSummary() async {
+    final cached = _fallbackSummary;
+    if (cached != null) return cached;
     try {
       final d = await _dashRepo.getSummary();
       final mapped = CustomerScopedSummary(
@@ -275,21 +358,29 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         visitCountMtd: d.visitCountMtd,
       );
       _fallbackSummary = mapped;
-      state = state.copyWith(
-        summary: mapped,
-        summaryFailed: false,
-        summaryIsFallback: true,
-      );
+      return mapped;
     } catch (_) {
-      // Dua-duanya gagal → nyatakan gagal, jangan menggambar Rp 0. `summary`
-      // dikosongkan agar angka dari filter SEBELUMNYA tidak tertinggal di layar
-      // dan disangka hasil filter yang baru.
-      state = state.copyWith(
-        summary: null,
-        summaryFailed: true,
-        summaryIsFallback: false,
-      );
+      return null;
     }
+  }
+
+  /// Terapkan COB terpilih pada angka cadangan, memuat `categories` bila cache
+  /// belum terisi (mis. panggilan opsi COB saat bootstrap gagal). Gagal memuat →
+  /// kembalikan [base] apa adanya; kartu lebih baik menampilkan angka lingkup
+  /// penuh daripada nol.
+  Future<CustomerScopedSummary> _withCobFallback(
+      CustomerScopedSummary base, String? cob) async {
+    if (cob == null || cob.isEmpty) return base;
+    var cats = _cobCategories;
+    if (cats == null) {
+      try {
+        cats = await _dashRepo.getCategories();
+        _cobCategories = cats;
+      } catch (_) {
+        return base;
+      }
+    }
+    return applyCobToFallback(base, cats, cob);
   }
 
   /// Memuat ulang kartu Target/Realisasi saja (tombol "Coba lagi" di kartu),
@@ -297,6 +388,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
   /// Cache cadangan dibuang supaya tombol ini benar-benar mencoba ulang jaringan.
   Future<void> reloadSummary() {
     _fallbackSummary = null;
+    _cobCategories = null;
     return _loadSummary();
   }
 
