@@ -17,9 +17,18 @@
         tools:node="remove" />
 
     <!-- image_picker & file_picker menyuntikkan seluruh trio READ_MEDIA_*, padahal
-         app ini hanya mengambil foto (kamera) dan berkas pdf/jpg/png lewat SAF —
-         tidak pernah menyentuh video atau audio. Permission READ_MEDIA_* termasuk
-         yang paling disorot reviewer Play, jadi dua yang tidak terpakai dibuang. -->
+         app ini TIDAK PERNAH menelusuri galeri: foto hanya dari KAMERA
+         (image_picker ImageSource.camera) dan dokumen pdf/jpg/png lewat SAF /
+         document picker (file_picker FileType.custom) yang tidak butuh izin media.
+         Ketiganya dibuang eksplisit. READ_MEDIA_IMAGES khususnya memicu error
+         "Izin Foto dan Video" di Play Console yang menuntut deklarasi fungsi inti —
+         dan mendeklarasikannya akan bertentangan dengan kebijakan privasi yang
+         menyatakan "aplikasi tidak menelusuri galeri foto perangkat". Kalau nanti
+         ada fitur pilih-dari-galeri, izin ini ditambahkan kembali BESERTA
+         deklarasinya. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
     <uses-permission
         android:name="android.permission.READ_MEDIA_VIDEO"
         tools:node="remove" />
