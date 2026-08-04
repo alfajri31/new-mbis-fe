@@ -86,7 +86,6 @@ coverage/
 **/ios/Runner/GeneratedPluginRegistrant.*
 
 # Web
-lib/generated_plugin_registrant.dart
 
 # Secrets / config (jangan commit)
 config.json

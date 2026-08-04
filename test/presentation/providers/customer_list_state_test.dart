@@ -179,4 +179,126 @@ void main() {
       expect(s2.summaryFailed, true);
     });
   });
+
+  /// Mengunci agar dropdown COB tetap menggerakkan angka saat kartu memakai
+  /// jalur cadangan. Sebelum ini cadangan hanya memakai `/summary` (yang tak
+  /// mengenal COB), sehingga memilih KUR/KBG menampilkan angka "Semua COB" yang
+  /// sama persis — dilaporkan lagi sebagai bug realisasi.
+  group('applyCobToFallback', () {
+    DashboardCategoryStat stat(
+      String category, {
+      required double targetFullYear,
+      required double realisasiYtd,
+      List<DashboardCategoryMonth> months = const [],
+    }) =>
+        DashboardCategoryStat(
+          category: category,
+          label: category,
+          description: '',
+          targetYtd: 0,
+          realisasiYtd: realisasiYtd,
+          targetFullYear: targetFullYear,
+          months: months,
+        );
+
+    DashboardCategories cats(List<DashboardCategoryStat> list,
+            {int currentMonth = 8}) =>
+        DashboardCategories(
+          year: 2026,
+          currentMonth: currentMonth,
+          defaultCategory: 'NON_PROGRAM_NON_ASKRED',
+          categories: list,
+        );
+
+    final base = CustomerScopedSummary(
+      premiTarget: 0,
+      realisasi: 55745600,
+      realisasiMtd: 1000,
+      visitCountYtd: 42,
+      visitCountMtd: 7,
+    );
+
+    test('COB terpilih memakai angka kategori itu, bukan angka lingkup penuh',
+        () {
+      final out = applyCobToFallback(
+        base,
+        cats([
+          stat('KUR', targetFullYear: 900, realisasiYtd: 300),
+          stat('KBG', targetFullYear: 500, realisasiYtd: 120),
+        ]),
+        'KUR',
+      );
+      expect(out.realisasi, 300);
+      expect(out.premiTarget, 900);
+      expect(out.cob, 'KUR');
+    });
+
+    test('ganti COB → angka ikut ganti (inti bug yang dilaporkan)', () {
+      final all = cats([
+        stat('KUR', targetFullYear: 900, realisasiYtd: 300),
+        stat('KBG', targetFullYear: 500, realisasiYtd: 120),
+      ]);
+      expect(applyCobToFallback(base, all, 'KUR').realisasi, 300);
+      expect(applyCobToFallback(base, all, 'KBG').realisasi, 120);
+    });
+
+    test('realisasi MTD diambil dari bulan berjalan kategori itu', () {
+      final out = applyCobToFallback(
+        base,
+        cats(
+          [
+            stat('KUR', targetFullYear: 900, realisasiYtd: 300, months: [
+              DashboardCategoryMonth(
+                  month: 7, label: 'Jul', target: 0, realisasi: 50),
+              DashboardCategoryMonth(
+                  month: 8, label: 'Agu', target: 0, realisasi: 80),
+            ]),
+          ],
+          currentMonth: 8,
+        ),
+        'KUR',
+      );
+      expect(out.realisasiMtd, 80);
+    });
+
+    test('bulan berjalan tanpa baris → MTD 0, bukan angka lingkup penuh', () {
+      final out = applyCobToFallback(
+        base,
+        cats([stat('KUR', targetFullYear: 900, realisasiYtd: 300)]),
+        'KUR',
+      );
+      expect(out.realisasiMtd, 0);
+    });
+
+    test('hitungan visit tetap dari angka dasar (visit tidak per-COB)', () {
+      final out = applyCobToFallback(
+        base,
+        cats([stat('KUR', targetFullYear: 900, realisasiYtd: 300)]),
+        'KUR',
+      );
+      expect(out.visitCountYtd, 42);
+      expect(out.visitCountMtd, 7);
+    });
+
+    test('tanpa COB (Semua COB) angka dasar dipakai apa adanya', () {
+      final out = applyCobToFallback(
+        base,
+        cats([stat('KUR', targetFullYear: 900, realisasiYtd: 300)]),
+        null,
+      );
+      expect(out.realisasi, 55745600);
+      expect(out.cob, isNull);
+    });
+
+    test('COB tak dikenal TIDAK jatuh ke kategori pertama', () {
+      // `DashboardCategories.byName` sengaja tidak dipakai: jatuh ke kategori
+      // pertama akan menampilkan angka KUR di bawah label COB lain.
+      final out = applyCobToFallback(
+        base,
+        cats([stat('KUR', targetFullYear: 900, realisasiYtd: 300)]),
+        'TIDAK_ADA',
+      );
+      expect(out.realisasi, 55745600);
+    });
+  });
 }

@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:printing/printing.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
+import '../../utils/input_formatters.dart';
 import '../../data/premi_rates.dart';
 import '../../src/app.dart';
 import '../../src/network/api_client.dart';
@@ -816,9 +817,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-              ],
+              inputFormatters: const [DecimalInputFormatter()],
               style: const TextStyle(
                 fontSize: 14,
                 color: AppColors.textPrimary,
@@ -856,7 +855,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
         controller: _rateController,
         enabled: enabled,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        inputFormatters: const [DecimalInputFormatter()],
         onChanged: (_) => setState(() {}),
         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
         decoration: InputDecoration(
@@ -882,7 +881,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
         controller: _diskonController,
         enabled: enabled,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        inputFormatters: const [DecimalInputFormatter()],
         onChanged: (_) => setState(() {}),
         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
         decoration: InputDecoration(

@@ -70,6 +70,11 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   bool get _summaryFailed => _cs.summaryFailed;
   bool get _summaryIsFallback => _cs.summaryIsFallback;
 
+  /// Ada filter wilayah/cabang/RM aktif — satu-satunya filter yang TIDAK bisa
+  /// diikuti jalur cadangan (endpoint dashboard hanya menerima `year`).
+  bool get _scopeFilterActive =>
+      _cs.regionId != null || _cs.branchId != null || _cs.rmId != null;
+
   /// Agents use a small, server-fixed book — keep it client-side; everyone else
   /// is server-paginated so a supervisor's customer base never loads all at once.
   bool get _isPaged => !widget.agentScoped;
@@ -928,9 +933,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
               ),
             ],
           ),
-          // Angka cadangan dari dashboard tidak mengikuti filter (endpoint-nya
-          // hanya menerima `year`). Wajib dinyatakan: angka yang diam saat
-          // difilter tanpa keterangan akan disangka bug perhitungan.
+          // Angka cadangan dari dashboard mengikuti COB, tetapi endpoint-nya tak
+          // menerima wilayah/cabang/RM. Wajib dinyatakan — dan tepat bagian
+          // MANA yang belum ikut: angka yang diam saat difilter tanpa
+          // keterangan akan disangka bug perhitungan.
           if (_summaryIsFallback) ...[
             const SizedBox(height: 4),
             Row(
@@ -941,12 +947,14 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
                   color: AppColors.textSecondary,
                 ),
                 const SizedBox(width: 4),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Angka lingkup penuh — filter belum diterapkan',
+                    _scopeFilterActive
+                        ? 'Angka lingkup penuh — filter wilayah/cabang/RM belum diterapkan'
+                        : 'Angka lingkup penuh (sumber cadangan dashboard)',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 10,
                       color: AppColors.textSecondary,
                     ),
