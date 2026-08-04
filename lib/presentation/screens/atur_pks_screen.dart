@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/app_theme.dart';
+import '../../utils/input_formatters.dart';
 import '../../src/agent/agent_repository.dart';
 import '../../core/providers/repository_providers.dart';
 import '../widgets/back_app_bar.dart';
@@ -241,7 +241,7 @@ class _AturPksScreenState extends ConsumerState<AturPksScreen> {
         controller: _rateCtrls[g.code],
         style: AppInput.fieldText,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        inputFormatters: const [DecimalInputFormatter()],
         validator: (v) {
           final s = (v ?? '').trim();
           if (s.isEmpty) return 'Wajib diisi';

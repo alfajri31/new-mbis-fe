@@ -557,6 +557,10 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          // Tanpa formatter, koma dari papan ketik ponsel masuk ke
+                          // isian tapi `double.tryParse` menolaknya — pemakai divonis
+                          // "nilai kurs tidak valid" untuk angka yang ia lihat benar.
+                          inputFormatters: const [DecimalInputFormatter()],
                           onChanged: (_) {},
                           validator: (val) =>
                               val == null || double.tryParse(val) == null
@@ -622,11 +626,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                                   const TextInputType.numberWithOptions(
                                     decimal: true,
                                   ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]'),
-                                ),
-                              ],
+                              inputFormatters: const [DecimalInputFormatter()],
                               onChanged: (_) {},
                               validator: (val) {
                                 final r = double.tryParse((val ?? '').trim());
