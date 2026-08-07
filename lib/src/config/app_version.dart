@@ -29,7 +29,7 @@ library;
 /// meng-hardcode `v2.1.0` sementara berkas build bilang `1.0.0` — arah
 /// penyelesaiannya adalah tampilan mengikuti yang benar-benar dibangun, karena
 /// itulah angka yang muncul di Play Console dan di laporan crash.
-const String versiAplikasi = '1.0.0';
+const String versiAplikasi = '1.0.1';
 
 /// Baris versi utuh di kaki layar profil — dipakai layar profil pegawai maupun
 /// Agen supaya keduanya mustahil berbeda bunyi.
