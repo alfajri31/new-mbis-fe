@@ -874,9 +874,12 @@ class AgentRepository {
     throw Exception(_message(res.body, 'Gagal memuat rate komisi'));
   }
 
-  /// Admin issues the CIF + creates the agent's login account.
-  Future<AgentCredentialModel> issueCif(String id) async {
-    final res = await apiClient.post('/api/agents/$id/issue-cif');
+  /// Menerbitkan CIF + akun login agen.
+  ///
+  /// [cif] DIKETIK pengelola agen kantor pusat, bukan dibangkitkan server: nomornya
+  /// berasal dari sistem inti, dan ia sekaligus menjadi NIP login agen.
+  Future<AgentCredentialModel> issueCif(String id, {required String cif}) async {
+    final res = await apiClient.post('/api/agents/$id/issue-cif', body: {'cif': cif});
     if (res.statusCode == 200) {
       return AgentCredentialModel.fromJson(jsonDecode(res.body));
     }

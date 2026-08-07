@@ -319,7 +319,12 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
   Widget _documentsCard(AgentModel a) {
     final isRm = _roles.contains('RM');
     final isAgentHq = _roles.any(Roles.agentHqManagers.contains);
-    final reviewing = isAgentHq && (a.status == 'WAITING_LICENSE' || a.status == 'WAITING_CIF');
+    // WAITING_RM_DOCS ikut: di sanalah dokumen tahap-2 diunggah lalu disetujui,
+    // dan sejak "Kirim Dokumen" dihapus, di sana pula CIF diterbitkan.
+    final reviewing = isAgentHq &&
+        (a.status == 'WAITING_LICENSE' ||
+            a.status == 'WAITING_RM_DOCS' ||
+            a.status == 'WAITING_CIF');
     // Slot dok pasca-lisensi yang BELUM diunggah → field unggah inline (intuitif,
     // ganti tombol "Unggah" dropdown lama).
     final uploaded = _docs.map((d) => d.docType).toSet();
@@ -355,6 +360,14 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text('Setujui semua dokumen dulu untuk melanjutkan.',
+                style: TextStyle(fontSize: 11, color: AppColors.secondaryOrange, fontStyle: FontStyle.italic)),
+          )
+        else if (reviewing &&
+            a.status == 'WAITING_RM_DOCS' &&
+            a.pksNumber.trim().isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Dokumen sudah disetujui. Isi "Atur PKS" untuk bisa menerbitkan CIF.',
                 style: TextStyle(fontSize: 11, color: AppColors.secondaryOrange, fontStyle: FontStyle.italic)),
           ),
       ]),
@@ -506,22 +519,30 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
       buttons.add(_btn('Ajukan Persetujuan', Icons.send, AppColors.primaryNavy,
           () => _run(() => _repo.submitForApproval(a.id).then((_) {}), 'Pengajuan dikirim.')));
     }
-    // Kirim dokumen & atur PKS ikut terbuka untuk kantor pusat: server sudah
-    // menerima keduanya dari DIV_AGEN, dan pada pemindahan data agen lama merekalah
-    // yang mengerjakannya — tidak ada RM yang mengurus agen yang sudah berjalan.
-    if ((isRm || isAgentHq) && a.status == 'WAITING_RM_DOCS') {
-      buttons.add(_btn('Kirim Dokumen', Icons.send, AppColors.primaryNavy,
-          () => _run(() => _repo.submitDocuments(a.id).then((_) {}), 'Dokumen dikirim untuk penerbitan CIF.')));
-    }
-    if (isRm || isAgentHq) {
+    // "Kirim Dokumen" DIHAPUS. Langkah itu hanya serah-terima RM → kantor pusat;
+    // dokumen bisa disetujui begitu diunggah, dan penerbitan CIF kini menerima
+    // WAITING_RM_DOCS langsung. Menyisakannya berarti satu klik yang tidak
+    // memeriksa apa pun. Sinyal "dokumen siap diproses" kini dikirim server saat
+    // unggahan terakhir melengkapi berkasnya.
+
+    // Atur PKS muncul BERSAMA rombongan dokumen tahap-2 (yang memuat berkas PKS),
+    // bukan sejak DRAFT — di tahap awal nomor PKS-nya belum ada wujudnya. Tetap
+    // tersedia setelahnya karena rate komisi mengikuti PKS dan berubah tiap PKS
+    // diperbarui.
+    const pksTooEarly = {'DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'WAITING_LICENSE'};
+    if ((isRm || isAgentHq) && !pksTooEarly.contains(a.status)) {
       buttons.add(_btn('Atur PKS', Icons.assignment_outlined, AppColors.primaryNavy, () => _pksFlow(a), outlined: true));
     }
     if (isRm && (a.status == 'DRAFT' || a.status == 'WAITING_APPROVAL' || a.status == 'REJECTED')) {
       buttons.add(_btn('Hapus', Icons.delete_outline, AppColors.errorRed, () => _deleteFlow(a), outlined: true));
     }
-    if (isAgentHq && a.status == 'WAITING_CIF') {
+    // Muncul sejak dokumen tahap-2 dimulai (WAITING_RM_DOCS), bukan menunggu
+    // "Kirim Dokumen" yang sudah dihapus. Aktif hanya bila SEMUA dokumen sudah
+    // disetujui DAN nomor PKS sudah diisi — dua hal itulah isi tahap ini.
+    if (isAgentHq && (a.status == 'WAITING_RM_DOCS' || a.status == 'WAITING_CIF')) {
+      final siap = _allDocsApproved && a.pksNumber.trim().isNotEmpty;
       buttons.add(_btn('Terbitkan CIF', Icons.key_outlined, AppColors.secondaryOrange,
-          () => _issueCifFlow(a), enabled: _allDocsApproved));
+          () => _issueCifFlow(a), enabled: siap));
     }
     if (isAgentHq && a.status == 'WAITING_RENEWAL') {
       buttons.add(_btn('Setujui Perpanjangan', Icons.autorenew, AppColors.successGreen, () => _licenseFlow(a, renewal: true)));
@@ -881,6 +902,12 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
   }
 
   Future<void> _issueCifFlow(AgentModel a) async {
+    // CIF DIKETIK, bukan dibangkitkan: nomornya berasal dari sistem inti, dan ia
+    // sekaligus jadi NIP login agen. Untuk agen lama yang datanya dipindahkan,
+    // nomor karangan bahkan akan menggantikan CIF asli yang sudah dipakai di
+    // dokumen. Server tetap yang memutuskan (wajib + unik).
+    final cifCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -888,19 +915,57 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
         // tinggi dari layar meluber (overflow) alih-alih bisa digulung.
         scrollable: true,
         title: const Text('Terbitkan CIF & Akun'),
-        content: const Text('Terbitkan CIF dan buat akun login untuk agen ini? Kata sandi sementara akan ditampilkan sekali.'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'Masukkan nomor CIF agen dari sistem inti. Nomor ini juga menjadi '
+                  'NIP login agen, jadi pastikan sama persis.',
+                  style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: cifCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Nomor CIF',
+                  hintText: 'mis. CIF001',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Nomor CIF wajib diisi'
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              const Text('Kata sandi sementara akan ditampilkan sekali.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Terbitkan')),
+          ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.pop(ctx, true);
+                }
+              },
+              child: const Text('Terbitkan')),
         ],
       ),
     );
+    final cif = cifCtrl.text.trim();
+    cifCtrl.dispose();
     if (confirm != true || _busy) return;
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      final cred = await _repo.issueCif(a.id);
+      final cred = await _repo.issueCif(a.id, cif: cif);
       await _load();
       if (!mounted) return;
       await showDialog<void>(
