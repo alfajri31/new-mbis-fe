@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import '../../src/network/api_client.dart';
 import '../../src/agent/agent_repository.dart';
 import '../widgets/back_app_bar.dart';
 import '../widgets/state_views.dart';
+import 'ajukan_agen_screen.dart';
 
 /// Human label for an [AgentStatus] code.
 String agentStatusLabel(String status) {
@@ -94,7 +96,8 @@ String agentDocLabel(String code) {
 
 /// S-150 — Manajemen Agen. Back-office worklist for the agent onboarding flow.
 /// Tabs adapt to the caller's role: every allowed user sees "Semua"; a Branch
-/// Manager also gets "Persetujuan" (pending), an Admin gets "Lisensi".
+/// Manager also gets "Persetujuan" (pending); pengelola agen kantor pusat
+/// (ADMIN atau Divisi Pengelolaan Agen) mendapat "Lisensi" & "Perpanjangan".
 class AgentManagementScreen extends StatelessWidget {
   const AgentManagementScreen({super.key});
 
@@ -117,19 +120,46 @@ class AgentManagementScreen extends StatelessWidget {
             : 'Belum ada agen terdaftar.',
       ),
     ];
-    if (roles.any((r) => r == 'BM' || r == 'RO' || r == 'KUP')) {
+    // DIV_AGEN ikut: sejak fase 1-2 dibuka untuknya, GET /api/agents/pending dan
+    // /approve juga menerimanya, dan antreannya nasional (bukan per kantor). Tanpa
+    // tab ini pengajuan yang dibuatnya sendiri lalu terlanjur diajukan tidak bisa
+    // ia lihat maupun putuskan dari aplikasi.
+    if (roles.any((r) => r == 'BM' || r == 'RO' || r == 'KUP') ||
+        roles.any(Roles.agentHqManagers.contains)) {
       tabs.add((label: 'Pengajuan', loader: repo.getPending, emptyMsg: 'Tidak ada agen menunggu persetujuan.'));
     }
-    if (roles.contains('ADMIN')) {
+    // Lisensi & perpanjangan adalah pekerjaan kantor pusat, bukan cabang. Cermin
+    // hasAnyRole('ADMIN','DIV_AGEN') di AgentController.
+    if (roles.any(Roles.agentHqManagers.contains)) {
       tabs.add((label: 'Lisensi', loader: repo.getAwaitingLicense, emptyMsg: 'Tidak ada agen menunggu lisensi.'));
       tabs.add((label: 'Perpanjangan', loader: repo.getRenewals, emptyMsg: 'Tidak ada permohonan perpanjangan.'));
     }
+
+    // Pintu "daftarkan agen" untuk kantor pusat. RM tidak diberi FAB di sini —
+    // pintunya sudah ada di Profil ("Ajukan Agen / TPM"), dan bagi RM layar ini
+    // berperan sebagai riwayat pengajuan, bukan konsol pendaftaran.
+    //
+    // Tanpa ini ADMIN & DIV_AGEN sama sekali tak punya jalan membuka form
+    // pendaftaran: tombol di Profil disembunyikan `MbisApp.isSupervisorRole`, yang
+    // mencakup ADMIN dan seluruh divisi kantor pusat.
+    final fab = roles.any(Roles.agentHqManagers.contains)
+        ? FloatingActionButton.extended(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AjukanAgenScreen()),
+            ),
+            backgroundColor: AppColors.primaryNavy,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.person_add_alt_1, size: 20),
+            label: const Text('Daftarkan Agen'),
+          )
+        : null;
 
     if (tabs.length == 1) {
       return Scaffold(
         backgroundColor: AppColors.bgScreen,
         appBar: BackAppBar(
             title: isRmOnly ? 'Pengajuan Agen Saya' : 'Manajemen Agen'),
+        floatingActionButton: fab,
         body: _AgentListTab(loader: tabs.first.loader, emptyMsg: tabs.first.emptyMsg),
       );
     }
@@ -152,6 +182,7 @@ class AgentManagementScreen extends StatelessWidget {
             tabs: [for (final t in tabs) Tab(text: t.label)],
           ),
         ),
+        floatingActionButton: fab,
         body: TabBarView(
           children: [for (final t in tabs) _AgentListTab(loader: t.loader, emptyMsg: t.emptyMsg)],
         ),

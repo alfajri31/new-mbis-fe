@@ -164,6 +164,9 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
     required String type,
     required String phone,
     required String email,
+    /// Hanya dipakai saat membuat baru DAN pengaju tak punya kantor (DIV_AGEN);
+    /// diabaikan server untuk RM.
+    String? officeId,
     String? npwp,
     String? bankName,
     String? accountNumber,
@@ -229,6 +232,7 @@ class AjukanAgenNotifier extends Notifier<AjukanAgenState> {
           type: type,
           phone: phone,
           email: email,
+          officeId: officeId,
           npwp: npwp,
           bankName: bankName,
           accountNumber: accountNumber,

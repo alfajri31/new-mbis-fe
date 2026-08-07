@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import '../../src/network/api_client.dart';
 import '../../src/agent/agent_repository.dart';
 import '../../src/master_data/master_data_repository.dart';
@@ -20,6 +21,7 @@ import '../widgets/kelola_master_data/bank_branch_row.dart';
 import '../widgets/kelola_master_data/bumn_row.dart';
 import '../widgets/kelola_master_data/category_row.dart';
 import '../widgets/kelola_master_data/office_row.dart';
+import '../../utils/input_formatters.dart';
 import '../../core/providers/repository_providers.dart';
 import '../providers/kelola_master_data_provider.dart';
 import '../widgets/dispose_callback.dart';
@@ -36,6 +38,23 @@ class _Section {
   final String group;
   final Widget Function(MasterDataRepository repo) builder;
 
+  /// Peran yang boleh membuka bagian ini. Default ADMIN saja, mengikuti pola
+  /// `_KelolaItem.roles` di kelola_screen.dart: bagian baru tetap tak terlihat
+  /// divisi mana pun sampai seseorang melebarkannya dengan sengaja.
+  ///
+  /// Penyaringan dilakukan di tingkat BAGIAN, bukan di tiap tombol: sebuah bagian
+  /// entah milik pemanggil (CRUD penuh) atau tidak muncul sama sekali. Karena itu
+  /// isi tab di bawah tak perlu tahu-menahu soal peran. Ini juga alasan tidak ada
+  /// mode "lihat saja" di sini — DIV_AUDIT & DIV_PROGRAM tidak pernah sampai ke
+  /// layar ini (lihat `_hasKelolaTab` di main_screen.dart).
+  ///
+  /// **Satu pengecualian: bagian `bank`.** Di sana kepemilikannya per-BARIS, bukan
+  /// per-bagian — DIV_SOE hanya boleh menyunting bank HIMBARA (bank BUMN),
+  /// sedangkan bank swasta tetap milik ADMIN. Karena aturan itu tidak bisa
+  /// dinyatakan lewat set peran di sini, `_BankTab` menyaringnya sendiri. Server
+  /// tetap penentunya: `BankService` menolak baris non-HIMBARA untuk kurator.
+  final Set<String> roles;
+
   const _Section({
     required this.id,
     required this.title,
@@ -43,6 +62,7 @@ class _Section {
     required this.icon,
     required this.group,
     required this.builder,
+    this.roles = const {Roles.admin},
   });
 }
 
@@ -67,6 +87,9 @@ final List<_Section> _kSections = [
     icon: Icons.inventory_2_outlined,
     group: _kGroupProduk,
     builder: (repo) => _ProductTab(repo: repo),
+    // Ketentuan & kebijakan produk (termasuk mencabut produk dari pilihan RM
+    // lewat status non-aktif) adalah wewenang Divisi Produk & Pengembangan.
+    roles: {Roles.admin, Roles.divProduct},
   ),
   _Section(
     id: 'kategori',
@@ -75,6 +98,7 @@ final List<_Section> _kSections = [
     icon: Icons.category_outlined,
     group: _kGroupProduk,
     builder: (repo) => _CategoryTab(repo: repo),
+    roles: {Roles.admin, Roles.divProduct},
   ),
   // Rate Komisi per-produk (TOC) DIHAPUS dari master data: rate komisi kini
   // mengikuti PKS per agen (lihat "Atur PKS" di detail agen), bisa beda tiap
@@ -87,6 +111,7 @@ final List<_Section> _kSections = [
     icon: Icons.handshake_outlined,
     group: _kGroupMitra,
     builder: (repo) => _BrokerTab(repo: repo),
+    roles: {Roles.admin, Roles.divRetail},
   ),
   _Section(
     id: 'bank',
@@ -95,6 +120,11 @@ final List<_Section> _kSections = [
     icon: Icons.account_balance_outlined,
     group: _kGroupMitra,
     builder: (repo) => _BankTab(repo: repo),
+    // Satu-satunya bagian yang kepemilikannya SEBAGIAN: bank HIMBARA adalah bank
+    // BUMN, jadi kurasinya milik DIV_SOE sejalan dengan daftar BUMN — tapi bank
+    // swasta tetap milik ADMIN. Karena itu `_BankTab` menyaring per-baris; lihat
+    // catatan pengecualian di [_Section.roles].
+    roles: {Roles.admin, Roles.divSoe},
   ),
   _Section(
     id: 'bumn',
@@ -103,6 +133,7 @@ final List<_Section> _kSections = [
     icon: Icons.hub_outlined,
     group: _kGroupMitra,
     builder: (repo) => _BumnTab(repo: repo),
+    roles: {Roles.admin, Roles.divSoe},
   ),
   _Section(
     id: 'template',
@@ -111,6 +142,7 @@ final List<_Section> _kSections = [
     icon: Icons.description_outlined,
     group: _kGroupMitra,
     builder: (_) => const _TemplateTab(),
+    roles: {Roles.admin, Roles.divAgen},
   ),
   _Section(
     id: 'kantor',
@@ -122,8 +154,13 @@ final List<_Section> _kSections = [
   ),
 ];
 
-/// Kelola Master Data — hub admin untuk seluruh data acuan (dropdown, produk,
-/// komisi, mitra, kantor, template). Tulis dijaga ADMIN di sisi server.
+/// Kelola Master Data — hub untuk seluruh data acuan (dropdown, produk, komisi,
+/// mitra, kantor, template).
+///
+/// Sejak peran divisi kantor pusat ditambahkan, layar ini bukan lagi milik ADMIN
+/// semata: tiap bagian punya pemiliknya sendiri lewat [_Section.roles], dan
+/// pemanggil hanya melihat bagian yang benar-benar boleh ia ubah. Server tetap
+/// menjadi penentu — tiap endpoint tulis digerbangi @PreAuthorize per divisi.
 ///
 /// Dulu layar ini satu `TabBar` berisi 9 tab yang harus di-geser: tab paling
 /// kanan (Kantor, Template) praktis tak terlihat, dan tak ada penjelasan isi tiap
@@ -161,9 +198,17 @@ class _KelolaMasterDataScreenState extends ConsumerState<KelolaMasterDataScreen>
     super.dispose();
   }
 
-  List<_Section> get _filtered {
-    if (_query.isEmpty) return _kSections;
-    return _kSections
+  /// Bagian yang boleh dibuka pemanggil. Dihitung dari peran, BUKAN dari kata
+  /// kunci pencarian — supaya bagian milik divisi lain tidak bisa dimunculkan
+  /// dengan mengetik namanya. Server tetap menjaga datanya (403), ini agar tidak
+  /// ada pintu yang terlihat padahal pasti tertutup.
+  List<_Section> _visibleSections(List<String> roles) =>
+      _kSections.where((s) => roles.any(s.roles.contains)).toList();
+
+  List<_Section> _filtered(List<String> roles) {
+    final visible = _visibleSections(roles);
+    if (_query.isEmpty) return visible;
+    return visible
         .where((s) =>
             s.title.toLowerCase().contains(_query) ||
             s.subtitle.toLowerCase().contains(_query))
@@ -182,7 +227,8 @@ class _KelolaMasterDataScreenState extends ConsumerState<KelolaMasterDataScreen>
   @override
   Widget build(BuildContext context) {
     final counts = ref.watch(masterDataCountsProvider);
-    final sections = _filtered;
+    final roles = MbisApp.of(context)?.session?.user.roles ?? const <String>[];
+    final sections = _filtered(roles);
     final groups = <String, List<_Section>>{};
     for (final s in sections) {
       (groups[s.group] ??= []).add(s);
@@ -1177,6 +1223,7 @@ class _ParameterFormState extends State<_ParameterForm> {
                     controller: _numeric,
                     style: AppInput.fieldText,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: const [DecimalInputFormatter()],
                     decoration: _dec('Nilai numerik (opsional)', hint: 'mis. rate 0.15'),
                   ),
                 ),
@@ -1383,6 +1430,7 @@ class _KomisiTabState extends ConsumerState<_KomisiTab> {
                 autofocus: true,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: const [DecimalInputFormatter()],
                 decoration: const InputDecoration(
                   labelText: 'Persentase Komisi',
                   suffixText: '%',
@@ -2298,6 +2346,24 @@ class _BankTabState extends ConsumerState<_BankTab> {
   List<BankItem> get _items => _bs.items;
   String _search = '';
 
+  /// Penanda bank BUMN di kolom `tipe_bank` — nilainya harus PERSIS ini, sebab
+  /// dropdown HIMBARA menyaringnya dengan pencocokan tepat.
+  static const _himbara = 'HIMBARA';
+
+  /// True bila pemanggil hanya boleh menyentuh baris HIMBARA: ia sampai ke sini
+  /// sebagai kurator DIV_SOE, bukan sebagai ADMIN. Cermin `requireHimbaraWhenCurator`
+  /// di `BankService` — server tetap yang menolak, ini supaya tombolnya tidak
+  /// terlihat aktif padahal pasti 403.
+  bool get _himbaraOnly {
+    final roles = MbisApp.of(context)?.session?.user.roles ?? const <String>[];
+    return !roles.contains(Roles.admin);
+  }
+
+  bool _isHimbara(BankItem b) => (b.tipeBank ?? '').toUpperCase() == _himbara;
+
+  /// Boleh disunting pemanggil ini?
+  bool _canEdit(BankItem b) => !_himbaraOnly || _isHimbara(b);
+
   @override
   void initState() {
     super.initState();
@@ -2334,6 +2400,7 @@ class _BankTabState extends ConsumerState<_BankTab> {
                 ])
               : Column(
                   children: [
+                    if (_himbaraOnly) _himbaraNotice(),
                     _simpleSearchField('Cari bank…', (v) => setState(() => _search = v)),
                     Expanded(
                       child: RefreshIndicator(
@@ -2356,6 +2423,7 @@ class _BankTabState extends ConsumerState<_BankTab> {
                                   final b = _filtered[i];
                                   return BankRow(
                                     bank: b,
+                                    canEdit: _canEdit(b),
                                     onOpenBranches: () => _openBranches(b),
                                     onEdit: () => _openForm(item: b),
                                     onDelete: () => _delete(b),
@@ -2369,9 +2437,29 @@ class _BankTabState extends ConsumerState<_BankTab> {
     );
   }
 
+  Widget _himbaraNotice() => Container(
+        margin: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.navyBg,
+          borderRadius: AppRadius.radiusMd,
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Text(
+          'Kamu mengelola bank HIMBARA (bank BUMN). Bank lain tetap terlihat agar '
+          'daftarnya utuh, tapi hanya bisa dibuka — perubahannya lewat admin.',
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
+      );
+
   void _openBranches(BankItem b) {
     Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => _BankBranchesScreen(repo: widget.repo, bank: b)));
+        builder: (_) => _BankBranchesScreen(
+            repo: widget.repo,
+            bank: b,
+            canEdit: _canEdit(b),
+            himbaraOnly: _himbaraOnly)));
   }
 
   Future<void> _delete(BankItem b) async {
@@ -2394,7 +2482,8 @@ class _BankTabState extends ConsumerState<_BankTab> {
       backgroundColor: AppColors.surfaceWhite,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => _BankForm(repo: widget.repo, item: item),
+      builder: (_) =>
+          _BankForm(repo: widget.repo, item: item, himbaraOnly: _himbaraOnly),
     );
     if (saved == true) _fetch();
   }
@@ -2403,7 +2492,15 @@ class _BankTabState extends ConsumerState<_BankTab> {
 class _BankForm extends StatefulWidget {
   final MasterDataRepository repo;
   final BankItem? item;
-  const _BankForm({required this.repo, this.item});
+
+  /// True untuk kurator DIV_SOE: tipe bank dikunci ke HIMBARA. Bukan sekadar
+  /// kenyamanan — server menolak kurator yang membuat bank bertipe lain, DAN
+  /// menolak upaya menurunkan bank HIMBARA jadi tipe lain (melepasnya dari
+  /// jangkauan sendiri). Mengunci fieldnya membuat aturan itu terlihat, bukan
+  /// muncul sebagai error setelah form diisi penuh.
+  final bool himbaraOnly;
+
+  const _BankForm({required this.repo, this.item, this.himbaraOnly = false});
 
   @override
   State<_BankForm> createState() => _BankFormState();
@@ -2419,7 +2516,8 @@ class _BankFormState extends State<_BankForm> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.item?.name ?? '');
-    _tipe = TextEditingController(text: widget.item?.tipeBank ?? '');
+    _tipe = TextEditingController(
+        text: widget.item?.tipeBank ?? (widget.himbaraOnly ? 'HIMBARA' : ''));
   }
 
   @override
@@ -2461,9 +2559,23 @@ class _BankFormState extends State<_BankForm> {
             TextFormField(
               controller: _tipe,
               style: AppInput.fieldText,
-              decoration: _dec('Tipe Bank (opsional)',
-                  hint: 'HIMBARA = bank BUMN; mis. SWASTA/BPD'),
+              readOnly: widget.himbaraOnly,
+              textCapitalization: TextCapitalization.characters,
+              decoration: _dec(
+                widget.himbaraOnly ? 'Tipe Bank (terkunci)' : 'Tipe Bank (opsional)',
+                hint: widget.himbaraOnly
+                    ? null
+                    : 'HIMBARA = bank BUMN; mis. SWASTA/BPD',
+              ),
             ),
+            if (widget.himbaraOnly)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Divisi SOE mengelola bank HIMBARA saja, jadi tipenya tidak bisa diubah.',
+                  style: TextStyle(fontSize: 11, color: AppColors.grayStage),
+                ),
+              ),
             const SizedBox(height: 16),
             _saveBtn(_saving, _save),
           ],
@@ -2495,7 +2607,23 @@ class _BankFormState extends State<_BankForm> {
 class _BankBranchesScreen extends ConsumerStatefulWidget {
   final MasterDataRepository repo;
   final BankItem bank;
-  const _BankBranchesScreen({required this.repo, required this.bank});
+
+  /// Cabang mengikuti IZIN ATAS INDUKNYA, bukan kolom `tipe_bank` cabang itu
+  /// sendiri — persis seperti `requireCuratableBank` di server. Kolom cabang tidak
+  /// ikut induknya otomatis, jadi kalau yang dipakai kolom cabang, cabang HIMBARA
+  /// yang kolomnya kosong justru tertutup.
+  final bool canEdit;
+
+  /// True bila pemanggilnya kurator DIV_SOE (bukan ADMIN) — tipe cabang dikunci
+  /// mengikuti induk.
+  final bool himbaraOnly;
+
+  const _BankBranchesScreen({
+    required this.repo,
+    required this.bank,
+    this.canEdit = true,
+    this.himbaraOnly = false,
+  });
 
   @override
   ConsumerState<_BankBranchesScreen> createState() => _BankBranchesScreenState();
@@ -2546,7 +2674,8 @@ class _BankBranchesScreenState extends ConsumerState<_BankBranchesScreen> {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
       ),
-      floatingActionButton: _addFab(() => _openForm(), 'Tambah Cabang'),
+      floatingActionButton:
+          widget.canEdit ? _addFab(() => _openForm(), 'Tambah Cabang') : null,
       body: _loading
           ? const SkeletonList(itemCount: 6)
           : _error != null
@@ -2578,6 +2707,7 @@ class _BankBranchesScreenState extends ConsumerState<_BankBranchesScreen> {
                                   final b = _filtered[i];
                                   return BankBranchRow(
                                     branch: b,
+                                    canEdit: widget.canEdit,
                                     onEdit: () => _openForm(item: b),
                                     onDelete: () => _delete(b),
                                   );
@@ -2610,7 +2740,15 @@ class _BankBranchesScreenState extends ConsumerState<_BankBranchesScreen> {
       backgroundColor: AppColors.surfaceWhite,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => _BankBranchForm(repo: widget.repo, bankId: widget.bank.id, item: item),
+      builder: (_) => _BankBranchForm(
+        repo: widget.repo,
+        bankId: widget.bank.id,
+        item: item,
+        parentTipeBank: widget.bank.tipeBank,
+        // Form ini hanya bisa dibuka saat canEdit, dan bagi kurator itu berarti
+        // induknya HIMBARA — jadi mengunci tipe = mengunci ke HIMBARA.
+        lockTipe: widget.himbaraOnly,
+      ),
     );
     if (saved == true) _fetch();
   }
@@ -2620,7 +2758,28 @@ class _BankBranchForm extends StatefulWidget {
   final MasterDataRepository repo;
   final String bankId;
   final BankBranchItem? item;
-  const _BankBranchForm({required this.repo, required this.bankId, this.item});
+
+  /// `tipe_bank` bank INDUKNYA. Cabang baru mewarisinya.
+  ///
+  /// Kenapa perlu: kolomnya "opsional" di form, jadi cabang baru gampang tersimpan
+  /// dengan `tipe_bank` NULL — dan itu persis kondisi yang harus ditambal
+  /// migrasi V51 (6.931 cabang BRI NULL). Dampaknya bukan kosmetik: laporan &
+  /// segmentasi yang membaca tipe_bank cabang akan menghitung nasabah bank BUMN
+  /// sebagai non-BUMN, tanpa satu pun error.
+  final String? parentTipeBank;
+
+  /// True bila pemanggil kurator DIV_SOE: tipe dikunci mengikuti induk, sebab
+  /// izinnya pun ditentukan induk — cabang bertipe lain di bawah induk HIMBARA
+  /// hanya akan membuat datanya tidak konsisten dengan gerbangnya.
+  final bool lockTipe;
+
+  const _BankBranchForm({
+    required this.repo,
+    required this.bankId,
+    this.item,
+    this.parentTipeBank,
+    this.lockTipe = false,
+  });
 
   @override
   State<_BankBranchForm> createState() => _BankBranchFormState();
@@ -2642,7 +2801,10 @@ class _BankBranchFormState extends State<_BankBranchForm> {
     _cif = TextEditingController(text: widget.item?.cifNo ?? '');
     _address = TextEditingController(text: widget.item?.address ?? '');
     _kode = TextEditingController(text: widget.item?.kodeUnitKerja ?? '');
-    _tipe = TextEditingController(text: widget.item?.tipeBank ?? '');
+    // Cabang yang SUDAH ada dipertahankan apa adanya (jangan diam-diam mengoreksi
+    // data orang lain saat sekadar membetulkan alamat); yang BARU mewarisi induk.
+    _tipe = TextEditingController(
+        text: widget.item?.tipeBank ?? widget.parentTipeBank ?? '');
   }
 
   @override
@@ -2698,9 +2860,25 @@ class _BankBranchFormState extends State<_BankBranchForm> {
                   decoration: _dec('Kode Unit Kerja (opsional)')),
               const SizedBox(height: 12),
               TextFormField(
-                  controller: _tipe,
-                  style: AppInput.fieldText,
-                  decoration: _dec('Tipe Bank (opsional)', hint: 'mis. HIMBARA')),
+                controller: _tipe,
+                style: AppInput.fieldText,
+                readOnly: widget.lockTipe,
+                textCapitalization: TextCapitalization.characters,
+                decoration: _dec(
+                  widget.lockTipe ? 'Tipe Bank (mengikuti induk)' : 'Tipe Bank',
+                  hint: widget.lockTipe ? null : 'mis. HIMBARA',
+                ),
+              ),
+              if (!widget.lockTipe && widget.parentTipeBank != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Terisi dari bank induk (${widget.parentTipeBank}). Laporan & '
+                    'segmentasi membaca tipe pada CABANG, jadi mengosongkannya '
+                    'membuat cabang ini tidak terhitung sebagai bank BUMN.',
+                    style: const TextStyle(fontSize: 11, color: AppColors.grayStage),
+                  ),
+                ),
               const SizedBox(height: 16),
               _saveBtn(_saving, _save),
             ],

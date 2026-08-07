@@ -127,6 +127,11 @@ class OfficeOption {
 }
 
 /// All assignable roles, with human labels for the account form.
+///
+/// Urutannya jadi urutan chip di form: peran operasional dulu, lalu divisi kantor
+/// pusat. Kuncinya harus sama persis dengan enum `RoleName` di backend — peran yang
+/// tidak dikenal backend ditolak saat menyimpan, dan (kalau lolos) akan jatuh ke
+/// cakupan OWNER sehingga seluruh layar penggunanya kosong.
 const Map<String, String> kRoleLabels = {
   'ADMIN': 'Admin',
   'RO': 'Regional Office (RO)',
@@ -134,6 +139,14 @@ const Map<String, String> kRoleLabels = {
   'KUP': 'KUP',
   'RM': 'Relationship Manager (RM)',
   'AGENT': 'Agen',
+  // Divisi kantor pusat: tanpa kantor, cakupan baca nasional, hak tulis terbatas
+  // pada daftar master miliknya sendiri.
+  'DIV_PRODUCT': 'Divisi Produk & Pengembangan',
+  'DIV_SOE': 'Divisi Bisnis BUMN',
+  'DIV_RETAIL': 'Divisi Bisnis Komersial & Ritel',
+  'DIV_AGEN': 'Divisi Pengelolaan Agen',
+  'DIV_AUDIT': 'Divisi Audit Internal (lihat saja)',
+  'DIV_PROGRAM': 'Program Business (lihat saja)',
 };
 
 /// Admin account management. Backed by /api/auth/admin/users (+ /api/offices);
@@ -187,8 +200,14 @@ class AccountRepository {
 
   /// Update an existing account. Only non-null fields are changed server-side;
   /// pass [password] only when resetting it.
+  ///
+  /// [nip] adalah identitas login, jadi menggantinya memindahkan pintu masuk
+  /// pemiliknya — server menolak bila NIP itu sudah dipakai akun lain. Sesi yang
+  /// sedang berjalan tidak ikut dicabut, sehingga yang bersangkutan tetap masuk
+  /// sampai tokennya kedaluwarsa lalu login berikutnya memakai NIP baru.
   Future<void> updateAccount(
     String id, {
+    String? nip,
     String? name,
     String? email,
     String? officeId, // "" detaches the office, null leaves it unchanged
@@ -198,6 +217,7 @@ class AccountRepository {
     bool? isConnect,
   }) async {
     final body = <String, dynamic>{};
+    if (nip != null) body['nip'] = nip;
     if (name != null) body['name'] = name;
     if (email != null) body['email'] = email;
     if (officeId != null) body['officeId'] = officeId;

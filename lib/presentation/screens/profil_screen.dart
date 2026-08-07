@@ -8,7 +8,9 @@ import '../providers/profil_provider.dart';
 // Ajukan Agen is a one-shot form, so it stays an imperative push (a half-filled
 // form has nothing worth restoring on refresh). The management consoles below
 // are routed instead — see /profil/* sub-routes in router.dart.
+import '../../src/auth/roles.dart';
 import 'ajukan_agen_screen.dart';
+import 'ganti_email_screen.dart';
 import 'ganti_password_screen.dart';
 
 /// S-112 — Profil RM. Reads profile from /api/auth/me and YTD performance from
@@ -22,9 +24,25 @@ class ProfilScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfilScreenState extends ConsumerState<ProfilScreen> {
+  static const _labelKeamanan = 'Keamanan & Password';
+  static const _labelEmail = 'Email Akun';
+
   static const List<({String label, IconData icon, String section})> _menu = [
-    (label: 'Keamanan & Password', icon: Icons.key_outlined, section: 'Pengaturan'),
+    (label: _labelKeamanan, icon: Icons.key_outlined, section: 'Pengaturan'),
+    (label: _labelEmail, icon: Icons.alternate_email, section: 'Pengaturan'),
   ];
+
+  /// Entri yang boleh dilihat pemanggil. "Email Akun" hanya untuk peran yang
+  /// memang dilayani `POST /api/auth/change-email` — cermin `hasRole('RM')` di
+  /// server, yang lewat hierarki peran ikut meloloskan KUP & ADMIN. Akun agen
+  /// sengaja di luar: email akunnya mengikuti data agennya, bukan sebaliknya.
+  List<({String label, IconData icon, String section})> _visibleMenu(BuildContext context) {
+    final roles = MbisApp.of(context)?.session?.user.roles ?? const <String>[];
+    final canChangeEmail = roles.any(_emailChangers.contains);
+    return _menu.where((m) => m.label != _labelEmail || canChangeEmail).toList();
+  }
+
+  static const _emailChangers = {Roles.rm, Roles.kup, Roles.admin};
 
   // State data/loading dipindah ke ProfilNotifier. Getter memproksi agar
   // FutureBuilder & build di bawah tetap memakai nama lama tanpa diubah.
@@ -254,7 +272,9 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
   }
 
   Widget _buildMenuSection(BuildContext context, String section) {
-    final items = _menu.where((m) => m.section == section).toList();
+    final items =
+        _visibleMenu(context).where((m) => m.section == section).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -289,10 +309,20 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
   Widget _menuItem(BuildContext context, String label, IconData icon, {required bool isLast}) {
     return InkWell(
       onTap: () {
-        if (label == 'Keamanan & Password') {
+        if (label == _labelKeamanan) {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const GantiPasswordScreen()),
           );
+        } else if (label == _labelEmail) {
+          Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const GantiEmailScreen()))
+              // Email tampil di header profil (dari klaim token yang baru ditukar),
+              // jadi muat ulang begitu layarnya ditutup dengan perubahan.
+              .then((changed) {
+            if (changed == true && mounted) {
+              ref.read(profilProvider.notifier).reload();
+            }
+          });
         }
       },
       child: Container(

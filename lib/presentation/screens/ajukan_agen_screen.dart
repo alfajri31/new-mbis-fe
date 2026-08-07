@@ -8,6 +8,7 @@ import '../widgets/field_label.dart';
 import '../../src/app.dart';
 import '../../src/network/api_client.dart';
 import '../../src/agent/agent_repository.dart';
+import '../../src/auth/roles.dart';
 import '../../src/region/region_repository.dart';
 import '../../src/common/file_opener.dart';
 import '../../core/providers/repository_providers.dart';
@@ -39,6 +40,43 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
   AutovalidateMode _autovalidate = AutovalidateMode.disabled;
   String _jenis = 'agen'; // 'agen' | 'tpm'
   String _bank = ''; // nama bank terpilih (untuk pencairan komisi)
+
+  // ── Kantor agen (khusus pengaju kantor pusat) ──
+  // Untuk RM kantor agen selalu mengikuti kantor RM-nya dan tak bisa dipilih dari
+  // klien. Pengelola agen kantor pusat (DIV_AGEN) tidak duduk di kantor mana pun,
+  // jadi tak ada yang bisa diwarisi — server MENOLAK pengajuannya tanpa officeId.
+  // Karena itu pemilih ini hanya muncul untuk mereka, dan wajib.
+  String _officeId = '';
+  List<OfficeOption> _offices = const [];
+  bool _loadingOffices = false;
+
+  /// True bila pemanggil harus menyebut kantor agen sendiri: ia memegang gerbang
+  /// pengelola agen kantor pusat TAPI tidak terikat kantor mana pun. Sengaja
+  /// dilihat dari ada/tidaknya officeId, bukan dari nama perannya — admin yang
+  /// kebetulan diberi kantor tetap mewarisi kantornya seperti dulu.
+  bool get _mustPickOffice {
+    final user = MbisApp.of(context)?.session?.user;
+    final roles = user?.roles.map((e) => e.toString()).toList();
+    final officeId = user?.officeId;
+    return Roles.hasAny(roles, Roles.agentHqManagers) &&
+        (officeId == null || officeId.isEmpty);
+  }
+
+  Future<void> _loadOffices() async {
+    if (_loadingOffices || _offices.isNotEmpty) return;
+    setState(() => _loadingOffices = true);
+    try {
+      final list = await ref.read(agentRepoProvider).offices();
+      if (!mounted) return;
+      setState(() => _offices = list);
+    } catch (_) {
+      // Daftar kantor gagal dimuat: biarkan kosong. Validator tetap menahan
+      // pengiriman, jadi tidak ada pengajuan tanpa kantor yang lolos diam-diam.
+      if (!mounted) return;
+    } finally {
+      if (mounted) setState(() => _loadingOffices = false);
+    }
+  }
 
   // Phase-1 document uploads. Picked files keyed by doc code; existing codes
   // (edit mode) are already stored on the server.
@@ -77,10 +115,13 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       // Reset baseline + muat template & config (async) via notifier. Sesi
       // dibaca notifier dari apiClientProvider — tak perlu context.
       _notifier.start();
+      // Butuh context (sesi), jadi baru bisa ditentukan setelah frame pertama.
+      if (_mustPickOffice) _loadOffices();
     });
     final e = widget.existing;
     if (e == null) return;
     _jenis = e.type == 'TPM' ? 'tpm' : 'agen';
+    _officeId = e.officeId;
     _bank = e.bankName;
     _gender = e.gender;
     _birthDate = e.birthDate.isEmpty ? null : DateTime.tryParse(e.birthDate);
@@ -524,6 +565,7 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
       type: type,
       phone: phone,
       email: email,
+      officeId: _officeId.isEmpty ? null : _officeId,
       npwp: _digitsOrNull(_npwpController),
       bankName: _bank.isEmpty ? null : _bank,
       accountNumber: _orNull(_accountNumberController),
@@ -695,6 +737,19 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
                 style: const TextStyle(fontSize: 11, color: AppColors.grayStage),
               ),
             ]),
+            const SizedBox(height: 16),
+            if (_mustPickOffice && !_isEdit) ...[
+              _section('Kantor Agen', [
+                _officeDropdown(),
+                const SizedBox(height: 6),
+                const Text(
+                  'Akun kantor pusat tidak terikat kantor mana pun, jadi kantor agen '
+                  'harus dipilih di sini. Kantor ini menentukan pimpinan yang menyetujui '
+                  'pengajuan dan siapa saja yang bisa melihat agennya nanti.',
+                  style: TextStyle(fontSize: 11, color: AppColors.grayStage),
+                ),
+              ]),
+            ],
             const SizedBox(height: 16),
             _section('Data Calon', [
               _field('Nama Lengkap', 'Nama calon ${_jenis.toUpperCase()}',
@@ -1092,6 +1147,63 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
           style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
           decoration: _decoration('Nama bank pencairan komisi'),
         ),
+      ],
+    );
+  }
+
+  /// Pemilih kantor agen — hanya dirender untuk pengaju kantor pusat.
+  Widget _officeDropdown() {
+    if (_loadingOffices && _offices.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Row(children: [
+          SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 10),
+          Text('Memuat daftar kantor…',
+              style: TextStyle(fontSize: 13, color: AppColors.grayStage)),
+        ]),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('Kantor Agen *'),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          // Alasan sama dengan _genderDropdown: nilai di luar daftar opsi membuat
+          // DropdownButtonFormField melempar assertion, bukan sekadar tampil kosong.
+          initialValue:
+              _offices.any((o) => o.id == _officeId) ? _officeId : null,
+          style: AppInput.fieldText,
+          isExpanded: true,
+          hint: Text(
+            _offices.isEmpty ? 'Daftar kantor gagal dimuat' : 'Pilih kantor',
+            style: const TextStyle(color: AppColors.grayStage, fontSize: 14),
+          ),
+          items: _offices
+              .map((o) => DropdownMenuItem<String>(
+                    value: o.id,
+                    child: Text('${o.name} (${o.id})',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14, color: AppColors.textPrimary)),
+                  ))
+              .toList(),
+          onChanged: (val) => setState(() => _officeId = val ?? ''),
+          validator: (_) => _officeId.trim().isEmpty ? 'Kantor wajib dipilih' : null,
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.grayStage),
+          decoration: _decoration(null),
+        ),
+        if (_offices.isEmpty && !_loadingOffices)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: TextButton.icon(
+              onPressed: _loadOffices,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Coba muat ulang daftar kantor',
+                  style: TextStyle(fontSize: 12)),
+            ),
+          ),
       ],
     );
   }

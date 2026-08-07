@@ -486,16 +486,27 @@ class _AccountFormState extends State<_AccountForm> {
               Text(_isEdit ? 'Edit Akun' : 'Tambah Akun',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
+              // NIP boleh diubah saat edit: ia identitas login, dan NIP yang
+              // salah ketik dulu hanya bisa dibetulkan lewat migrasi basis data.
+              // Menggantinya memindahkan pintu masuk pemiliknya, jadi bantuannya
+              // ditulis di bawah field supaya admin tidak melakukannya tanpa sadar.
               TextFormField(
                 controller: _nip,
                 style: AppInput.fieldText,
-                enabled: !_isEdit, // NIP is the login id; immutable after creation.
                 decoration: _dec('NIP / ID Login',
                     hint: _isEdit ? null : 'mis. 199001012015031001'),
-                validator: (v) => (!_isEdit && (v == null || v.trim().isEmpty))
-                    ? 'Wajib diisi'
-                    : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
+              if (_isEdit) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'NIP dipakai untuk login. Bila diubah, beri tahu pemiliknya — '
+                  'sesi yang sedang berjalan tetap aktif, tetapi login berikutnya '
+                  'memakai NIP baru.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
@@ -646,6 +657,7 @@ class _AccountFormState extends State<_AccountForm> {
       if (_isEdit) {
         await widget.repo.updateAccount(
           widget.item!.id,
+          nip: _nip.text.trim(),
           name: _name.text.trim(),
           email: _email.text.trim(),
           officeId: _officeId, // '' detaches

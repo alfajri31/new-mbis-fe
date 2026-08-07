@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/responsive.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import 'dashboard_screen.dart';
 import 'customer_list_screen.dart';
 import 'bumn_screen.dart';
@@ -60,17 +61,24 @@ class _MainScreenState extends State<MainScreen> {
     return MbisApp.isSupervisorRole(list);
   }
 
-  /// ADMIN dan seluruh pimpinan kantor (BM/RO/KUP) mendapat tab "Kelola"
-  /// (index 6) di samping tab RM, supaya konsol yang boleh mereka pakai cukup
-  /// satu ketukan — tidak lagi terselip di Profil. Hub-nya menyaring kartunya
-  /// sendiri per peran. Tools ikut di dalamnya karena tab 4 mereka dipakai
-  /// daftar kinerja RM, jadi tak ada ruang untuk tab Tools tersendiri.
+  /// ADMIN, seluruh pimpinan kantor (BM/RO/KUP), dan divisi kantor pusat yang
+  /// mengelola satu daftar master mendapat tab "Kelola" (index 6) di samping tab
+  /// RM, supaya konsol yang boleh mereka pakai cukup satu ketukan — tidak lagi
+  /// terselip di Profil. Hub-nya menyaring kartunya sendiri per peran. Tools ikut
+  /// di dalamnya karena tab 4 mereka dipakai daftar kinerja RM, jadi tak ada ruang
+  /// untuk tab Tools tersendiri.
+  ///
+  /// DIV_AUDIT & DIV_PROGRAM sengaja TIDAK dapat tab ini: mereka hanya boleh
+  /// melihat, dan semua yang boleh mereka lihat sudah ada di tab Dashboard,
+  /// Customer, BUMN, Broker, dan Tools. Memberi mereka hub Kelola hanya akan
+  /// memunculkan pintu-pintu yang seluruhnya 403.
   bool get _hasKelolaTab {
     final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
     return roles.contains('ADMIN') ||
         roles.contains('BM') ||
         roles.contains('RO') ||
-        roles.contains('KUP');
+        roles.contains('KUP') ||
+        roles.any(Roles.curatorDivisions.contains);
   }
 
   /// RM gets the draggable AI quick-access button (others manage/don't run AI).

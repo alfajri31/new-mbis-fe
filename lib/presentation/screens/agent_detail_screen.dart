@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import '../../src/agent/agent_repository.dart';
 import '../../src/common/file_opener.dart';
 import '../../core/providers/repository_providers.dart';
@@ -11,6 +12,7 @@ import '../widgets/back_app_bar.dart';
 import 'agent_management_screen.dart' show agentStatusLabel, agentStatusColor, agentTypeLabel, agentDocLabel;
 import 'ajukan_agen_screen.dart';
 import 'atur_pks_screen.dart';
+import 'koreksi_agen_screen.dart';
 
 /// S-151 — Agent detail + back-office actions. Buttons shown depend on the
 /// caller's role and the agent's status in the onboarding workflow.
@@ -111,6 +113,10 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
               const SizedBox(height: 12),
               _rejectionBanner(a.rejectionReason),
             ],
+            if (a.approvalPath == 'DIRECT') ...[
+              const SizedBox(height: 12),
+              _directEntryBanner(),
+            ],
             const SizedBox(height: 16),
             _infoCard('Kontak', [
               _row('Email', a.email),
@@ -209,6 +215,38 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     );
   }
 
+  /// Penanda agen yang masuk lewat jalur langsung kantor pusat.
+  ///
+  /// Inti dari mencatat `approval_path`: tanpa ditampilkan di suatu tempat, agen
+  /// hasil pemindahan data lama tak bisa dibedakan dari agen yang benar-benar
+  /// diperiksa pimpinan cabang — dan kolomnya jadi percuma.
+  Widget _directEntryBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: AppColors.secondaryOrange),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.playlist_add_check,
+              size: 18, color: AppColors.secondaryOrange),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Dimasukkan langsung oleh kantor pusat — tanpa persetujuan pimpinan '
+              'cabang. Umumnya agen lama yang datanya dipindahkan.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _rejectionBanner(String reason) {
     return Container(
       width: double.infinity,
@@ -260,22 +298,36 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     return '${rt.trim().isEmpty ? '-' : rt.trim()} / ${rw.trim().isEmpty ? '-' : rw.trim()}';
   }
 
-  /// 4 dokumen wajib pasca-lisensi (diunggah RM saat WAITING_RM_DOCS).
+  /// 4 dokumen wajib pasca-lisensi (diunggah saat WAITING_RM_DOCS).
   static const _postLicenseDocs = <String>['PAKTA_INTEGRITAS', 'PKS', 'SMAP', 'MEMO_2'];
 
-  /// Semua dokumen tersimpan sudah disetujui Admin (gate Input Lisensi / CIF).
+  /// Slot dokumen pasca-lisensi yang relevan untuk [a].
+  ///
+  /// Memo dibuang untuk agen yang masuk lewat jalur langsung — server pun sudah
+  /// mengecualikannya (`requiredPostLicenseDocs`), jadi menampilkannya di sini
+  /// hanya menuntut berkas yang untuk agen lama memang tidak pernah ada, dan
+  /// membuat layar terlihat belum lengkap padahal sudah bisa dilanjutkan.
+  List<String> _postLicenseDocsFor(AgentModel a) => a.approvalPath == 'DIRECT'
+      ? _postLicenseDocs.where((t) => !t.toUpperCase().startsWith('MEMO')).toList()
+      : _postLicenseDocs;
+
+  /// Semua dokumen tersimpan sudah disetujui pengelola agen kantor pusat
+  /// (gate Input Lisensi / CIF).
   bool get _allDocsApproved =>
       _docs.isNotEmpty && _docs.every((d) => d.isApproved);
 
   Widget _documentsCard(AgentModel a) {
     final isRm = _roles.contains('RM');
-    final isAdmin = _roles.contains('ADMIN');
-    final reviewing = isAdmin && (a.status == 'WAITING_LICENSE' || a.status == 'WAITING_CIF');
+    final isAgentHq = _roles.any(Roles.agentHqManagers.contains);
+    final reviewing = isAgentHq && (a.status == 'WAITING_LICENSE' || a.status == 'WAITING_CIF');
     // Slot dok pasca-lisensi yang BELUM diunggah → field unggah inline (intuitif,
     // ganti tombol "Unggah" dropdown lama).
     final uploaded = _docs.map((d) => d.docType).toSet();
-    final missingPostLicense = (isRm && a.status == 'WAITING_RM_DOCS')
-        ? _postLicenseDocs.where((t) => !uploaded.contains(t)).toList()
+    // Kantor pusat ikut: sejak POST /{id}/documents dibuka untuk DIV_AGEN, merekalah
+    // yang mengunggah dokumen saat memindahkan data agen lama — tanpa slot ini
+    // mereka mentok di WAITING_RM_DOCS tanpa satu pun cara mengunggah dari aplikasi.
+    final missingPostLicense = ((isRm || isAgentHq) && a.status == 'WAITING_RM_DOCS')
+        ? _postLicenseDocsFor(a).where((t) => !uploaded.contains(t)).toList()
         : const <String>[];
 
     return Container(
@@ -296,7 +348,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
             child: Text('Belum ada dokumen.', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
           )
         else ...[
-          for (final d in _docs) _docRow(a, d, isRm: isRm, isAdmin: isAdmin),
+          for (final d in _docs) _docRow(a, d, isRm: isRm, isAgentHq: isAgentHq),
           for (final t in missingPostLicense) _emptyDocSlot(a, t),
         ],
         if (reviewing && !_allDocsApproved)
@@ -309,7 +361,7 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     );
   }
 
-  Widget _docRow(AgentModel a, AgentDocumentModel d, {required bool isRm, required bool isAdmin}) {
+  Widget _docRow(AgentModel a, AgentDocumentModel d, {required bool isRm, required bool isAgentHq}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -341,8 +393,8 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
             child: Text('Alasan ditolak: ${d.rejectionReason}',
                 style: const TextStyle(fontSize: 11, color: AppColors.errorRed)),
           ),
-        // Aksi Admin: setujui / tolak per-dokumen.
-        if (isAdmin && (!d.isApproved || !d.isRejected))
+        // Aksi pengelola agen kantor pusat: setujui / tolak per-dokumen.
+        if (isAgentHq && (!d.isApproved || !d.isRejected))
           Padding(
             padding: const EdgeInsets.only(left: 26, top: 6),
             child: Wrap(spacing: 8, children: [
@@ -352,8 +404,8 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
                 _miniBtn('Tolak', AppColors.errorRed, () => _rejectDoc(a, d)),
             ]),
           ),
-        // RM: unggah ulang dokumen yang ditolak.
-        if (isRm && d.isRejected)
+        // Pengunggah (RM atau kantor pusat): unggah ulang dokumen yang ditolak.
+        if ((isRm || isAgentHq) && d.isRejected)
           Padding(
             padding: const EdgeInsets.only(left: 26, top: 6),
             child: _miniBtn('Unggah Ulang', AppColors.primaryNavy, () => _pickAndUpload(a, d.docType)),
@@ -432,14 +484,20 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     final buttons = <Widget>[];
     final isRm = _roles.contains('RM');
     final isSupervisor = _roles.any((r) => r == 'BM' || r == 'RO' || r == 'KUP');
-    final isAdmin = _roles.contains('ADMIN');
+    // Tahap kantor pusat: input lisensi, terbitkan CIF, setujui perpanjangan, dan
+    // adjudikasi dokumen. Dulu hanya ADMIN; kini Divisi Pengelolaan Agen memegangnya
+    // langsung. Cermin hasAnyRole('ADMIN','DIV_AGEN') di AgentController.
+    final isAgentHq = _roles.any(Roles.agentHqManagers.contains);
 
-    if (isSupervisor && a.status == 'WAITING_APPROVAL') {
+    // Kantor pusat ikut memutus: cermin hasAnyRole('BM','RO','KUP','DIV_AGEN') di
+    // AgentController. Keputusannya tetap tercatat BRANCH — yang direkam adalah
+    // rutenya (diputuskan, bukan dilompati); siapa pemutusnya ada di approved_by.
+    if ((isSupervisor || isAgentHq) && a.status == 'WAITING_APPROVAL') {
       buttons.add(_btn('Tolak', Icons.close, AppColors.errorRed, _rejectFlow, outlined: true));
       buttons.add(_btn('Setujui', Icons.check, AppColors.successGreen,
           () => _run(() => _repo.approve(a.id).then((_) {}), 'Pengajuan disetujui.')));
     }
-    if (isAdmin && a.status == 'WAITING_LICENSE') {
+    if (isAgentHq && a.status == 'WAITING_LICENSE') {
       buttons.add(_btn('Input Lisensi', Icons.badge_outlined, AppColors.primaryNavy,
           () => _licenseFlow(a), enabled: _allDocsApproved));
     }
@@ -448,22 +506,44 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
       buttons.add(_btn('Ajukan Persetujuan', Icons.send, AppColors.primaryNavy,
           () => _run(() => _repo.submitForApproval(a.id).then((_) {}), 'Pengajuan dikirim.')));
     }
-    if (isRm && a.status == 'WAITING_RM_DOCS') {
+    // Kirim dokumen & atur PKS ikut terbuka untuk kantor pusat: server sudah
+    // menerima keduanya dari DIV_AGEN, dan pada pemindahan data agen lama merekalah
+    // yang mengerjakannya — tidak ada RM yang mengurus agen yang sudah berjalan.
+    if ((isRm || isAgentHq) && a.status == 'WAITING_RM_DOCS') {
       buttons.add(_btn('Kirim Dokumen', Icons.send, AppColors.primaryNavy,
           () => _run(() => _repo.submitDocuments(a.id).then((_) {}), 'Dokumen dikirim untuk penerbitan CIF.')));
     }
-    if (isRm) {
+    if (isRm || isAgentHq) {
       buttons.add(_btn('Atur PKS', Icons.assignment_outlined, AppColors.primaryNavy, () => _pksFlow(a), outlined: true));
     }
     if (isRm && (a.status == 'DRAFT' || a.status == 'WAITING_APPROVAL' || a.status == 'REJECTED')) {
       buttons.add(_btn('Hapus', Icons.delete_outline, AppColors.errorRed, () => _deleteFlow(a), outlined: true));
     }
-    if (isAdmin && a.status == 'WAITING_CIF') {
+    if (isAgentHq && a.status == 'WAITING_CIF') {
       buttons.add(_btn('Terbitkan CIF', Icons.key_outlined, AppColors.secondaryOrange,
           () => _issueCifFlow(a), enabled: _allDocsApproved));
     }
-    if (isAdmin && a.status == 'WAITING_RENEWAL') {
+    if (isAgentHq && a.status == 'WAITING_RENEWAL') {
       buttons.add(_btn('Setujui Perpanjangan', Icons.autorenew, AppColors.successGreen, () => _licenseFlow(a, renewal: true)));
+    }
+    // Jalur langsung kantor pusat: melewati persetujuan cabang sepenuhnya, dipakai
+    // terutama saat memindahkan data agen lama yang memang sudah berjalan.
+    // WAITING_APPROVAL ikut: pengaju kantor pusat yang terlanjur menekan "Ajukan
+    // Persetujuan" tidak boleh terjebak menunggu keputusan cabang yang memang tidak
+    // relevan untuk pemindahan data agen lama.
+    if (isAgentHq &&
+        (a.status == 'DRAFT' ||
+            a.status == 'REJECTED' ||
+            a.status == 'WAITING_APPROVAL')) {
+      buttons.add(_btn('Masukkan Langsung', Icons.playlist_add_check,
+          AppColors.secondaryOrange, () => _directApproveFlow(a), outlined: true));
+    }
+    // Koreksi data kantor pusat: tersedia pada status APA PUN, tidak seperti
+    // "Edit Data" milik RM yang mati begitu pengajuan diproses. Justru agen yang
+    // sudah berjalan itulah yang datanya tak bisa disentuh siapa pun sebelum ini.
+    if (isAgentHq) {
+      buttons.add(_btn('Koreksi Data', Icons.fact_check_outlined,
+          AppColors.primaryNavy, () => _koreksiFlow(a), outlined: true));
     }
 
     if (buttons.isEmpty) return const SizedBox.shrink();
@@ -516,6 +596,57 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
   Future<void> _editFlow(AgentModel a) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => AjukanAgenScreen(existing: a)),
+    );
+    if (changed == true) await _load();
+  }
+
+  /// Konfirmasi yang menyebut APA yang dilewati. Jalur ini menghapus pemeriksaan
+  /// empat mata — satu orang mendaftarkan, mengunggah dokumen, dan meloloskan
+  /// sekaligus — jadi jangan sampai tertekan tanpa disadari.
+  Future<void> _directApproveFlow(AgentModel a) async {
+    final setuju = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Masukkan tanpa persetujuan cabang?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${a.name} akan langsung lolos ke tahap lisensi tanpa dilihat '
+                'pimpinan cabang.',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 10),
+            const Text(
+              'Field wajib & dokumen registrasi wajib TETAP diperiksa — hanya memo '
+              'yang dikecualikan. Perbuatan ini tercatat atas nama Anda, dan cabang '
+              'menerima pemberitahuan.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.secondaryOrange,
+                foregroundColor: Colors.white),
+            child: const Text('Masukkan Langsung'),
+          ),
+        ],
+      ),
+    );
+    if (setuju != true) return;
+    await _run(() => _repo.approveDirect(a.id).then((_) {}),
+        'Agen dimasukkan langsung, menunggu lisensi.');
+  }
+
+  Future<void> _koreksiFlow(AgentModel a) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => KoreksiAgenScreen(agent: a)),
     );
     if (changed == true) await _load();
   }

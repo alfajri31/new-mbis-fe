@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import '../widgets/glass_app_bar.dart';
 import '../widgets/max_width_body.dart';
 
@@ -48,6 +49,10 @@ class KelolaScreen extends StatelessWidget {
         desc: 'Atur nilai dropdown, produk, rate COB, dan daftar broker',
         bg: AppColors.greenLight,
         route: '/kelola/master-data',
+        // Divisi kantor pusat masuk lewat sini ke bagian yang jadi miliknya saja
+        // (produk, BUMN, broker, template agen) — layarnya menyaring sendiri per
+        // peran. DIV_AUDIT & DIV_PROGRAM tidak ikut: mereka hanya melihat.
+        roles: {'ADMIN', ...Roles.curatorDivisions},
       ),
       _KelolaItem(
         icon: Icons.smart_toy_outlined,
@@ -70,7 +75,8 @@ class KelolaScreen extends StatelessWidget {
         bg: AppColors.navyBg,
         route: '/kelola/manajemen-agen',
         // Persetujuan pengajuan agen dilakukan pimpinan kantor RM: BM, RO, KUP.
-        roles: {'ADMIN', 'BM', 'RO', 'KUP'},
+        // DIV_AGEN memegang sisi kantor pusatnya: lisensi, perpanjangan, dan CIF.
+        roles: {'ADMIN', 'BM', 'RO', 'KUP', Roles.divAgen},
       ),
       _KelolaItem(
         icon: Icons.swap_horiz,
@@ -126,11 +132,16 @@ class KelolaScreen extends StatelessWidget {
         route: '/kelola/import-pipeline',
       ),
       _KelolaItem(
-        icon: Icons.flag_outlined,
-        label: 'Impor Target RM',
-        desc: 'Unggah target bulanan tiap RM per kategori (AKK, AKM, SB, ...) via template Excel',
-        bg: AppColors.navyBg,
-        route: '/kelola/import-target',
+        icon: Icons.fact_check_outlined,
+        // Satu entri untuk keduanya: berkas rekap pusat memuat kolom Target dan
+        // Realisasi berdampingan, jadi dua menu terpisah berarti mengunggah berkas
+        // yang sama dua kali — dan kalau salah satu terlewat, dashboard
+        // membandingkan realisasi bulan ini dengan target bulan lalu.
+        label: 'Impor Target & Realisasi',
+        desc: 'Unggah rekap bulanan dari pusat sekali untuk mengisi target dan '
+            'realisasi; realisasi pipeline WON tetap utuh',
+        bg: AppColors.greenLight,
+        route: '/kelola/import-realisasi',
       ),
     ];
 

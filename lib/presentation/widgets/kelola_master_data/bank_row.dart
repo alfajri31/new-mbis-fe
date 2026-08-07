@@ -13,12 +13,18 @@ class BankRow extends StatelessWidget {
     required this.onOpenBranches,
     required this.onEdit,
     required this.onDelete,
+    this.canEdit = true,
   });
 
   final BankItem bank;
   final VoidCallback onOpenBranches;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// False bila pemanggil boleh MELIHAT baris ini tapi tidak menyuntingnya —
+  /// kurator DIV_SOE atas bank non-HIMBARA. Menu ubah/hapus disembunyikan dan
+  /// baris diberi keterangan, alih-alih menyodorkan aksi yang pasti ditolak server.
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +43,7 @@ class BankRow extends StatelessWidget {
         ),
         subtitle: Text(
           [
-            'Kelola cabang',
+            canEdit ? 'Kelola cabang' : 'Bukan HIMBARA — hanya bisa dilihat',
             if (b.tipeBank != null && b.tipeBank!.isNotEmpty) b.tipeBank!,
           ].join(' • '),
           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
@@ -48,13 +54,16 @@ class BankRow extends StatelessWidget {
             if (v == 'edit') onEdit();
             if (v == 'delete') onDelete();
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'branches', child: Text('Kelola cabang')),
-            PopupMenuItem(value: 'edit', child: Text('Edit')),
-            PopupMenuItem(
-              value: 'delete',
-              child: Text('Hapus', style: TextStyle(color: AppColors.errorRed)),
-            ),
+          itemBuilder: (_) => <PopupMenuEntry<String>>[
+            const PopupMenuItem<String>(
+                value: 'branches', child: Text('Kelola cabang')),
+            if (canEdit)
+              const PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
+            if (canEdit)
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Text('Hapus', style: TextStyle(color: AppColors.errorRed)),
+              ),
           ],
         ),
       ),
