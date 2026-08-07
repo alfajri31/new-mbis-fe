@@ -30,6 +30,7 @@ import '../presentation/screens/kelola_akun_screen.dart';
 import '../presentation/screens/kelola_aktivitas_ai_screen.dart';
 import '../presentation/screens/export_data_screen.dart';
 import '../presentation/screens/import_pipeline_screen.dart';
+import '../presentation/screens/import_realisasi_screen.dart';
 import '../presentation/screens/import_target_screen.dart';
 import '../presentation/screens/export_my_visits_screen.dart';
 import '../presentation/screens/privasi_akun_screen.dart';
@@ -326,6 +327,9 @@ List<RouteBase> _konsolSubRoutes() => [
       GoRoute(
           path: 'master-data',
           builder: (_, _) => const KelolaMasterDataScreen()),
+      GoRoute(
+          path: 'import-realisasi',
+          builder: (_, _) => const ImportRealisasiScreen()),
       GoRoute(path: 'akun', builder: (_, _) => const KelolaAkunScreen()),
       GoRoute(
           path: 'aktivitas-ai',

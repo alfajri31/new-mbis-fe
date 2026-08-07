@@ -532,8 +532,22 @@ class DashboardCategoryStat {
   final String label;
   final String description;
   final double targetYtd;
+
+  /// Angka yang DITAMPILKAN: realisasi resmi untuk bulan yang sudah diunggah
+  /// pusat, realisasi WON untuk bulan yang belum.
   final double realisasiYtd;
   final double targetFullYear;
+
+  /// Realisasi dari pipeline WON apa adanya — tetap dipakai ekspor & layar detail.
+  final double realisasiWonYtd;
+
+  /// Realisasi resmi; HANYA menjumlahkan bulan yang benar-benar diunggah.
+  final double realisasiResmiYtd;
+
+  /// Berapa bulan berjalan yang memakai angka resmi. 0 = yang tampil murni WON,
+  /// jadi label "Resmi" tidak boleh ditampilkan.
+  final int bulanResmi;
+
   final List<DashboardCategoryMonth> months;
 
   DashboardCategoryStat({
@@ -543,8 +557,17 @@ class DashboardCategoryStat {
     required this.targetYtd,
     required this.realisasiYtd,
     required this.targetFullYear,
+    required this.realisasiWonYtd,
+    required this.realisasiResmiYtd,
+    required this.bulanResmi,
     required this.months,
   });
+
+  /// Ada angka resmi yang ikut membentuk angka YTD di layar.
+  bool get pakaiResmi => bulanResmi > 0;
+
+  /// Selisih angka yang tampil terhadap angka WON — inti layar detail.
+  double get selisihTerhadapWon => realisasiYtd - realisasiWonYtd;
 
   /// Rasio pencapaian. Target 0 tapi ada realisasi → dianggap 100% (sesuai aturan bisnis);
   /// keduanya 0 → 0. Bisa >1 (boleh lewat target).
@@ -568,6 +591,12 @@ class DashboardCategoryStat {
         targetYtd: (json['targetYtd'] ?? 0).toDouble(),
         realisasiYtd: (json['realisasiYtd'] ?? 0).toDouble(),
         targetFullYear: (json['targetFullYear'] ?? 0).toDouble(),
+        // Server lama belum mengirim tiga field ini: jatuh ke angka yang tampil
+        // supaya layar detail menyebut "sama dengan WON", bukan nol palsu.
+        realisasiWonYtd:
+            (json['realisasiWonYtd'] ?? json['realisasiYtd'] ?? 0).toDouble(),
+        realisasiResmiYtd: (json['realisasiResmiYtd'] ?? 0).toDouble(),
+        bulanResmi: (json['bulanResmi'] ?? 0) as int,
         months: (json['months'] as List<dynamic>?)
                 ?.map((e) => DashboardCategoryMonth.fromJson(e as Map<String, dynamic>))
                 .toList() ??
@@ -579,20 +608,35 @@ class DashboardCategoryMonth {
   final int month;
   final String label;
   final double target;
+
+  /// Angka yang ditampilkan bulan ini: resmi bila ada, selain itu WON.
   final double realisasi;
+  final double realisasiWon;
+
+  /// null = pusat belum mengunggah bulan ini, jadi yang tampil angka WON.
+  final double? realisasiResmi;
 
   DashboardCategoryMonth({
     required this.month,
     required this.label,
     required this.target,
     required this.realisasi,
+    required this.realisasiWon,
+    this.realisasiResmi,
   });
+
+  bool get pakaiResmi => realisasiResmi != null;
 
   factory DashboardCategoryMonth.fromJson(Map<String, dynamic> json) => DashboardCategoryMonth(
         month: json['month'] ?? 0,
         label: json['label'] ?? '',
         target: (json['target'] ?? 0).toDouble(),
         realisasi: (json['realisasi'] ?? 0).toDouble(),
+        realisasiWon:
+            (json['realisasiWon'] ?? json['realisasi'] ?? 0).toDouble(),
+        realisasiResmi: json['realisasiResmi'] == null
+            ? null
+            : (json['realisasiResmi'] as num).toDouble(),
       );
 }
 

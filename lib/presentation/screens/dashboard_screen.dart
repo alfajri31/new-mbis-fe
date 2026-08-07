@@ -823,6 +823,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (cat == null) return;
     final maxMonth = _categories?.currentMonth ?? 12;
     final months = cat.months.where((m) => m.month <= maxMonth).toList();
+    // Pembedahan sumber angka (rekap resmi vs pipeline WON) hanya untuk RM —
+    // dialah pemilik angkanya dan satu-satunya yang bisa menindaklanjuti kalau
+    // rekap pusat tak cocok dengan pipeline-nya. Bagi atasan & admin angkanya
+    // sudah teragregasi lintas RM, jadi rinciannya tidak bisa ditindaklanjuti
+    // dan hanya menambah keramaian. Dibaca sekali di sini, bukan di dalam
+    // builder, supaya tiap baris bulan tidak menelusuri context berulang kali.
+    final tampilkanSumber = _isRm;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surfaceWhite,
@@ -854,6 +861,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 ),
               ),
               const SizedBox(height: 12),
+              if (tampilkanSumber) ...[
+                _perbandinganSumber(cat),
+                const SizedBox(height: 12),
+              ],
               Flexible(
                 child: months.isEmpty
                     ? const Padding(
@@ -897,12 +908,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        'Realisasi ${AppFormat.currencyShort(m.realisasi)}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textPrimary,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              'Realisasi ${AppFormat.currencyShort(m.realisasi)}',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          if (tampilkanSumber &&
+                                              m.pakaiResmi) ...[
+                                            const SizedBox(width: 6),
+                                            const _SumberChip(),
+                                          ],
+                                        ],
                                       ),
                                       Text(
                                         'Target ${AppFormat.currencyShort(m.target)}',
@@ -911,6 +933,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                           color: AppColors.textSecondary,
                                         ),
                                       ),
+                                      // Angka WON hanya disebut saat berbeda:
+                                      // menuliskannya di tiap baris membuat yang
+                                      // penting (selisihnya) tenggelam.
+                                      if (tampilkanSumber &&
+                                          m.pakaiResmi &&
+                                          m.realisasiWon != m.realisasi)
+                                        Text(
+                                          'Pipeline WON ${AppFormat.currencyShort(m.realisasiWon)}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.grayStage,
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -934,6 +969,120 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       ),
     );
   }
+
+  /// Perbandingan sumber angka — hanya untuk RM (lihat `tampilkanSumber` di
+  /// [_openCategoryMonthly]), tapi bagi RM ditampilkan untuk SETIAP kategori,
+  /// termasuk yang tidak punya rekap resmi sama sekali (Total, KUR).
+  ///
+  /// Justru kategori tanpa rekap resmi yang paling perlu menyebutkan sumbernya.
+  /// Berkas pusat tidak memuat kolom Total maupun KUR, jadi keduanya selamanya
+  /// memakai angka pipeline WON — sementara kategori tetangganya sudah memakai
+  /// angka resmi. Tanpa keterangan ini, orang yang berpindah filter akan melihat
+  /// Total lebih kecil daripada salah satu bagiannya dan menyimpulkan aplikasinya
+  /// rusak, padahal yang berbeda adalah sumber datanya.
+  Widget _perbandinganSumber(DashboardCategoryStat cat) {
+    final selisih = cat.selisihTerhadapWon;
+    final naik = selisih >= 0;
+    final adaResmi = cat.pakaiResmi;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.navyBg,
+        borderRadius: AppRadius.radiusLg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (adaResmi) ...[
+                const _SumberChip(),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  adaResmi
+                      ? '${cat.bulanResmi} bulan memakai rekap resmi pusat'
+                      : 'Belum ada rekap resmi untuk kategori ini — '
+                          'angkanya murni dari pipeline WON',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _barisSumber('Angka yang tampil', cat.realisasiYtd, tebal: true),
+          _barisSumber('Dari rekap resmi', cat.realisasiResmiYtd),
+          _barisSumber('Dari pipeline WON', cat.realisasiWonYtd),
+          const Divider(height: 14, color: AppColors.border),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Selisih terhadap WON',
+                  style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                ),
+              ),
+              Text(
+                adaResmi
+                    ? '${naik ? '+' : '−'}${AppFormat.currencyShort(selisih.abs())}'
+                    : 'tidak ada',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: !adaResmi
+                      ? AppColors.grayStage
+                      : (naik ? AppColors.successGreen : AppColors.errorRed),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            adaResmi
+                ? 'Ekspor data tetap memakai angka dari pipeline WON.'
+                : 'Kategori ini tidak ada di berkas rekap pusat, jadi angkanya '
+                    'tidak bisa dibandingkan dengan kategori yang sudah memakai '
+                    'rekap resmi.',
+            style: const TextStyle(fontSize: 11, color: AppColors.grayStage),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _barisSumber(String label, double value, {bool tebal = false}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: tebal
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                  fontWeight: tebal ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+            Text(
+              AppFormat.currencyShort(value),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: tebal ? FontWeight.bold : FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _buildJadwalList(List<DashboardSchedule> schedules) {
     if (schedules.isEmpty) {
@@ -1152,6 +1301,33 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
             fontWeight: FontWeight.w600,
             color: selected ? Colors.white : AppColors.primaryNavy,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Penanda kecil "Resmi" — dipasang HANYA pada angka yang benar-benar berasal
+/// dari rekap pusat. Bulan yang belum diunggah tetap memakai angka pipeline WON
+/// dan sengaja tidak diberi penanda ini, supaya tidak ada klaim sumber yang
+/// tidak benar.
+class _SumberChip extends StatelessWidget {
+  const _SumberChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.successGreen.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'Resmi',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.bold,
+          color: AppColors.successGreen,
         ),
       ),
     );
