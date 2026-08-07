@@ -26,6 +26,11 @@ class CustomerListState {
   final String searchTerm;
   final String? entityFilter;
   final bool hvcFilter;
+
+  /// Tahap pipeline terpilih (P3/P2/P1/WON/DECLINE); null = semua tahap.
+  /// Disaring di SERVER, bukan di klien: daftarnya berhalaman, jadi menyaring
+  /// satu halaman akan menampilkan "3 dari 20" padahal yang cocok ratusan.
+  final String? stageFilter;
   final CustomerKpi? kpi;
   final bool initialLoading;
   final String? error;
@@ -68,6 +73,7 @@ class CustomerListState {
     this.searchTerm = '',
     this.entityFilter,
     this.hvcFilter = false,
+    this.stageFilter,
     this.kpi,
     this.initialLoading = true,
     this.error,
@@ -94,6 +100,7 @@ class CustomerListState {
     String? searchTerm,
     Object? entityFilter = _keep,
     bool? hvcFilter,
+    Object? stageFilter = _keep,
     Object? kpi = _keep,
     bool? initialLoading,
     Object? error = _keep,
@@ -120,6 +127,8 @@ class CustomerListState {
       entityFilter:
           entityFilter == _keep ? this.entityFilter : entityFilter as String?,
       hvcFilter: hvcFilter ?? this.hvcFilter,
+      stageFilter:
+          stageFilter == _keep ? this.stageFilter : stageFilter as String?,
       kpi: kpi == _keep ? this.kpi : kpi as CustomerKpi?,
       initialLoading: initialLoading ?? this.initialLoading,
       error: error == _keep ? this.error : error as String?,
@@ -409,6 +418,17 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     }
   }
 
+  /// Pilih tahap pipeline (null = semua). Menekan tahap yang sedang aktif
+  /// mematikannya — pintasan yang dipakai orang tanpa perlu membuka sheet lagi.
+  void onStageChanged(String? stage) {
+    final next = state.stageFilter == stage ? null : stage;
+    state = state.copyWith(stageFilter: next);
+    if (_isPaged) {
+      _loadStats();
+      _resetAndLoad();
+    }
+  }
+
   Future<void> _loadScopeOffices() async {
     try {
       final offices = await _dashRepo.getScopeOffices();
@@ -427,6 +447,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         branchId: state.branchId,
         rmId: state.rmId,
         hvc: state.hvcFilter,
+        stage: state.stageFilter,
       );
       state = state.copyWith(kpi: kpi);
     } catch (_) {
@@ -452,6 +473,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         branchId: state.branchId,
         rmId: state.rmId,
         hvc: state.hvcFilter,
+        stage: state.stageFilter,
       );
       // Load lebih baru (filter/search/reset) mulai saat ini in-flight — buang
       // respons usang ini agar barisnya tak menimpa daftar baru.
@@ -568,6 +590,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     state = state.copyWith(
       entityFilter: null,
       hvcFilter: false,
+      stageFilter: null,
       regionId: null,
       branchId: null,
       rmId: null,

@@ -13,9 +13,8 @@ import '../../src/nav.dart';
 import '../../src/pipeline/pipeline_repository.dart';
 import '../../src/pipeline/pipeline_timeline.dart';
 import '../../src/visit/visit_repository.dart';
-import '../../src/broker/broker_repository.dart';
-import '../../src/reference/reference_repository.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import '../../src/network/api_client.dart';
 import '../../src/pipeline/pipeline_stage.dart';
 import '../../utils/format.dart';
@@ -35,6 +34,7 @@ import '../widgets/pipeline_detail/pipeline_visit_web_notice.dart';
 // loaded on demand to keep the map library out of the initial bundle.
 import '../widgets/visit_detail_sheet.dart' deferred as vds;
 import 'add_activity_screen.dart';
+import 'add_pipeline_screen.dart';
 import 'tender_status_screen.dart';
 import '../widgets/dispose_callback.dart';
 
@@ -67,10 +67,8 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
   List<PipelineHistoryModel> get _history =>
       _ds.history; // Log Activity timeline
   List<PipelineDocumentModel> get _docs => _ds.docs; // SPAU / Underlying
-  List<BrokerModel> get _brokers =>
-      _ds.brokers; // edit sheet broker dropdown (P4)
-  ProductCascade get _cascade => _ds.cascade; // edit sheet COB/LOB/ToC
-  List<ParamRef> get _kerjaSamaOptions => _ds.kerjaSamaOptions;
+  // Broker, cascade produk, dan opsi kerja sama tidak lagi dibaca di sini:
+  // formulir edit kini AddPipelineScreen, yang memuat referensinya sendiri.
 
   // Repo/ApiClient untuk aksi-tulis & preview yang tetap di widget (upload/delete
   // dokumen, edit/ubah status, jadwal, buka visit). Dari shared provider — bukan
@@ -157,7 +155,20 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
         pipeline.referralStatus == 'APPROVED' &&
         _currentUserId != null &&
         _currentUserId == pipeline.referralFromRmId;
-    final isReadOnly = isWon || isDeclined || isHandedOver;
+    // Pipeline terkunci karena SIKLUS HIDUPNYA, terlepas dari siapa yang membuka.
+    final lifecycleLocked = isWon || isDeclined || isHandedOver;
+
+    // Dua gerbang peran, karena server memang membedakannya:
+    //   • data pipeline (produk/TSI/rate) → hasAnyRole('RM','BM','RO','KUP')
+    //   • pekerjaan lapangan (stage, jadwal, kunjungan, dokumen) → hasRole('RM'),
+    //     yang lewat RoleHierarchy hanya menaikkan ADMIN & KUP — bukan BM/RO.
+    // Sebelumnya keduanya disamakan, sehingga BM/RO disodori tombol ubah status,
+    // jadwal, dan unggah dokumen yang seluruhnya berujung 403. Peran divisi kantor
+    // pusat gagal di kedua gerbang: cakupan bacanya nasional, hak tulisnya tidak ada.
+    final roles = MbisApp.of(context)?.session?.user.roles;
+    final canEditPipeline = Roles.hasAny(roles, Roles.pipelineWriters);
+    final canFieldWork = Roles.hasAny(roles, Roles.pipelineFieldWorkers);
+    final isReadOnly = lifecycleLocked || !canFieldWork;
 
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
@@ -177,11 +188,23 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           ),
         ),
         actions: [
-          if (!isAgent && !isReadOnly)
+          // Sengaja memakai lifecycleLocked + canEditPipeline, bukan isReadOnly:
+          // BM/RO boleh mengoreksi data pipeline di kantornya walau tak boleh
+          // mengerjakan pekerjaan lapangannya.
+          if (!isAgent && !lifecycleLocked && canEditPipeline)
             IconButton(
               icon: const Icon(Icons.edit_outlined, color: Colors.white),
               tooltip: 'Edit Pipeline',
-              onPressed: () => _showEditPipelineSheet(pipeline),
+              onPressed: () => _openEditPipeline(pipeline),
+            ),
+          // Hapus permanen: ADMIN saja, sejalan dengan gerbang server. RM pemilik
+          // pun tidak diberi tombol ini — pipeline ikut membentuk angka capaian,
+          // jadi koreksinya lewat ubah stage/isi, bukan menghapus jejaknya.
+          if (roles != null && roles.contains('ADMIN'))
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              tooltip: 'Hapus Pipeline',
+              onPressed: () => _confirmDeletePipeline(pipeline),
             ),
         ],
       ),
@@ -215,7 +238,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                               flex: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: _primarySections(pipeline, isAgent: isAgent),
+                                children: _primarySections(pipeline, isAgent: isAgent, canWrite: canFieldWork),
                               ),
                             ),
                             const SizedBox(width: AppSpacing.lg),
@@ -227,6 +250,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                                   pipeline,
                                   isAgent: isAgent,
                                   isReadOnly: isReadOnly,
+                                  canFieldWork: canFieldWork,
                                   isWon: isWon,
                                   isDeclined: isDeclined,
                                 ),
@@ -237,12 +261,13 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ..._primarySections(pipeline, isAgent: isAgent),
+                            ..._primarySections(pipeline, isAgent: isAgent, canWrite: canFieldWork),
                             const SizedBox(height: 16),
                             ..._sidebarSections(
                               pipeline,
                               isAgent: isAgent,
                               isReadOnly: isReadOnly,
+                              canFieldWork: canFieldWork,
                               isWon: isWon,
                               isDeclined: isDeclined,
                             ),
@@ -259,7 +284,8 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
 
   /// Primary info sections — the left column on desktop, the top of the single
   /// column on mobile.
-  List<Widget> _primarySections(PipelineDetailModel pipeline, {required bool isAgent}) {
+  List<Widget> _primarySections(PipelineDetailModel pipeline,
+      {required bool isAgent, required bool canWrite}) {
     final banner = PipelineReferralBanner.maybe(pipeline, currentUserId: _currentUserId);
     return [
       if (banner != null) ...[banner, const SizedBox(height: 16)],
@@ -282,6 +308,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
         docs: _docs,
         currentUserId: _currentUserId,
         isAgent: isAgent,
+        canWrite: canWrite,
         onView: _openPipelineDoc,
         onUpload: _uploadPipelineDoc,
         onDelete: _deletePipelineDoc,
@@ -347,6 +374,57 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     }
   }
 
+  /// Konfirmasi hapus pipeline (ADMIN).
+  ///
+  /// Dialognya menyebut akibat yang tidak terlihat dari layar ini: jadwal,
+  /// kunjungan, dan dokumennya ikut terhapus, dan untuk pipeline WON angka
+  /// realisasi RM-nya ikut turun. Tanpa itu, penghapusan terasa seperti
+  /// "menutup satu baris" padahal ia mengubah angka capaian.
+  Future<void> _confirmDeletePipeline(PipelineDetailModel pipeline) async {
+    final won = pipeline.stage.toUpperCase() == 'WON';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Hapus pipeline ini?'),
+        content: Text(
+          'Pipeline "${pipeline.projectName ?? pipeline.customerName ?? '-'}" '
+          'akan dihapus permanen beserta jadwal, kunjungan, dan dokumennya.'
+          '${won ? '\n\nPipeline ini berstatus WON: realisasinya ikut hilang, '
+              'sehingga capaian RM yang bersangkutan akan turun.' : ''}'
+          '\n\nTindakan ini tidak bisa dibatalkan.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Hapus',
+                  style: TextStyle(color: AppColors.errorRed))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await _pipelineRepo.deletePipeline(pipeline.id);
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Pipeline dihapus'),
+        backgroundColor: AppColors.successGreen,
+      ));
+      navigator.pop(true); // daftar di belakang memuat ulang
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: AppColors.errorRed,
+      ));
+    }
+  }
+
   Future<void> _deletePipelineDoc(PipelineDocumentModel doc) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -383,6 +461,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     PipelineDetailModel pipeline, {
     required bool isAgent,
     required bool isReadOnly,
+    required bool canFieldWork,
     required bool isWon,
     required bool isDeclined,
   }) {
@@ -499,7 +578,9 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
             ],
           ),
         ),
-        if (!isAgent) ...[
+        // "Pipeline Dicancel" memanggil PUT /{id}/status → hasRole('RM'). BM/RO
+        // tidak lolos, jadi tombolnya jangan ditampilkan kepada mereka.
+        if (!isAgent && canFieldWork) ...[
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -661,7 +742,8 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           : () async {
               await vds.loadLibrary();
               if (!mounted) return;
-              vds.showVisitDetail(context, _apiClient, visit);
+              final changed = await vds.showVisitDetail(context, _apiClient, visit);
+              if (changed && mounted) await _fetchData(silent: true);
             },
     );
   }
@@ -784,33 +866,27 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     }
   }
 
-  /// Edit pipeline business fields. The sheet is a self-contained StatefulWidget
-  /// (not an inline StatefulBuilder) so its MediaQuery/controllers tear down
-  /// cleanly; the save happens here, after the sheet route is fully popped.
-  Future<void> _showEditPipelineSheet(PipelineDetailModel p) async {
-    final result = await showModalBottomSheet<_EditPipelineResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => _EditPipelineSheet(
-          initial: p, brokers: _brokers, cascade: _cascade, kerjaSama: _kerjaSamaOptions),
+  /// Buka formulir pipeline dalam mode edit.
+  ///
+  /// Memakai [AddPipelineScreen] yang sama dengan alur tambah, menggantikan sheet
+  /// lama yang hanya memuat sebagian field — nama tender, tahapan tender, dan
+  /// pihak kerja sama dulu tidak pernah bisa diperbaiki setelah pipeline dibuat.
+  /// Penyimpanan dikerjakan layar itu; di sini tinggal memuat ulang detailnya.
+  Future<void> _openEditPipeline(PipelineDetailModel p) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddPipelineScreen(
+          customerId: p.customerId ?? '',
+          customerName: p.customerName,
+          existing: p,
+        ),
+      ),
     );
-    if (result == null || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await _pipelineRepo.updatePipeline(p.id, result.toBody());
-      if (!mounted) return;
-      _fetchData(silent: true);
-      messenger.showSnackBar(const SnackBar(content: Text('Pipeline diperbarui')));
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
-    }
+    if (saved == true && mounted) await _fetchData(silent: true);
   }
 
-  /// Schedule a future visit. Self-contained sheet (see _showEditPipelineSheet
-  /// note); inline required-field validation lives inside the sheet (J2).
+  /// Schedule a future visit. Self-contained sheet; inline required-field
+  /// validation lives inside the sheet (J2).
   Future<void> _showScheduleSheet() async {
     final result = await showModalBottomSheet<_ScheduleResult>(
       context: context,
@@ -950,422 +1026,6 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
 //  cleanly. They return their result via Navigator.pop; the caller performs
 //  the network call afterwards (avoids the `_dependents.isEmpty` assertion).
 // ===========================================================================
-
-/// Result of [_EditPipelineSheet].
-class _EditPipelineResult {
-  final String sourceType;
-  final String? refId;
-  final String? product;
-  final String? projectName;
-  final String? statusKerjaSama;
-  final String? cobName;
-  final String? lobName;
-  final String? tocCode;
-  final String? tocName;
-  final double? tsiIdr;
-  final double? ratePremi;
-  final DateTime? closing;
-
-  _EditPipelineResult({
-    required this.sourceType,
-    this.refId,
-    this.product,
-    this.projectName,
-    this.statusKerjaSama,
-    this.cobName,
-    this.lobName,
-    this.tocCode,
-    this.tocName,
-    this.tsiIdr,
-    this.ratePremi,
-    this.closing,
-  });
-
-  Map<String, dynamic> toBody() {
-    final body = <String, dynamic>{'sourceType': sourceType};
-    body['refId'] = refId; // null clears the link for non-broker sources
-    if (projectName != null) body['projectName'] = projectName;
-    if (statusKerjaSama != null) body['statusKerjaSama'] = statusKerjaSama;
-    // When a ToC is chosen, send the full cascade; product (card title) follows tocName.
-    if (tocCode != null) {
-      body['cobName'] = cobName;
-      body['lobName'] = lobName;
-      body['tocCode'] = tocCode;
-      body['tocName'] = tocName;
-    } else if (product != null && product!.isNotEmpty) {
-      body['product'] = product;
-    }
-    if (tsiIdr != null) body['tsiIdr'] = tsiIdr;
-    if (ratePremi != null) body['ratePremi'] = ratePremi;
-    if (closing != null) body['closingEstimasi'] = closing!.toIso8601String();
-    return body;
-  }
-}
-
-class _EditPipelineSheet extends StatefulWidget {
-  final PipelineDetailModel initial;
-  final List<BrokerModel> brokers;
-  final ProductCascade cascade;
-  final List<ParamRef> kerjaSama;
-  const _EditPipelineSheet(
-      {required this.initial, required this.brokers, required this.cascade, required this.kerjaSama});
-
-  @override
-  State<_EditPipelineSheet> createState() => _EditPipelineSheetState();
-}
-
-class _EditPipelineSheetState extends State<_EditPipelineSheet> {
-  static const _sources = {
-    'DIRECT': 'Direct',
-    'AGENT': 'Agen',
-    'BROKER': 'Broker',
-    'BANCASSURANCE': 'Bancassurance',
-    'TPM': 'TPM'
-  };
-
-  late final TextEditingController _tsiCtrl;
-  late final TextEditingController _productCtrl;
-  late final TextEditingController _rateCtrl;
-  late final TextEditingController _projectCtrl;
-  late String _sourceType;
-  String? _brokerId;
-  String? _statusKerjaSama;
-  String? _cob;
-  String? _lob;
-  String? _tocCode;
-  String? _tocName;
-  DateTime? _closing;
-
-  bool get _hasProducts => widget.cascade.all.isNotEmpty;
-
-  @override
-  void initState() {
-    super.initState();
-    final p = widget.initial;
-    _tsiCtrl = TextEditingController(text: p.tsiIdr > 0 ? AppFormat.thousands(p.tsiIdr.round()) : '');
-    _productCtrl = TextEditingController(text: p.product ?? '');
-    _rateCtrl = TextEditingController(text: p.ratePremi != null ? _trimNum(p.ratePremi!) : '');
-    _projectCtrl = TextEditingController(text: p.projectName ?? '');
-    _sourceType = p.sourceType ?? 'DIRECT';
-    if (_sourceType == 'BROKER' && p.refId != null && widget.brokers.any((b) => b.id == p.refId)) {
-      _brokerId = p.refId;
-    }
-    _statusKerjaSama = p.statusKerjaSama;
-    // Preselect cascade from current values if they exist in the product list.
-    _cob = (p.cobName != null && widget.cascade.cobs.contains(p.cobName)) ? p.cobName : null;
-    if (_cob != null && p.lobName != null && widget.cascade.lobs(_cob!).contains(p.lobName)) {
-      _lob = p.lobName;
-    }
-    if (_cob != null && _lob != null && p.tocCode != null) {
-      final match = widget.cascade.tocs(_cob!, _lob!).where((t) => t.tocCode == p.tocCode);
-      if (match.isNotEmpty) {
-        _tocCode = match.first.tocCode;
-        _tocName = match.first.tocName;
-      }
-    }
-    _closing = p.closingEstimasi != null ? DateTime.tryParse(p.closingEstimasi!) : null;
-  }
-
-  static String _trimNum(double v) {
-    var s = v.toStringAsFixed(4);
-    if (s.contains('.')) s = s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-    return s;
-  }
-
-  @override
-  void dispose() {
-    _tsiCtrl.dispose();
-    _productCtrl.dispose();
-    _rateCtrl.dispose();
-    _projectCtrl.dispose();
-    super.dispose();
-  }
-
-  // Estimasi premi tidak disimpan — backend menghitung ulang dari tsiIdr ×
-  // ratePremi saat read. Parsing di sini harus sama dengan _save() agar angka
-  // yang dipratinjau sama dengan yang tersimpan.
-  double get _tsiInput {
-    final digits = _tsiCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
-    return digits.isEmpty ? 0 : double.parse(digits);
-  }
-
-  double get _rateInput =>
-      double.tryParse(_rateCtrl.text.trim().replaceAll(',', '.')) ?? 0;
-
-  double get _estimasiPremiIdr => _tsiInput * (_rateInput / 100);
-
-  void _save() {
-    final tsiDigits = _tsiCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final result = _EditPipelineResult(
-      sourceType: _sourceType,
-      refId: _sourceType == 'BROKER' ? _brokerId : null,
-      product: _productCtrl.text.trim().isEmpty ? null : _productCtrl.text.trim(),
-      projectName: _projectCtrl.text.trim(),
-      statusKerjaSama: _statusKerjaSama,
-      cobName: _cob,
-      lobName: _lob,
-      tocCode: _tocCode,
-      tocName: _tocName,
-      tsiIdr: tsiDigits.isEmpty ? null : double.parse(tsiDigits),
-      ratePremi: double.tryParse(_rateCtrl.text.trim().replaceAll(',', '.')),
-      closing: _closing,
-    );
-    Navigator.of(context).pop(result);
-  }
-
-  Widget _estimasiPremiBox() {
-    final v = _estimasiPremiIdr;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Estimasi Premi (IDR)',
-            style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-        const SizedBox(height: 6),
-        Container(
-          height: 44,
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: AppColors.grayBg,
-            borderRadius: AppRadius.radiusMd,
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Text(
-            v > 0 ? 'Rp ${AppFormat.thousands(v.round())}' : 'Auto kalkulasi dari TSI × rate / 100',
-            style: const TextStyle(
-                fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final closingLabel = _closing == null ? 'Pilih tanggal' : AppFormat.dateOnly(_closing);
-    return Padding(
-      padding: EdgeInsets.only(
-          left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Edit Pipeline',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-            const SizedBox(height: 18),
-            DropdownButtonFormField<String>(
-              // Lihat catatan pada dropdown Status Kerja Sama di bawah.
-              initialValue: _sources.containsKey(_sourceType) ? _sourceType : null,
-              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                  labelText: 'Sumber Bisnis',
-                  labelStyle: const TextStyle(fontSize: 13),
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-              items: _sources.entries
-                  .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14))))
-                  .toList(),
-              onChanged: (v) => setState(() {
-                _sourceType = v ?? 'DIRECT';
-                if (_sourceType != 'BROKER') _brokerId = null;
-              }),
-            ),
-            if (_sourceType == 'BROKER') ...[
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _brokerId,
-                isExpanded: true,
-                style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                    labelText: 'Broker',
-                    labelStyle: const TextStyle(fontSize: 13),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-                items: widget.brokers
-                    .map((b) => DropdownMenuItem(
-                        value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14))))
-                    .toList(),
-                onChanged: (v) => setState(() => _brokerId = v),
-              ),
-              if (widget.brokers.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text('Daftar broker belum termuat',
-                      style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                ),
-            ],
-            const SizedBox(height: 10),
-            TextField(
-              controller: _projectCtrl,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                  labelText: 'Nama Proyek',
-                  labelStyle: const TextStyle(fontSize: 13),
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-            ),
-            if (widget.kerjaSama.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: widget.kerjaSama.any((k) => k.key == _statusKerjaSama) ? _statusKerjaSama : null,
-                isExpanded: true,
-                style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                    labelText: 'Status Kerja Sama',
-                    labelStyle: const TextStyle(fontSize: 13),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-                items: widget.kerjaSama
-                    .map((k) => DropdownMenuItem(value: k.key, child: Text(k.value, style: const TextStyle(fontSize: 14))))
-                    .toList(),
-                onChanged: (v) => setState(() => _statusKerjaSama = v),
-              ),
-            ],
-            const SizedBox(height: 10),
-            if (_hasProducts) ...[
-              DropdownButtonFormField<String>(
-                initialValue: _cob,
-                isExpanded: true,
-                style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                    labelText: 'COB',
-                    labelStyle: const TextStyle(fontSize: 13),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-                items: widget.cascade.cobs
-                    .map((c) => DropdownMenuItem(
-                        value: c, child: Text(c, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14))))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  _cob = v;
-                  _lob = null;
-                  _tocCode = null;
-                  _tocName = null;
-                }),
-              ),
-              if (_cob != null) ...[
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _lob,
-                  isExpanded: true,
-                  style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                  decoration: InputDecoration(
-                      labelText: 'LOB',
-                      labelStyle: const TextStyle(fontSize: 13),
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-                  items: widget.cascade.lobs(_cob!)
-                      .map((l) => DropdownMenuItem(
-                          value: l, child: Text(l, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14))))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _lob = v;
-                    _tocCode = null;
-                    _tocName = null;
-                  }),
-                ),
-              ],
-              if (_cob != null && _lob != null) ...[
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _tocCode,
-                  isExpanded: true,
-                  style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                  decoration: InputDecoration(
-                      labelText: 'ToC (judul card)',
-                      labelStyle: const TextStyle(fontSize: 13),
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-                  items: widget.cascade.tocs(_cob!, _lob!)
-                      .map((t) => DropdownMenuItem(
-                          value: t.tocCode,
-                          child: Text(t.tocName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14))))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _tocCode = v;
-                    final m = widget.cascade.tocs(_cob!, _lob!).where((t) => t.tocCode == v);
-                    _tocName = m.isNotEmpty ? m.first.tocName : null;
-                  }),
-                ),
-              ],
-            ] else
-              TextField(
-                controller: _productCtrl,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                    labelText: 'Produk',
-                    labelStyle: const TextStyle(fontSize: 13),
-                    hintText: 'mis. Asuransi Kredit Bank',
-                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.grayStage),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-              ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _tsiCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [ThousandsInputFormatter()],
-              style: const TextStyle(fontSize: 14),
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                  labelText: 'TSI/Plafond Nilai Jaminan',
-                  labelStyle: const TextStyle(fontSize: 13),
-                  prefixText: 'Rp ',
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _rateCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(fontSize: 14),
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                  labelText: 'Rate Premi',
-                  labelStyle: const TextStyle(fontSize: 13),
-                  hintText: 'mis. 2,5',
-                  hintStyle: const TextStyle(fontSize: 13, color: AppColors.grayStage),
-                  suffixText: '%',
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: AppRadius.radiusMd)),
-            ),
-            const SizedBox(height: 10),
-            _estimasiPremiBox(),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final now = DateTime.now();
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _closing ?? now,
-                  firstDate: now.subtract(const Duration(days: 365)),
-                  lastDate: now.add(const Duration(days: 365 * 3)),
-                );
-                if (picked != null) setState(() => _closing = picked);
-              },
-              icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text('Est. Closing: $closingLabel'),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _save,
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryNavy,
-                    shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg)),
-                child: const Text('Simpan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Result of [_ScheduleSheet].
 class _ScheduleResult {

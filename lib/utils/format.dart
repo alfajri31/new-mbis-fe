@@ -15,16 +15,47 @@ class AppFormat {
     return num.tryParse(digits);
   }
 
-  /// Short currency format per design.md §8.1:
-  /// ≥ 1 Miliar → "Rp X,XX M"; 1 Jt–999 Jt → "Rp X Jt"; < 1 Jt → "Rp X.XXX".
+  /// Short currency format untuk kartu ringkasan:
+  /// ≥ 1 Miliar → "Rp X,XX M"; ≥ 1 Juta → "Rp X,X Jt"; ≥ 1 Ribu → "Rp X Rb";
+  /// sisanya angka utuh.
+  ///
+  /// Tiga hal yang diperbaiki di sini, semuanya bergejala di kartu dashboard:
+  ///
+  /// 1. **Tingkat ribuan dulu tidak ada**, jadi nilai di bawah satu juta jatuh ke
+  ///    angka utuh — "Rp 850.000". Di kartu ringkasan yang seharusnya sekali lihat,
+  ///    deretan digit bertitik itu justru yang paling lambat dibaca, dan mudah
+  ///    tertukar dengan desimal.
+  /// 2. **Bagian bulat tidak punya pemisah ribuan**, sehingga nominal besar tampil
+  ///    "Rp 1234,56 M" — empat digit menempel tanpa jeda.
+  /// 3. **Nilai negatif tidak ikut dipendekkan**: perbandingan `>=` gagal untuk
+  ///    bilangan minus, jadi ia lolos ke cabang terakhir dan tampil utuh. Sejak
+  ///    realisasi resmi boleh minus (koreksi/pembatalan polis), ini bukan lagi
+  ///    kasus teoretis.
   static String currencyShort(num idr) {
-    if (idr >= 1000000000) {
-      return 'Rp ${_decimal(idr / 1000000000, 2)} M';
+    final negatif = idr < 0;
+    final v = idr.abs();
+    final String badan;
+    if (v >= 1000000000) {
+      badan = '${_grouped(v / 1000000000, 2)} M';
+    } else if (v >= 1000000) {
+      badan = '${_grouped(v / 1000000, 1)} Jt';
+    } else if (v >= 1000) {
+      badan = '${_grouped(v / 1000, 0)} Rb';
+    } else {
+      badan = thousands(v.round());
     }
-    if (idr >= 1000000) {
-      return 'Rp ${_decimal(idr / 1000000, 1)} Jt';
+    return 'Rp ${negatif ? '-' : ''}$badan';
+  }
+
+  /// Angka pendek dengan pemisah ribuan pada bagian bulatnya, mis. "1.234,56".
+  static String _grouped(num value, int places) {
+    final s = _decimal(value, places);
+    final koma = s.indexOf(',');
+    if (koma < 0) {
+      return thousands(int.tryParse(s) ?? value.round());
     }
-    return 'Rp ${thousands(idr.round())}';
+    final bulat = int.tryParse(s.substring(0, koma)) ?? value.truncate();
+    return '${thousands(bulat)},${s.substring(koma + 1)}';
   }
 
   /// Full rupiah with thousands separators, e.g. "Rp 1.234.567".

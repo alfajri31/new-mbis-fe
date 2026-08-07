@@ -30,6 +30,7 @@ class CustomerCard extends StatelessWidget {
         entityColor = AppColors.successGreen;
         break;
       case 'Perorangan':
+      case 'Perseorangan':
       default:
         entityColor = AppColors.grayStage;
         break;

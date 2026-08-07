@@ -172,6 +172,8 @@ class PipelineDetailModel {
   final String? subStage;
   final String? product;
   final String? projectName;
+  /// Nama tender (wajib saat [isTender]) — dipakai layar edit untuk prefill.
+  final String? tenderName;
   final String? statusKerjaSama;
   final bool isTender;
   final String? cobName;
@@ -208,6 +210,7 @@ class PipelineDetailModel {
     this.subStage,
     this.product,
     this.projectName,
+    this.tenderName,
     this.statusKerjaSama,
     this.isTender = false,
     this.cobName,
@@ -246,6 +249,7 @@ class PipelineDetailModel {
       subStage: json['subStage'],
       product: json['product'],
       projectName: json['projectName'],
+      tenderName: json['tenderName'],
       statusKerjaSama: json['statusKerjaSama'],
       isTender: json['isTender'] == true,
       cobName: json['cobName'],
@@ -303,6 +307,12 @@ class PipelineDocumentModel {
         fileName: j['fileName'] ?? '',
         fileUrl: j['fileUrl'] ?? '',
       );
+}
+
+/// Marker: dipakai layar detail untuk membedakan gagal-karena-izin dari gagal lain.
+class PipelineDeleteForbidden implements Exception {
+  @override
+  String toString() => 'Hanya admin yang boleh menghapus pipeline.';
 }
 
 class PipelineRepository {
@@ -363,6 +373,20 @@ class PipelineRepository {
     final response = await apiClient.delete('/api/pipelines/$pipelineId/documents/$docId');
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception('Failed to delete document');
+    }
+  }
+
+  /// Hapus pipeline permanen. Server hanya mengizinkan ADMIN.
+  ///
+  /// Ikut menghapus jadwal, kunjungan, dan dokumennya; bila stage-nya WON,
+  /// realisasinya ikut hilang dari dashboard RM yang bersangkutan.
+  Future<void> deletePipeline(String pipelineId) async {
+    final response = await apiClient.delete('/api/pipelines/$pipelineId');
+    if (response.statusCode == 403) {
+      throw PipelineDeleteForbidden();
+    }
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Gagal menghapus pipeline');
     }
   }
 

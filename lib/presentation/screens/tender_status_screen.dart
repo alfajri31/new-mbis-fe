@@ -964,7 +964,12 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
     return TextField(
       controller: c,
       keyboardType: money ? TextInputType.number : (keyboard ?? TextInputType.text),
-      inputFormatters: money ? [ThousandsInputFormatter()] : null,
+      // Isian desimal (share %) ikut aturan koma/titik yang sama dengan rate premi:
+      // papan ketik Indonesia memunculkan koma, dan tanpa formatter pemisah kedua
+      // ikut masuk sehingga `double.parse` di _save() melempar.
+      inputFormatters: money
+          ? [ThousandsInputFormatter()]
+          : (keyboard?.decimal == true ? const [DecimalInputFormatter()] : null),
       onChanged: (_) => setState(() {
         onEdited?.call();
         _missing = const []; // ringkasan ikut hilang begitu user membetulkan
@@ -1049,6 +1054,7 @@ class _TenderWonSheetState extends State<_TenderWonSheet> {
               key: ValueKey('share-pct-$slot'),
               controller: s.pctCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: const [DecimalInputFormatter()],
               onChanged: (_) => setState(() {
                 s.pctErr = null;
                 _missing = const [];

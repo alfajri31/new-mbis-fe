@@ -157,7 +157,15 @@ class CustomerDetailModel {
   final bool isBumn;
   final bool isHvc;
   final String? bumnName;
+  /// FK master_bumn. Dipakai layar edit untuk memilih ulang node BUMN yang sama —
+  /// nama saja tidak cukup karena struktur relasi & induk diturunkan dari id ini.
+  final String? bumnId;
   final List<BumnPathNode> bumnPath; // Holding → … → this node
+  // Cabang bank customer (kategori PERBANKAN) — id + nama untuk prefill picker.
+  final String? bankBranchId;
+  final String? bankBranchName;
+  final String? bankId;
+  final String? bankName;
   final bool isBlacklisted;
   final String? state;
   final String? npwp;
@@ -197,7 +205,12 @@ class CustomerDetailModel {
     this.isBumn = false,
     this.isHvc = false,
     this.bumnName,
+    this.bumnId,
     this.bumnPath = const [],
+    this.bankBranchId,
+    this.bankBranchName,
+    this.bankId,
+    this.bankName,
     this.isBlacklisted = false,
     this.state,
     this.npwp,
@@ -238,6 +251,11 @@ class CustomerDetailModel {
       isBumn: json['isBumn'] == true,
       isHvc: json['isHvc'] == true,
       bumnName: json['bumnName'],
+      bumnId: json['bumnId'],
+      bankBranchId: json['bankBranchId'],
+      bankBranchName: json['bankBranchName'],
+      bankId: json['bankId'],
+      bankName: json['bankName'],
       bumnPath: (json['bumnPath'] as List<dynamic>? ?? [])
           .map((e) => BumnPathNode.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -442,6 +460,7 @@ class CustomerRepository {
     String? branchId,
     String? rmId,
     bool hvc = false,
+    String? stage,
   }) async {
     final params = <String, String>{
       'page': '$page',
@@ -452,6 +471,9 @@ class CustomerRepository {
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
       if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
       if (hvc) 'hvc': 'true',
+      // Disaring di server, bukan di klien: daftar ini berhalaman, jadi menyaring
+      // hasil satu halaman akan menampilkan "3 dari 20" padahal yang cocok ratusan.
+      if (stage != null && stage.isNotEmpty) 'stage': stage,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
@@ -503,6 +525,7 @@ class CustomerRepository {
     String? branchId,
     String? rmId,
     bool hvc = false,
+    String? stage,
   }) async {
     final params = <String, String>{
       if (search != null && search.isNotEmpty) 'search': search,
@@ -511,6 +534,7 @@ class CustomerRepository {
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
       if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
       if (hvc) 'hvc': 'true',
+      if (stage != null && stage.isNotEmpty) 'stage': stage,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')

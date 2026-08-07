@@ -198,6 +198,11 @@ void main() {
           targetYtd: 0,
           realisasiYtd: realisasiYtd,
           targetFullYear: targetFullYear,
+          // Uji ini soal pemilihan COB, bukan soal realisasi resmi: tanpa
+          // unggahan pusat, angka yang tampil memang sama dengan angka WON.
+          realisasiWonYtd: realisasiYtd,
+          realisasiResmiYtd: 0,
+          bulanResmi: 0,
           months: months,
         );
 
@@ -249,9 +254,17 @@ void main() {
           [
             stat('KUR', targetFullYear: 900, realisasiYtd: 300, months: [
               DashboardCategoryMonth(
-                  month: 7, label: 'Jul', target: 0, realisasi: 50),
+                  month: 7,
+                  label: 'Jul',
+                  target: 0,
+                  realisasi: 50,
+                  realisasiWon: 50),
               DashboardCategoryMonth(
-                  month: 8, label: 'Agu', target: 0, realisasi: 80),
+                  month: 8,
+                  label: 'Agu',
+                  target: 0,
+                  realisasi: 80,
+                  realisasiWon: 80),
             ]),
           ],
           currentMonth: 8,

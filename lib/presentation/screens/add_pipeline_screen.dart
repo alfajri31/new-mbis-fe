@@ -11,7 +11,9 @@ import '../widgets/add_pipeline/readonly_box.dart';
 import '../widgets/add_pipeline/polis_preview.dart';
 import '../widgets/add_pipeline/locked_text_field.dart';
 import '../widgets/add_pipeline/locked_process_field.dart';
+import '../../core/providers/repository_providers.dart';
 import '../providers/add_pipeline_provider.dart';
+import '../../src/pipeline/pipeline_repository.dart';
 import '../../src/pipeline/pipeline_stage.dart';
 import '../../src/broker/broker_repository.dart';
 import '../../src/customer/customer_repository.dart';
@@ -68,18 +70,26 @@ const List<String> _tenderFlowOrder = [
   'LOSS_TENDER',
 ];
 
+/// Formulir pipeline — dipakai untuk TAMBAH maupun EDIT.
+///
+/// Beri [existing] untuk membuka dalam mode edit. Yang SENGAJA tidak ikut diedit
+/// di sini karena punya alur & aturannya sendiri: stage/detail stage (lewat
+/// editor status, yang mewajibkan nilai realisasi saat WON dan mengirim
+/// notifikasi), serta referral lintas cabang (butuh persetujuan dua BM).
 class AddPipelineScreen extends ConsumerStatefulWidget {
   final String customerId;
   final String?
   customerName; // nama customer utama (auto-isi sbg pihak pertama kerja sama)
   final String?
   customerLegalEntity; // badan hukum customer utama (auto-isi pihak pertama)
+  final PipelineDetailModel? existing;
 
   const AddPipelineScreen({
     super.key,
     required this.customerId,
     this.customerName,
     this.customerLegalEntity,
+    this.existing,
   });
 
   @override
@@ -193,9 +203,82 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
     return null;
   }
 
+  bool get _isEdit => widget.existing != null;
+  bool _savingEdit = false;
+
+  /// Isi state form dari pipeline yang sedang diedit.
+  ///
+  /// Nilai dropdown (sumber bisnis, kerja sama, COB/LOB/ToC) dipasang apa adanya;
+  /// tiap dropdown sudah menyaring nilainya terhadap daftar opsinya sendiri dan
+  /// dibangun ulang begitu opsi itu tiba, jadi tak perlu menunggu data referensi.
+  ///
+  /// TSI selalu dibaca sebagai rupiah: mata uang asal & kurs tidak disimpan
+  /// backend, jadi yang tersedia untuk diedit hanya nilai rupiah hasil konversi.
+  void _prefillFromExisting() {
+    final p = widget.existing;
+    if (p == null) return;
+    _sumberBisnis = p.sourceType ?? 'DIRECT';
+    if (_sumberBisnis == 'BROKER') _brokerId = p.refId;
+    if (_sumberBisnis == 'AGENT') _agentId = p.refId;
+    _namaProyek = p.projectName ?? '';
+    _statusKerjaSama = p.statusKerjaSama ?? 'INDIVIDU';
+    _cob = p.cobName;
+    _lob = p.lobName;
+    _tocCode = p.tocCode;
+    _tocName = p.product;
+    _isTender = p.isTender;
+    _namaTender = p.tenderName ?? '';
+    _stage = p.stage.isEmpty ? 'P3' : p.stage;
+    _currency = 'IDR';
+    _kurs = 1.0;
+    _kursController.text = '1.0';
+    _tsiOriginal = p.tsiIdr;
+    if (p.tsiIdr > 0) {
+      // Titik ribuan dipasang manual: inputFormatters hanya jalan saat pemakai
+      // mengetik, tidak saat teks controller diisi dari kode.
+      _tsiController.text = _formatCurrency(p.tsiIdr, symbol: '').trim();
+    }
+    if (p.ratePremi != null) {
+      _ratePremi = p.ratePremi!;
+      _rateController.text = _trimTrailingZeros(p.ratePremi!);
+    }
+    _estimasiClosing = p.closingEstimasi != null
+        ? DateTime.tryParse(p.closingEstimasi!)
+        : null;
+    for (final party in p.parties) {
+      _parties.add(
+        _PartyInput()
+          ..legalEntity = party.legalEntity
+          ..customerName = party.customerName,
+      );
+    }
+    for (final t in p.tenderProcesses) {
+      _tenders.add(
+        _TenderInput(
+          processType: t.processType,
+          mandatory: _mandatoryTenderSteps.contains(t.processType),
+        )
+          ..start = t.startDate != null ? DateTime.tryParse(t.startDate!) : null
+          ..end = t.endDate != null ? DateTime.tryParse(t.endDate!) : null,
+      );
+    }
+  }
+
+  /// "2.5000" → "2.5"; rate disimpan double, tampilannya jangan berekor nol.
+  static String _trimTrailingZeros(double v) {
+    var s = v.toStringAsFixed(4);
+    if (s.contains('.')) {
+      s = s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+    }
+    return s;
+  }
+
   @override
   void initState() {
     super.initState();
+    // Prefill SEBELUM listener dipasang: listener menulis ulang _tsiOriginal &
+    // _ratePremi dari teks controller, dan itu memicu setState di initState.
+    _prefillFromExisting();
     _kursController.addListener(_onCalculationsChanged);
     _tsiController.addListener(_onCalculationsChanged);
     _rateController.addListener(_onCalculationsChanged);
@@ -355,9 +438,9 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Tambah Pipeline',
-          style: TextStyle(
+        title: Text(
+          _isEdit ? 'Edit Pipeline' : 'Tambah Pipeline',
+          style: const TextStyle(
             color: AppColors.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -660,6 +743,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                       _buildTextField(
                         label: 'Nama Proyek',
                         hint: 'mis. Pembangunan Jalan Tol Seksi 2',
+                        initialValue: _namaProyek,
                         onChanged: (val) => setState(() => _namaProyek = val),
                       ),
                     ],
@@ -695,6 +779,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                           // jadi tandai bintang seperti field wajib lain.
                           label: 'Nama Tender *',
                           hint: 'mis. Tender Asuransi Proyek IKN 2026',
+                          initialValue: _namaTender,
                           onChanged: (val) => setState(() => _namaTender = val),
                         ),
                         const SizedBox(height: 14),
@@ -705,7 +790,10 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                   const SizedBox(height: 16),
 
                   // ─────────── REFERRAL (RM only) ───────────
-                  if (_isRm) ...[
+                  // Hanya saat menambah: referral butuh persetujuan BM cabang asal
+                  // & tujuan, jadi mengubahnya dari formulir edit akan melewati
+                  // alur persetujuan itu.
+                  if (_isRm && !_isEdit) ...[
                     FormSection(
                       title: 'Referral',
                       children: [
@@ -764,8 +852,10 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                     children: [
                       // Untuk Tender, stage & detail stage ditentukan otomatis dari
                       // proses tender (mulai dari "Pendaftaran Tender"), jadi cukup
-                      // tampilkan estimasi closing saja.
-                      if (!_isTender) ...[
+                      // tampilkan estimasi closing saja. Saat mengedit stage juga
+                      // disembunyikan: perpindahannya lewat editor status, yang
+                      // mewajibkan nilai realisasi di WON dan menulis riwayat.
+                      if (!_isTender && !_isEdit) ...[
                         _fieldLabel('Stage *'),
                         const SizedBox(height: 6),
                         Row(
@@ -850,7 +940,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: _saving ? null : _handleSubmit,
+                      onPressed: (_saving || _savingEdit) ? null : _handleSubmit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryNavy,
                         shape: RoundedRectangleBorder(
@@ -858,7 +948,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: _saving
+                      child: (_saving || _savingEdit)
                           ? const SizedBox(
                               width: 22,
                               height: 22,
@@ -867,9 +957,9 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'Simpan Pipeline',
-                              style: TextStyle(
+                          : Text(
+                              _isEdit ? 'Simpan Perubahan' : 'Simpan Pipeline',
+                              style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -1270,10 +1360,14 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
   }
 
   // ── reusable widgets ──
+  /// [initialValue] hanya berlaku bila [controller] tidak diberi (TextFormField
+  /// melarang keduanya) dan hanya dibaca pada build pertama — cukup, karena isian
+  /// teks di-prefill sinkron di initState.
   Widget _buildTextField({
     required String label,
     required String hint,
     TextEditingController? controller,
+    String? initialValue,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     List<TextInputFormatter>? inputFormatters,
@@ -1287,6 +1381,7 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
+          initialValue: controller == null ? initialValue : null,
           maxLines: maxLines,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
@@ -1315,6 +1410,8 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
         _fieldLabel(label),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          // Lihat catatan key di _buildDropdownFieldKV.
+          key: ValueKey('dd-$label-${items.length}'),
           initialValue: safeValue,
           style: AppInput.fieldText,
           isExpanded: true,
@@ -1381,6 +1478,11 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
         _fieldLabel(label),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          // `initialValue` hanya dibaca sekali. Saat mengedit, nilai tersimpan
+          // sudah ada sebelum daftar opsinya selesai diunduh, jadi build pertama
+          // menyaringnya jadi null dan pilihan itu tak pernah muncul. Key yang
+          // ikut jumlah opsi membuat field dibangun ulang begitu opsinya tiba.
+          key: ValueKey('kv-$label-${options.length}'),
           initialValue: safeValue,
           style: AppInput.fieldText,
           isExpanded: true,
@@ -1619,6 +1721,81 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
     );
   }
 
+  /// Simpan perubahan pipeline yang sudah ada.
+  ///
+  /// Body-nya cerminan jalur tambah dikurangi hal-hal yang punya alur sendiri:
+  /// stage/sub-stage (editor status) dan referral (butuh persetujuan BM). Sisanya
+  /// dikirim lengkap, itulah sebabnya layar ini dipakai ulang alih-alih sheet
+  /// berisi sebagian field.
+  Future<void> _saveEdit() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    String? refId;
+    if (_sumberBisnis == 'BROKER') {
+      refId = _brokerId;
+    } else if (_sumberBisnis == 'AGENT') {
+      refId = _agentId;
+    }
+
+    final body = <String, dynamic>{
+      'product': _tocName,
+      'projectName': _namaProyek.isEmpty ? null : _namaProyek,
+      'tenderName': _isTender && _namaTender.trim().isNotEmpty
+          ? _namaTender.trim()
+          : null,
+      'statusKerjaSama': _statusKerjaSama,
+      'isTender': _isTender,
+      'cobName': _cob,
+      'lobName': _lob,
+      'tocCode': _tocCode,
+      'tocName': _tocName,
+      'tsiIdr': _tsiIdr,
+      'ratePremi': _ratePremi,
+      'closingEstimasi': _estimasiClosing?.toIso8601String(),
+      'sourceType': _sumberBisnis.isEmpty ? 'DIRECT' : _sumberBisnis,
+      'refId': refId,
+      // Koleksi dikirim hanya bila relevan: backend memperlakukan non-null
+      // sebagai "ganti seluruh isinya", jadi mengirim daftar kosong untuk
+      // pipeline individu/non-tender justru akan menghapus baris yang sah.
+      if (_statusKerjaSama != 'INDIVIDU')
+        'parties': _parties
+            .map((p) => {
+                  'legalEntity': p.legalEntity,
+                  'customerName': p.customerName?.trim(),
+                })
+            .toList(),
+      if (_isTender)
+        'tenderProcesses': _tenders
+            .map((t) => {
+                  'processType': t.processType,
+                  'startDate': _iso(t.start!),
+                  'endDate': _iso(t.end!),
+                })
+            .toList(),
+    };
+
+    setState(() => _savingEdit = true);
+    try {
+      await ref
+          .read(pipelineRepoProvider)
+          .updatePipeline(widget.existing!.id, body);
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Pipeline diperbarui'),
+        backgroundColor: AppColors.successGreen,
+      ));
+      navigator.pop(true); // detail pipeline memuat ulang
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _savingEdit = false);
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: AppColors.errorRed,
+      ));
+    }
+  }
+
   /// Daftar isian wajib yang masih kurang, URUT sesuai posisinya di layar.
   ///
   /// Semua aturan wajib dikumpulkan di SATU tempat (bukan tersebar antara
@@ -1717,6 +1894,11 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       setState(() => _autovalidate = AutovalidateMode.onUserInteraction);
       warn('Ada isian yang belum valid');
+      return;
+    }
+
+    if (_isEdit) {
+      await _saveEdit();
       return;
     }
 

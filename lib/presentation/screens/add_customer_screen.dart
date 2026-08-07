@@ -33,8 +33,19 @@ class _PickedDoc {
   const _PickedDoc(this.fileName, this.bytes);
 }
 
+/// Formulir customer — dipakai untuk TAMBAH maupun EDIT.
+///
+/// Satu layar untuk keduanya, bukan sheet edit terpisah berisi sebagian field:
+/// sheet lama hanya memuat identitas & PIC, sehingga badan hukum, entitas, HVC,
+/// kategori bank, dan titik lokasi tidak pernah bisa diperbaiki setelah tersimpan.
+///
+/// Beri [existing] untuk membuka dalam mode edit. Yang TIDAK ikut diedit di sini
+/// dan tetap punya alurnya sendiri: dokumen (dikelola di detail customer),
+/// penugasan RM, dan cek blacklist (peristiwa saat pendaftaran).
 class AddCustomerScreen extends ConsumerStatefulWidget {
-  const AddCustomerScreen({super.key});
+  const AddCustomerScreen({super.key, this.existing});
+
+  final CustomerDetailModel? existing;
 
   @override
   ConsumerState<AddCustomerScreen> createState() => _AddCustomerScreenState();
@@ -42,6 +53,9 @@ class AddCustomerScreen extends ConsumerStatefulWidget {
 
 class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
+
+  bool get _isEdit => widget.existing != null;
+  bool _savingEdit = false;
 
   // Form fields state
   String _badanHukum = '';
@@ -108,6 +122,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   @override
   void initState() {
     super.initState();
+    _prefillFromExisting();
     // Bootstrap notifier setelah frame pertama: deteksi peran (agent → muat
     // daftar RM) + muat opsi referensi/BUMN. Sesi dibaca notifier dari
     // sessionProvider — tak perlu context. (Dulu dipecah antara initState
@@ -116,6 +131,54 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       if (!mounted) return;
       _notifier.start();
     });
+  }
+
+  /// Isi seluruh state form dari customer yang sedang diedit.
+  ///
+  /// Dilakukan sinkron di initState, BUKAN menunggu opsi dropdown termuat: nilai
+  /// terpilih disimpan sebagai key/objek tersendiri, dan tiap dropdown sudah
+  /// menyaring nilainya terhadap daftar opsinya sendiri. Bank & cabang dibentuk
+  /// langsung dari detail customer, jadi picker-nya terisi tanpa perlu menunggu
+  /// daftar bank selesai diunduh.
+  void _prefillFromExisting() {
+    final c = widget.existing;
+    if (c == null) return;
+    _badanHukum = c.legalEntity ?? '';
+    _namaCustomer = c.name;
+    _entitas = c.entityCategory ?? '';
+    _strukturRelasi = c.strukturRelasi ?? '';
+    _nib = c.nib ?? '';
+    // NPWP disimpan sebagai angka murni; formulir menampilkannya bertopeng.
+    _npwp = maskNpwp(c.npwp ?? '');
+    _email = c.companyEmail ?? '';
+    _phone = c.companyPhone ?? '';
+    _alamat = c.address ?? '';
+    _alamatController.text = _alamat;
+    _picName = c.picName ?? '';
+    _picPhone = c.picPhone ?? '';
+    _picJabatan = c.picJabatan ?? '';
+    _picTitle = c.picTitle ?? '';
+    _nik = c.nik ?? '';
+    _kategori = c.category ?? 'NON_PERBANKAN';
+    _isBumn = c.isBumn;
+    _isHvc = c.isHvc;
+    _bumnId = c.bumnId;
+    _bumnName = c.isBumn ? c.name : null;
+    _bumnInduk = c.bumnName;
+    if (c.bankId != null && c.bankName != null) {
+      _selectedBank = BankRef(c.bankId!, c.bankName!, null);
+    }
+    if (c.bankBranchId != null && c.bankBranchName != null) {
+      _selectedBranch = BankBranchRef(c.bankBranchId!, c.bankBranchName!, c.address);
+    }
+    final lat = double.tryParse(c.latitude ?? '');
+    final lng = double.tryParse(c.longitude ?? '');
+    if (lat != null && lng != null) {
+      _locationLat = lat;
+      _locationLng = lng;
+      _locationCoordinate = '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+      _locationAddress = c.address ?? '';
+    }
   }
 
   @override
@@ -158,9 +221,9 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Tambah Customer',
-          style: TextStyle(
+        title: Text(
+          _isEdit ? 'Edit Customer' : 'Tambah Customer',
+          style: const TextStyle(
             color: AppColors.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -182,8 +245,9 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
               key: _formKey,
               child: Column(
                 children: [
-                  // SECTION: RM TUJUAN (hanya untuk agen)
-                  if (_isAgent) ...[
+                  // SECTION: RM TUJUAN (hanya untuk agen, hanya saat menambah —
+                  // memindahkan customer ke RM lain punya alurnya sendiri).
+                  if (_isAgent && !_isEdit) ...[
                     _buildAgentRmSection(),
                     const SizedBox(height: 16),
                   ],
@@ -296,6 +360,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                         _buildTextField(
                           label: 'Nama Customer *',
                           hint: 'Nama lengkap perusahaan',
+                          initialValue: _namaCustomer,
                           onChanged: (val) =>
                               setState(() => _namaCustomer = val),
                           validator: (val) => val == null || val.isEmpty
@@ -314,6 +379,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                           _buildTextField(
                             label: 'NIK *',
                             hint: 'Nomor Induk Kependudukan',
+                            initialValue: _nik,
                             keyboardType: TextInputType.number,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
@@ -340,6 +406,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                       _buildTextField(
                         label: 'Email Perusahaan',
                         hint: 'perusahaan@email.com',
+                        initialValue: _email,
                         keyboardType: TextInputType.emailAddress,
                         onChanged: (val) => setState(() => _email = val),
                       ),
@@ -347,6 +414,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                       _buildTextField(
                         label: 'No. Telepon Perusahaan',
                         hint: '021-xxxx-xxxx',
+                        initialValue: _phone,
                         keyboardType: TextInputType.phone,
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(
@@ -363,6 +431,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                         _buildTextField(
                           label: 'NIB',
                           hint: 'Nomor Induk Berusaha (13 digit)',
+                          initialValue: _nib,
                           keyboardType: TextInputType.number,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
@@ -380,6 +449,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                         _buildTextField(
                           label: 'NPWP',
                           hint: 'XX.XXX.XXX.X-XXX.XXX',
+                          initialValue: _npwp,
                           keyboardType: TextInputType.number,
                           inputFormatters: [NpwpInputFormatter()],
                           onChanged: (val) => setState(() => _npwp = val),
@@ -427,6 +497,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                       _buildTextField(
                         label: 'Nama PIC *',
                         hint: 'Nama penanggung jawab',
+                        initialValue: _picName,
                         onChanged: (val) => setState(() => _picName = val),
                         validator: (val) => val == null || val.trim().isEmpty
                             ? 'Nama PIC wajib diisi'
@@ -436,6 +507,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                       _buildTextField(
                         label: 'No. Telepon PIC',
                         hint: '08xx-xxxx-xxxx',
+                        initialValue: _picPhone,
                         keyboardType: TextInputType.phone,
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(
@@ -450,34 +522,40 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                       _buildTextField(
                         label: 'Jabatan PIC',
                         hint: 'Jabatan penanggung jawab',
+                        initialValue: _picJabatan,
                         onChanged: (val) => setState(() => _picJabatan = val),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
 
-                  // SECTION: DOKUMEN
-                  AddCustomerFormSection(
-                    title: 'Dokumen',
-                    children: [
-                      _buildUploadRow('NPWP'),
-                      const SizedBox(height: 10),
-                      _buildUploadRow('NIB'),
-                      const SizedBox(height: 10),
-                      _buildUploadRow('NIK/KTP PIC'),
-                      const SizedBox(height: 8),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Format: PDF/JPG, maks 5MB per file',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
+                  // SECTION: DOKUMEN — hanya saat menambah. Untuk customer yang
+                  // sudah ada, dokumen dikelola di layar detail (bisa dilihat,
+                  // diganti, dihapus); mengunggah dari sini hanya akan menumpuk
+                  // berkas tanpa cara membuangnya.
+                  if (!_isEdit) ...[
+                    AddCustomerFormSection(
+                      title: 'Dokumen',
+                      children: [
+                        _buildUploadRow('NPWP'),
+                        const SizedBox(height: 10),
+                        _buildUploadRow('NIB'),
+                        const SizedBox(height: 10),
+                        _buildUploadRow('NIK/KTP PIC'),
+                        const SizedBox(height: 8),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Format: PDF/JPG, maks 5MB per file',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   // SUBMIT BUTTON
@@ -485,7 +563,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: _handleSubmit,
+                      onPressed: _savingEdit ? null : _handleSubmit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryNavy,
                         shape: RoundedRectangleBorder(
@@ -493,14 +571,23 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Simpan & Cek Blacklist',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      child: _savingEdit
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text(
+                              // Cek blacklist adalah peristiwa pendaftaran; saat
+                              // mengedit tidak ada yang perlu dicek ulang.
+                              _isEdit ? 'Simpan Perubahan' : 'Simpan & Cek Blacklist',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -597,12 +684,16 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
     );
   }
 
+  /// [initialValue] hanya berlaku bila [controller] tidak diberi (TextFormField
+  /// melarang keduanya sekaligus) dan hanya dibaca pada build pertama — cukup,
+  /// karena isian teks di-prefill sinkron di initState, bukan setelah data async.
   Widget _buildTextField({
     required String label,
     required String hint,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     TextEditingController? controller,
+    String? initialValue,
     List<TextInputFormatter>? inputFormatters,
     required void Function(String) onChanged,
     String? Function(String?)? validator,
@@ -620,6 +711,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           ),
           child: TextFormField(
             controller: controller,
+            initialValue: controller == null ? initialValue : null,
             maxLines: maxLines,
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
@@ -664,6 +756,9 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             border: Border.all(color: AppColors.border),
           ),
           child: DropdownButtonFormField<String>(
+            // Lihat catatan key di _buildDropdownFieldKV: nilai prefill baru bisa
+            // terpasang setelah daftar opsinya termuat.
+            key: ValueKey('dd-$label-${items.length}'),
             // Nilai di luar daftar opsi membuat DropdownButtonFormField melempar
             // assertion (layar mati), bukan sekadar tampil kosong. Master data
             // bisa berubah, jadi nilainya divalidasi dulu terhadap opsinya.
@@ -886,6 +981,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         _fieldLabel(label),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          // `initialValue` hanya dibaca sekali. Saat mengedit, nilai tersimpan
+          // sudah ada sebelum daftar opsinya selesai diunduh, jadi build pertama
+          // menyaringnya jadi null dan pilihan itu tidak pernah muncul. Key yang
+          // ikut jumlah opsi membuat field dibangun ulang begitu opsinya tiba.
+          key: ValueKey('kv-$label-${options.length}'),
           // Nilai di luar daftar opsi membuat DropdownButtonFormField melempar
           // assertion (layar mati), bukan sekadar tampil kosong. Master data
           // bisa berubah, jadi nilainya divalidasi dulu terhadap opsinya.
@@ -1118,7 +1218,37 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         return;
       }
     }
+    if (_isEdit) {
+      _saveEdit();
+      return;
+    }
     _showBlacklistDialog();
+  }
+
+  /// Simpan perubahan customer yang sudah ada. Memakai payload yang SAMA dengan
+  /// jalur tambah, jadi tiap field yang tampil di formulir benar-benar terkirim —
+  /// itulah inti pemakaian ulang layar ini alih-alih sheet berisi sebagian field.
+  Future<void> _saveEdit() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _savingEdit = true);
+    try {
+      await ref
+          .read(customerRepoProvider)
+          .updateCustomer(widget.existing!.id, _payload());
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Customer diperbarui')),
+      );
+      navigator.pop(true); // detail customer memuat ulang
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _savingEdit = false);
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: AppColors.errorRed,
+      ));
+    }
   }
 
   /// The effective customer name across modes (bank/BUMN derive it).

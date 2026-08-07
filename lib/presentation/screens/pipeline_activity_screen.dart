@@ -360,7 +360,10 @@ class _PipelineActivityScreenState
           : () async {
               await vds.loadLibrary();
               if (!mounted) return;
-              vds.showVisitDetail(context, _apiClient, visit);
+              // Kunjungan bisa diedit dari sheet-nya; muat ulang supaya kartu
+              // riwayat & jadwal follow-up ikut menampilkan hasilnya.
+              final changed = await vds.showVisitDetail(context, _apiClient, visit);
+              if (changed && mounted) await _fetch();
             },
     );
   }
