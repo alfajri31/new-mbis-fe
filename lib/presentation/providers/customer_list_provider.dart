@@ -26,6 +26,23 @@ class CustomerListState {
   final String searchTerm;
   final String? entityFilter;
   final bool hvcFilter;
+
+  /// Tahap pipeline terpilih (P3/P2/P1/WON/DECLINE); null = semua tahap.
+  /// Disaring di SERVER, bukan di klien: daftarnya berhalaman, jadi menyaring
+  /// satu halaman akan menampilkan "3 dari 20" padahal yang cocok ratusan.
+  final String? stageFilter;
+
+  /// Kolom pengurutan: `name` atau `createdAt`. Diurutkan di SERVER — alasannya
+  /// persis sama dengan [stageFilter]: mengurutkan di klien hanya menata satu
+  /// halaman, bukan seluruh daftar.
+  ///
+  /// Hanya kedua nilai ini yang diterima server (daftar putih di
+  /// `CustomerService.sortOf`); nilai lain dibalas 400, bukan didiamkan.
+  final String sortBy;
+
+  /// Arah pengurutan: `asc` atau `desc`.
+  final String sortDir;
+
   final CustomerKpi? kpi;
   final bool initialLoading;
   final String? error;
@@ -36,6 +53,12 @@ class CustomerListState {
   final bool isSupervisor;
   final String? rmId; // RM terpilih (null = semua RM di scope)
   final String? rmName; // label tampil untuk RM terpilih
+
+  /// Identitas pemakai sendiri — dasar tombol "Customer Saya". Disimpan di state
+  /// (bukan dibaca ulang dari sesi di layar) supaya layar tidak perlu tahu
+  /// bagaimana sesi disusun.
+  final String? ownRmId;
+  final String? ownRmName;
   final String? cob; // COB / kategori-target terpilih (null = semua)
   final List<DashboardCategoryStat> cobOptions; // opsi dropdown COB
   final CustomerScopedSummary? summary; // headline Target/Realisasi/Visit
@@ -68,6 +91,9 @@ class CustomerListState {
     this.searchTerm = '',
     this.entityFilter,
     this.hvcFilter = false,
+    this.stageFilter,
+    this.sortBy = 'name',
+    this.sortDir = 'asc',
     this.kpi,
     this.initialLoading = true,
     this.error,
@@ -75,6 +101,8 @@ class CustomerListState {
     this.isSupervisor = false,
     this.rmId,
     this.rmName,
+    this.ownRmId,
+    this.ownRmName,
     this.cob,
     this.cobOptions = const [],
     this.summary,
@@ -94,6 +122,9 @@ class CustomerListState {
     String? searchTerm,
     Object? entityFilter = _keep,
     bool? hvcFilter,
+    Object? stageFilter = _keep,
+    String? sortBy,
+    String? sortDir,
     Object? kpi = _keep,
     bool? initialLoading,
     Object? error = _keep,
@@ -101,6 +132,8 @@ class CustomerListState {
     bool? isSupervisor,
     Object? rmId = _keep,
     Object? rmName = _keep,
+    Object? ownRmId = _keep,
+    Object? ownRmName = _keep,
     Object? cob = _keep,
     List<DashboardCategoryStat>? cobOptions,
     Object? summary = _keep,
@@ -120,6 +153,10 @@ class CustomerListState {
       entityFilter:
           entityFilter == _keep ? this.entityFilter : entityFilter as String?,
       hvcFilter: hvcFilter ?? this.hvcFilter,
+      stageFilter:
+          stageFilter == _keep ? this.stageFilter : stageFilter as String?,
+      sortBy: sortBy ?? this.sortBy,
+      sortDir: sortDir ?? this.sortDir,
       kpi: kpi == _keep ? this.kpi : kpi as CustomerKpi?,
       initialLoading: initialLoading ?? this.initialLoading,
       error: error == _keep ? this.error : error as String?,
@@ -127,6 +164,8 @@ class CustomerListState {
       isSupervisor: isSupervisor ?? this.isSupervisor,
       rmId: rmId == _keep ? this.rmId : rmId as String?,
       rmName: rmName == _keep ? this.rmName : rmName as String?,
+      ownRmId: ownRmId == _keep ? this.ownRmId : ownRmId as String?,
+      ownRmName: ownRmName == _keep ? this.ownRmName : ownRmName as String?,
       cob: cob == _keep ? this.cob : cob as String?,
       cobOptions: cobOptions ?? this.cobOptions,
       summary: summary == _keep ? this.summary : summary as CustomerScopedSummary?,
@@ -139,6 +178,18 @@ class CustomerListState {
   /// menggantikan getter `_regions`/`_branches` di layar.
   List<ScopeOffice> get regions =>
       offices.where((o) => o.type == 'REGIONAL').toList();
+
+  /// Cakupan pemakai melampaui dirinya sendiri — backend mengirim kantor yang
+  /// boleh ia lihat lewat `/api/dashboard/scope-offices`, dan daftar itu KOSONG
+  /// untuk RM biasa. Dipakai sebagai gerbang filter cabang dan tombol "Customer
+  /// Saya", menggantikan pemeriksaan peran: RM yang berkantor di Kanwil (CR-18)
+  /// cakupannya seluas pimpinan Kanwil padahal perannya tetap RM, jadi gerbang
+  /// berbasis nama peran akan melewatkannya.
+  bool get scopeWiderThanOwn => offices.isNotEmpty;
+
+  /// Daftar sedang dipersempit ke customer milik pemakai sendiri.
+  bool get onlyOwnCustomers =>
+      rmId != null && ownRmId != null && rmId == ownRmId;
 
   List<ScopeOffice> get branches => offices
       .where((o) =>
@@ -156,8 +207,12 @@ class CustomerListState {
 /// itu). Selama tidak ada filter wilayah/cabang/RM, hasilnya identik dengan
 /// endpoint yang belum ter-deploy tersebut, jadi tidak muncul "angka versi ketiga".
 ///
-/// Hitungan visit tidak per-COB — backend pun mengembalikannya sama untuk semua
-/// COB — jadi nilainya diambil apa adanya dari [base].
+/// Hitungan visit di jalur cadangan ini TETAP angka lingkup penuh dari [base].
+/// Sejak CR-09 `customer-summary?cob=X` memang menyaring kunjungan per COB, tapi
+/// `/api/dashboard/categories` — satu-satunya sumber per-COB yang tersedia di
+/// jalur cadangan — tidak membawa angka kunjungan sama sekali. Jadi selama
+/// cadangan yang dipakai, kartu Visit menjawab pertanyaan yang lebih luas
+/// daripada kartu di sebelahnya; UI menandainya lewat `summaryIsFallback`.
 ///
 /// COB tak dikenal → [base] dikembalikan utuh. Sengaja TIDAK memakai
 /// `DashboardCategories.byName`, yang jatuh ke kategori pertama saat tak ketemu:
@@ -246,7 +301,12 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     // Pakai daftar penyelia kanonik aplikasi (ADMIN/RO/BM/KUP — DPJ belum termasuk,
     // selaras main/profil/tools screen). Hanya bermakna di jalur paged (non-agent).
     final isSupervisor = _isPaged && MbisApp.isSupervisorRole(userRoles);
-    state = state.copyWith(canAddCustomer: canAdd, isSupervisor: isSupervisor);
+    state = state.copyWith(
+      canAddCustomer: canAdd,
+      isSupervisor: isSupervisor,
+      ownRmId: session?.user.id,
+      ownRmName: session?.user.name,
+    );
     _bootstrap();
   }
 
@@ -409,6 +469,34 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     }
   }
 
+  /// Pilih tahap pipeline (null = semua). Menekan tahap yang sedang aktif
+  /// mematikannya — pintasan yang dipakai orang tanpa perlu membuka sheet lagi.
+  void onStageChanged(String? stage) {
+    final next = state.stageFilter == stage ? null : stage;
+    state = state.copyWith(stageFilter: next);
+    if (_isPaged) {
+      _loadStats();
+      _resetAndLoad();
+    }
+  }
+
+  /// Ganti pengurutan daftar (CR-08). [sortBy] `name`/`createdAt`, [dir] `asc`/`desc`.
+  ///
+  /// Hanya daftar yang dimuat ulang — KPI header TIDAK, karena urutan tidak
+  /// mengubah satu pun angkanya. Memanggil `_loadStats()` di sini hanya akan
+  /// menambah satu permintaan yang hasilnya dijamin sama.
+  ///
+  /// Sengaja TIDAK ikut dibersihkan `resetAllFilters`: urutan bukan filter, ia tidak
+  /// menyembunyikan baris. Tombol "Reset" di sheet menghitung dan menyebut filter,
+  /// jadi diam-diam mengubah urutan di situ akan membuat labelnya berbohong.
+  void onSortChanged(String sortBy, String dir) {
+    if (sortBy == state.sortBy && dir == state.sortDir) return;
+    state = state.copyWith(sortBy: sortBy, sortDir: dir);
+    if (_isPaged) {
+      _resetAndLoad();
+    }
+  }
+
   Future<void> _loadScopeOffices() async {
     try {
       final offices = await _dashRepo.getScopeOffices();
@@ -427,6 +515,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         branchId: state.branchId,
         rmId: state.rmId,
         hvc: state.hvcFilter,
+        stage: state.stageFilter,
       );
       state = state.copyWith(kpi: kpi);
     } catch (_) {
@@ -452,6 +541,9 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
         branchId: state.branchId,
         rmId: state.rmId,
         hvc: state.hvcFilter,
+        stage: state.stageFilter,
+        sort: state.sortBy,
+        dir: state.sortDir,
       );
       // Load lebih baru (filter/search/reset) mulai saat ini in-flight — buang
       // respons usang ini agar barisnya tak menimpa daftar baru.
@@ -557,6 +649,30 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     _loadSummary();
   }
 
+  /// Nyalakan/matikan penyempitan ke customer milik sendiri.
+  ///
+  /// Memakai jalur filter RM yang sudah ada, bukan bendera baru: server sudah
+  /// menyaring `rmId` lewat ScopeNarrower, jadi tidak ada aturan cakupan kedua
+  /// yang perlu dipelihara. Filter wilayah/cabang ikut dilepas saat dinyalakan —
+  /// "cabang X" dan "punya saya" nyaris selalu saling meniadakan, dan
+  /// membiarkannya menyala bersama membuat daftar kosong tanpa sebab yang terlihat.
+  void toggleOwnCustomers() {
+    if (state.onlyOwnCustomers) {
+      state = state.copyWith(rmId: null, rmName: null);
+    } else {
+      if (state.ownRmId == null) return; // sesi belum siap
+      state = state.copyWith(
+        rmId: state.ownRmId,
+        rmName: state.ownRmName,
+        regionId: null,
+        branchId: null,
+      );
+    }
+    _resetAndLoad();
+    _loadStats();
+    _loadSummary();
+  }
+
   void onCobChanged(String? cob) {
     // COB hanya memengaruhi kartu Target/Realisasi, bukan daftar customer.
     state = state.copyWith(cob: cob);
@@ -568,6 +684,7 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     state = state.copyWith(
       entityFilter: null,
       hvcFilter: false,
+      stageFilter: null,
       regionId: null,
       branchId: null,
       rmId: null,

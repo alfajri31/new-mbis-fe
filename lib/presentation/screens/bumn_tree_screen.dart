@@ -83,7 +83,8 @@ class _BumnTreeScreenState extends ConsumerState<BumnTreeScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Ekosistem BUMN', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Ekosistem BUMN', showBack: true, contentMaxWidth: double.infinity),
       body: FutureBuilder<List<BumnTreeNode>>(
         future: _future,
         builder: (context, snap) {

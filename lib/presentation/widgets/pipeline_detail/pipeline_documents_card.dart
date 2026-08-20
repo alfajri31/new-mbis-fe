@@ -14,6 +14,7 @@ class PipelineDocumentsCard extends StatelessWidget {
     required this.docs,
     required this.currentUserId,
     required this.isAgent,
+    required this.canWrite,
     required this.onView,
     required this.onUpload,
     required this.onDelete,
@@ -23,6 +24,12 @@ class PipelineDocumentsCard extends StatelessWidget {
   final List<PipelineDocumentModel> docs;
   final String? currentUserId;
   final bool isAgent;
+
+  /// Pemanggil berwenang mengubah pipeline ini sama sekali. Berbeda dari kunci
+  /// operan/agen di bawah, yang soal SIAPA di antara para RM yang boleh menyentuh
+  /// dokumen. Ini soal peran: divisi kantor pusat punya cakupan baca nasional
+  /// sehingga sampai ke layar ini, tapi seluruh endpoint tulis akan menolaknya.
+  final bool canWrite;
 
   /// Buka/unduh dokumen yang sudah terunggah. Berkasnya dilayani endpoint
   /// terlindungi `/api/files/**`, jadi pemanggilnya WAJIB mengambil isinya lewat
@@ -41,7 +48,7 @@ class PipelineDocumentsCard extends StatelessWidget {
     final isOriginalReferrer =
         currentUserId != null && currentUserId == pipeline.referralFromRmId;
     final docLockedForOperan = isReferralHandedOver && !isOriginalReferrer;
-    final canEditDocs = !isAgent && !docLockedForOperan;
+    final canEditDocs = canWrite && !isAgent && !docLockedForOperan;
     PipelineDocumentModel? docOf(String type) {
       for (final d in docs) {
         if (d.docType == type) return d;

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import 'app.dart';
 import 'auth/auth_session.dart';
+import 'auth/roles.dart';
 import '../presentation/screens/splash_screen.dart';
 import '../presentation/screens/login_screen.dart';
 import '../presentation/screens/main_screen.dart';
@@ -16,7 +17,6 @@ import '../presentation/screens/visit_map_screen.dart';
 import '../presentation/screens/agent_detail_screen.dart';
 import '../presentation/screens/tools_screen.dart';
 import '../presentation/screens/product_knowledge_screen.dart';
-import '../presentation/screens/gps_tracking_loader.dart';
 import '../presentation/screens/kalkulator_premi_screen.dart';
 import '../presentation/screens/kelola_premi_screen.dart';
 import '../presentation/screens/assistant_screen.dart';
@@ -30,8 +30,8 @@ import '../presentation/screens/kelola_akun_screen.dart';
 import '../presentation/screens/kelola_aktivitas_ai_screen.dart';
 import '../presentation/screens/export_data_screen.dart';
 import '../presentation/screens/import_pipeline_screen.dart';
+import '../presentation/screens/import_realisasi_screen.dart';
 import '../presentation/screens/import_target_screen.dart';
-import '../presentation/screens/export_my_visits_screen.dart';
 import '../presentation/screens/privasi_akun_screen.dart';
 import '../presentation/screens/kebijakan_privasi_screen.dart';
 import '../presentation/screens/hapus_akun_screen.dart';
@@ -126,6 +126,16 @@ GoRouter buildRouter({
         if (goingToLogin || loc == '/') {
           return MbisApp.homeRouteForRoles(session.user.roles);
         }
+
+        // Hub Kelola digerbangi peran, bukan hanya disembunyikan tabnya. Tanpa
+        // ini seorang RM bisa mengetik '/kelola/export-data' dan mendapat
+        // halaman yang tergambar lengkap tetapi seluruh tombolnya mati, yang
+        // terbaca sebagai aplikasi rusak alih-alih sebagai penolakan akses.
+        if (loc == '/kelola' || loc.startsWith('/kelola/')) {
+          if (!Roles.hasAny(session.user.roles, Roles.kelolaHubRoles)) {
+            return MbisApp.homeRouteForRoles(session.user.roles);
+          }
+        }
         return null;
       },
       routes: [
@@ -182,9 +192,17 @@ GoRouter buildRouter({
         _tabRoute('/profil', 'rm-shell', 5, (i) => MainScreen(index: i),
             subRoutes: [
               ..._konsolSubRoutes(),
+              // Pengajuan agen/TPM milik RM — pintunya "Ajukan Agen / TPM" di Profil.
+              // Sengaja BUKAN bagian _konsolSubRoutes: konsol pengelolaan agen adalah
+              // layar pimpinan kantor & kantor pusat, sedangkan layar ini hanya memuat
+              // pengajuan pemanggilnya sendiri. Dirutekan (bukan Navigator.push) supaya
+              // ketukan pada sebuah pengajuan memakai rute /agent-detail yang sama
+              // seperti konsolnya.
               GoRoute(
-                  path: 'export-visit-saya',
-                  builder: (_, _) => const ExportMyVisitsScreen()),
+                  path: 'pengajuan-agen',
+                  builder: (_, _) => const AgentManagementScreen(mine: true)),
+              // Rute 'export-visit-saya' dihapus (CR-13) — 'export' di bawah sudah
+              // mencakup ekspor kunjungan, ter-scope di server.
               GoRoute(
                   path: 'export',
                   builder: (_, _) => const ExportScreen()),
@@ -289,13 +307,17 @@ GoRoute _privasiRoute() => GoRoute(
 /// The field tools, as a reusable sub-route list. Nested under the /tools tab
 /// (for RM, whose tab 4 IS Tools) and under /kelola/tools (for BM/ADMIN, whose
 /// tab 4 is the RM performance list), so back returns to the hub the user opened
-/// the tool from. `visit-map` is the supervisory, office-scoped map — the same
-/// screen the dashboard's "Peta Visit" button opens.
+/// the tool from.
+///
+/// `visit-map` adalah SATU-SATUNYA peta kunjungan, untuk semua peran — endpoint
+/// di belakangnya ber-cakupan, jadi RM melihat kunjungannya sendiri dan penyelia
+/// melihat kantornya. Rute lama `gps` (GPS Tracking, khusus RM) dihapus bersama
+/// layarnya: dua peta bernama mirip sudah terbukti membuat orang salah menunjuk
+/// layar. Kalau ada tautan lama ke `/tools/gps`, arahkan ke `visit-map`.
 List<RouteBase> _toolsSubRoutes() => [
       GoRoute(
           path: 'product-knowledge',
           builder: (_, _) => const ProductKnowledgeScreen()),
-      GoRoute(path: 'gps', builder: (_, _) => const GpsTrackingLoader()),
       GoRoute(path: 'visit-map', builder: (_, _) => const VisitMapScreen()),
       GoRoute(
           path: 'kalkulator-premi',
@@ -326,6 +348,9 @@ List<RouteBase> _konsolSubRoutes() => [
       GoRoute(
           path: 'master-data',
           builder: (_, _) => const KelolaMasterDataScreen()),
+      GoRoute(
+          path: 'import-realisasi',
+          builder: (_, _) => const ImportRealisasiScreen()),
       GoRoute(path: 'akun', builder: (_, _) => const KelolaAkunScreen()),
       GoRoute(
           path: 'aktivitas-ai',

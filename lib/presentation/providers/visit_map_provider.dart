@@ -16,6 +16,12 @@ class VisitMapState {
   final String? officeFilter; // selected office id, null = whole scope
   final String? selectedVisitId;
 
+  /// Hitungan kunjungan se-cakupan, termasuk yang TANPA koordinat. [locations]
+  /// hanya berisi yang bisa diplot, jadi angka inilah yang memungkinkan layar
+  /// berkata "N kunjungan tercatat, tapi tak satu pun menyimpan koordinat".
+  /// Null = belum termuat / gagal (kartu statistik menampilkan "–").
+  final VisitTrackingSummary? summary;
+
   const VisitMapState({
     this.loading = true,
     this.error,
@@ -23,6 +29,7 @@ class VisitMapState {
     this.offices = const [],
     this.officeFilter,
     this.selectedVisitId,
+    this.summary,
   });
 
   VisitMapState copyWith({
@@ -32,12 +39,14 @@ class VisitMapState {
     List<ScopeOffice>? offices,
     Object? officeFilter = _keep,
     Object? selectedVisitId = _keep,
+    Object? summary = _keep,
   }) {
     return VisitMapState(
       loading: loading ?? this.loading,
       error: error == _keep ? this.error : error as String?,
       locations: locations ?? this.locations,
       offices: offices ?? this.offices,
+      summary: summary == _keep ? this.summary : summary as VisitTrackingSummary?,
       officeFilter: officeFilter == _keep
           ? this.officeFilter
           : officeFilter as String?,
@@ -94,11 +103,30 @@ class VisitMapNotifier extends Notifier<VisitMapState> {
         loading: false,
         selectedVisitId: null,
       );
+      // Hitungan menyusul dan TIDAK menahan peta: pin jauh lebih penting daripada
+      // angka di kartu, dan kegagalannya tidak boleh mengosongkan peta yang sudah
+      // benar. Gagal → summary dibiarkan null, kartunya menampilkan "–".
+      _loadSummary();
     } catch (e) {
       state = state.copyWith(
         error: e.toString().replaceFirst('Exception: ', ''),
         loading: false,
       );
+    }
+  }
+
+  Future<void> _loadSummary() async {
+    final officeId = state.officeFilter; // dibekukan: filter bisa berubah saat menunggu
+    try {
+      final summary = await _repo.getVisitTrackingSummary(officeId: officeId);
+      // Filter sudah berganti selagi permintaan ini berjalan → hasilnya milik
+      // pertanyaan lama; membuangnya lebih baik daripada angka yang tak cocok
+      // dengan pin yang sedang tampil.
+      if (officeId != state.officeFilter) return;
+      state = state.copyWith(summary: summary);
+    } catch (_) {
+      if (officeId != state.officeFilter) return;
+      state = state.copyWith(summary: null);
     }
   }
 
@@ -113,5 +141,13 @@ class VisitMapNotifier extends Notifier<VisitMapState> {
   /// (`_mapController.move`) tetap di widget. (Dulu bagian `setState` di `_focus`.)
   void select(VisitLocation loc) {
     state = state.copyWith(selectedVisitId: loc.visitId);
+  }
+
+  /// Batal seleksi — menutup ringkasan kunjungan (CR-10). Dipanggil tombol tutup
+  /// pada kartu ringkasan dan sebelum berpindah ke halaman customer: state ini
+  /// hidup di notifier, jadi tanpa dibersihkan ringkasan lama sudah terbuka lagi
+  /// saat peta dibuka berikutnya.
+  void clearSelection() {
+    state = state.copyWith(selectedVisitId: null);
   }
 }

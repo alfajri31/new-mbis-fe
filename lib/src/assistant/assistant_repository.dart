@@ -262,11 +262,21 @@ class AssistantRepository {
 
   /// Runs an activity. The model isn't chosen here — the server uses the admin-selected
   /// active model and echoes it back in [AiRunResult.model].
+  /// Batas tunggu KHUSUS untuk menjalankan aktivitas. Default [ApiClient] 30 detik lebih PENDEK
+  /// daripada 60 detik yang diberi backend kepada penyedia model
+  /// (`mbis.assistant.timeout-seconds`), jadi setiap run yang memakan 30–60 detik dijamin gagal
+  /// di aplikasi padahal server menyelesaikannya — jawabannya dibuang karena tidak ada yang
+  /// menunggu, sementara jatah harian sudah dipotong di awal dan sengaja TIDAK dikembalikan
+  /// (lihat AiUsageGuard: tidak ada refund). 90 detik memberi ruang di atas batas server dan
+  /// masih di bawah `proxy_read_timeout 120s` nginx yang berdiri di depan build web.
+  static const Duration _runTimeout = Duration(seconds: 90);
+
   Future<AiRunResult> runActivity(
       String customerId, String activityId, Map<String, String> inputs) async {
     final res = await apiClient.post(
       '/api/assistant/customers/$customerId/activities/$activityId/run',
       body: {'inputs': inputs},
+      timeout: _runTimeout,
     );
     if (res.statusCode == 200) {
       return AiRunResult.fromJson(jsonDecode(res.body));

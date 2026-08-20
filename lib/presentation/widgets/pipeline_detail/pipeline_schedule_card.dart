@@ -6,7 +6,7 @@ import '../../../utils/format.dart';
 import '../../../utils/schedule_status.dart';
 
 /// One "Jadwal Mendatang" card (status badge + date/time + agenda), with an
-/// optional edit/cancel menu for OPEN schedules.
+/// optional edit/cancel/complete menu for OPEN schedules.
 /// Murni presentational — diekstrak dari `pipeline_detail_screen.dart`
 /// (behavior-preserving). Aksi ubah/batal dilewatkan lewat callback.
 class PipelineScheduleCard extends StatelessWidget {
@@ -16,12 +16,14 @@ class PipelineScheduleCard extends StatelessWidget {
     this.editable = false,
     required this.onEdit,
     required this.onCancel,
+    required this.onComplete,
   });
 
   final PipelineScheduleModel schedule;
   final bool editable;
   final ValueChanged<PipelineScheduleModel> onEdit;
   final ValueChanged<PipelineScheduleModel> onCancel;
+  final ValueChanged<PipelineScheduleModel> onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -99,8 +101,17 @@ class PipelineScheduleCard extends StatelessWidget {
                           onSelected: (v) {
                             if (v == 'edit') onEdit(s);
                             if (v == 'cancel') onCancel(s);
+                            if (v == 'done') onComplete(s);
                           },
                           itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'done',
+                              child: Row(children: [
+                                Icon(Icons.check_circle_outline, size: 18, color: AppColors.successGreen),
+                                SizedBox(width: 10),
+                                Text('Tandai selesai'),
+                              ]),
+                            ),
                             PopupMenuItem(
                               value: 'edit',
                               child: Row(children: [

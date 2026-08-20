@@ -5,10 +5,12 @@ import '../../theme/app_theme.dart';
 import '../../src/app.dart';
 import '../../src/config/app_version.dart';
 import '../providers/profil_provider.dart';
-// Ajukan Agen is a one-shot form, so it stays an imperative push (a half-filled
-// form has nothing worth restoring on refresh). The management consoles below
-// are routed instead — see /profil/* sub-routes in router.dart.
-import 'ajukan_agen_screen.dart';
+// Semua layar yang terbuka dari sini dirutekan — lihat sub-rute /profil/* di
+// router.dart — supaya refresh di web tidak melemparkan pengguna kembali ke
+// Profil. Termasuk "Ajukan Agen / TPM", yang kini membuka daftar pengajuan RM
+// (/profil/pengajuan-agen), bukan langsung formulirnya.
+import '../../src/auth/roles.dart';
+import 'ganti_email_screen.dart';
 import 'ganti_password_screen.dart';
 
 /// S-112 — Profil RM. Reads profile from /api/auth/me and YTD performance from
@@ -22,9 +24,25 @@ class ProfilScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfilScreenState extends ConsumerState<ProfilScreen> {
+  static const _labelKeamanan = 'Keamanan & Password';
+  static const _labelEmail = 'Email Akun';
+
   static const List<({String label, IconData icon, String section})> _menu = [
-    (label: 'Keamanan & Password', icon: Icons.key_outlined, section: 'Pengaturan'),
+    (label: _labelKeamanan, icon: Icons.key_outlined, section: 'Pengaturan'),
+    (label: _labelEmail, icon: Icons.alternate_email, section: 'Pengaturan'),
   ];
+
+  /// Entri yang boleh dilihat pemanggil. "Email Akun" hanya untuk peran yang
+  /// memang dilayani `POST /api/auth/change-email` — cermin `hasRole('RM')` di
+  /// server, yang lewat hierarki peran ikut meloloskan KUP & ADMIN. Akun agen
+  /// sengaja di luar: email akunnya mengikuti data agennya, bukan sebaliknya.
+  List<({String label, IconData icon, String section})> _visibleMenu(BuildContext context) {
+    final roles = MbisApp.of(context)?.session?.user.roles ?? const <String>[];
+    final canChangeEmail = roles.any(_emailChangers.contains);
+    return _menu.where((m) => m.label != _labelEmail || canChangeEmail).toList();
+  }
+
+  static const _emailChangers = {Roles.rm, Roles.kup, Roles.admin};
 
   // State data/loading dipindah ke ProfilNotifier. Getter memproksi agar
   // FutureBuilder & build di bawah tetap memakai nama lama tanpa diubah.
@@ -98,10 +116,11 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
               const SizedBox(height: AppSpacing.lg),
               if (!isAdmin) ...[
                 _buildAjukanAgenButton(context),
-                _buildManajemenAgenButton(context),
                 _buildReferralButton(context),
                 _buildKelolaPengumumanButton(context),
-                _buildExportMyVisitsButton(context),
+                // "Ekspor Kunjungan Saya" dihapus (CR-13): "Ekspor Data" di bawah
+                // sudah mencakupnya. `/api/export/visits` ter-scope di server, dan
+                // RM tanpa filter mendapat persis kunjungannya sendiri.
                 _buildExportDataButton(context),
                 const SizedBox(height: AppSpacing.lg),
               ],
@@ -254,7 +273,9 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
   }
 
   Widget _buildMenuSection(BuildContext context, String section) {
-    final items = _menu.where((m) => m.section == section).toList();
+    final items =
+        _visibleMenu(context).where((m) => m.section == section).toList();
+    if (items.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -289,10 +310,20 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
   Widget _menuItem(BuildContext context, String label, IconData icon, {required bool isLast}) {
     return InkWell(
       onTap: () {
-        if (label == 'Keamanan & Password') {
+        if (label == _labelKeamanan) {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const GantiPasswordScreen()),
           );
+        } else if (label == _labelEmail) {
+          Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const GantiEmailScreen()))
+              // Email tampil di header profil (dari klaim token yang baru ditukar),
+              // jadi muat ulang begitu layarnya ditutup dengan perubahan.
+              .then((changed) {
+            if (changed == true && mounted) {
+              ref.read(profilProvider.notifier).reload();
+            }
+          });
         }
       },
       child: Container(
@@ -321,6 +352,14 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
     );
   }
 
+  /// "Ajukan Agen / TPM" — SATU-SATUNYA pintu RM ke urusan agen.
+  ///
+  /// Dulu ia membuka formulir pendaftaran, dan pintu kedua ("Manajemen Agen")
+  /// membawa RM ke konsol pengelolaan agen sekantornya. Pintu kedua itu dihapus:
+  /// tugas RM berhenti begitu agennya terdaftar, dan agen yang sudah berjalan
+  /// diurus pengelola agen kantor pusat. Karena melengkapi dokumen tahap-2 masih
+  /// pekerjaan RM, tombol ini kini membuka DAFTAR pengajuannya sendiri —
+  /// formulirnya ada di "Ajukan Baru" pada daftar itu.
   Widget _buildAjukanAgenButton(BuildContext context) {
     // Supervisors (KUP/BM/RO/DPJ) can't propose agents/TPM — hide the action.
     final roles = MbisApp.of(context)?.session?.user.roles;
@@ -330,9 +369,7 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
       width: double.infinity,
       height: 52,
       child: OutlinedButton.icon(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AjukanAgenScreen()),
-        ),
+        onPressed: () => context.go('/profil/pengajuan-agen'),
         icon: const Icon(Icons.person_add_alt_1,
             size: 18, color: AppColors.primaryNavy),
         label: const Text('Ajukan Agen / TPM',
@@ -344,63 +381,6 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
           backgroundColor: AppColors.navyBg,
           side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
           shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-        ),
-      ),
-    );
-  }
-
-  /// "Manajemen Agen" — worklist onboarding agen, KHUSUS RM di sini.
-  ///
-  /// Peran lain (ADMIN/BM/RO/KUP) sudah punya kartu yang sama di hub "Kelola",
-  /// jadi tidak diduplikasi di Profil — semua konsol terpusat di Kelola. RM
-  /// tetap di sini karena RM tidak punya tab Kelola.
-  Widget _buildManajemenAgenButton(BuildContext context) {
-    const allowed = {'RM'};
-    final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
-    if (!roles.any(allowed.contains)) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.md),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton.icon(
-          onPressed: () => context.go('/profil/manajemen-agen'),
-          icon: const Icon(Icons.manage_accounts_outlined, size: 18, color: AppColors.primaryNavy),
-          label: const Text('Manajemen Agen',
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryNavy)),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: AppColors.navyBg,
-            side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// "Ekspor Kunjungan Saya" — RM exports only their own visit data (item 11,
-  /// after-piloting feedback). Supervisors/admin already have the full export
-  /// console via Kelola, so this is RM-only.
-  Widget _buildExportMyVisitsButton(BuildContext context) {
-    final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
-    if (!roles.contains('RM')) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.md),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton.icon(
-          onPressed: () => context.go('/profil/export-visit-saya'),
-          icon: const Icon(Icons.file_download_outlined, size: 18, color: AppColors.primaryNavy),
-          label: const Text('Ekspor Kunjungan Saya',
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryNavy)),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: AppColors.navyBg,
-            side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-          ),
         ),
       ),
     );

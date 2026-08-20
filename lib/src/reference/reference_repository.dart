@@ -85,8 +85,9 @@ class ReferenceRepository {
 
   /// Agents/TPM the current RM may attach to a pipeline (region-scoped by backend).
   Future<List<AgentRef>> agents() async {
-    // scope=office: RM melihat agen aktif di subtree kantornya (dropdown sumber
-    // pipeline), bukan hanya agen yang ia ajukan sendiri.
+    // scope=office: direktori nama agen AKTIF di subtree kantor RM (+ kanwil di
+    // atasnya). Penyaringan status kini di SERVER, dan barisnya tidak lagi membawa
+    // NIK/NPWP/rekening milik agen yang didaftarkan RM lain.
     final res = await apiClient.get('/api/agents?scope=office');
     if (res.statusCode != 200) return [];
     final List<dynamic> list = jsonDecode(res.body);

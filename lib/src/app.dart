@@ -9,6 +9,7 @@ import '../core/providers/app_providers.dart';
 import 'auth/auth_repository.dart';
 import '../core/observability/crash_reporter.dart';
 import 'auth/auth_session.dart';
+import 'auth/roles.dart';
 import 'network/api_client.dart';
 import 'notification/push_service.dart';
 import 'router.dart';
@@ -44,12 +45,24 @@ class MbisApp extends ConsumerStatefulWidget {
     return '/dashboard';
   }
 
-  /// Oversight roles (ADMIN/RO/BM/KUP). They oversee RMs rather than doing field
-  /// work themselves, so their UI drops the personal jadwal/akses-cepat, swaps the
-  /// Tools tab for the RM management list, and hides "Ajukan Agen". Mirrors the
-  /// backend scope (ADMIN = national, RO/BM/KUP = office subtree); ADMIN is
-  /// included so it also gets the RM management tab, not just the dashboard view.
-  static const Set<String> supervisorRoles = {'ADMIN', 'KUP', 'BM', 'RO'};
+  /// Oversight roles (ADMIN/RO/BM/KUP + divisi kantor pusat). They oversee RMs
+  /// rather than doing field work themselves, so their UI drops the personal
+  /// jadwal/akses-cepat, swaps the Tools tab for the RM management list, and hides
+  /// "Ajukan Agen". Mirrors the backend scope (ADMIN & divisi = national,
+  /// RO/BM/KUP = office subtree); ADMIN is included so it also gets the RM
+  /// management tab, not just the dashboard view.
+  ///
+  /// Divisi kantor pusat ikut karena posisinya memang mengawasi, bukan bekerja di
+  /// lapangan: mereka tak punya portofolio nasabah sendiri, jadi jadwal & akses
+  /// cepat pribadi tidak berlaku. Yang membedakan mereka dari penyelia kantor
+  /// adalah hak TULIS-nya, dan itu digerbangi terpisah — lihat `Roles`.
+  static const Set<String> supervisorRoles = {
+    'ADMIN',
+    'KUP',
+    'BM',
+    'RO',
+    ...Roles.headOfficeDivisions,
+  };
 
   static bool isSupervisorRole(List<String>? roles) =>
       roles != null && roles.any(supervisorRoles.contains);

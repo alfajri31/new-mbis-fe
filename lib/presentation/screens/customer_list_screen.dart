@@ -53,6 +53,9 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   String get _searchTerm => _cs.searchTerm;
   String? get _entityFilter => _cs.entityFilter;
   bool get _hvcFilter => _cs.hvcFilter;
+  String? get _stageFilter => _cs.stageFilter;
+  String get _sortBy => _cs.sortBy;
+  String get _sortDir => _cs.sortDir;
   CustomerKpi? get _kpi => _cs.kpi;
   bool get _initialLoading => _cs.initialLoading;
   String? get _error => _cs.error;
@@ -113,6 +116,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   // Aksi filter/paging → delegasi ke CustomerListNotifier (logika dipindah utuh).
   void _onHvcToggle() => _notifier.onHvcToggle();
   void _onEntityChanged(String? entity) => _notifier.onEntityChanged(entity);
+  void _onStageChanged(String? stage) => _notifier.onStageChanged(stage);
+
+  void _onSortChanged(String sortBy, String dir) =>
+      _notifier.onSortChanged(sortBy, dir);
   void _onRegionChanged(String? regionId) => _notifier.onRegionChanged(regionId);
   void _onBranchChanged(String? branchId) => _notifier.onBranchChanged(branchId);
   void _onRmChanged(String? rmId, String? rmName) =>
@@ -439,13 +446,19 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   }) {
     String v(int? n) => n?.toString() ?? '–';
     // Total Customer + pipeline stage breakdown (P3/P2/P1/Won/Declined).
+    // Tiap kartu adalah jalan masuk ke daftar yang menyusun angkanya (CR-06):
+    // `stage` di bawah harus tetap cocok dengan nilai di [_kStageOptions], karena
+    // keduanya bermuara ke filter tahap yang sama.
     final cards = <Widget>[
       _kpiCard('Total Customer', v(kpi?.totalCustomer), AppColors.primaryNavy),
-      _kpiCard('Pipeline P3', v(kpi?.p3), AppColors.grayStage),
-      _kpiCard('Pipeline P2', v(kpi?.p2), AppColors.secondaryOrange),
-      _kpiCard('Pipeline P1', v(kpi?.p1), AppColors.primaryNavy),
-      _kpiCard('Pipeline Won', v(kpi?.won), AppColors.successGreen),
-      _kpiCard('Pipeline Declined', v(kpi?.decline), AppColors.errorRed),
+      _kpiCard('Pipeline P3', v(kpi?.p3), AppColors.grayStage, stage: 'P3'),
+      _kpiCard('Pipeline P2', v(kpi?.p2), AppColors.secondaryOrange,
+          stage: 'P2'),
+      _kpiCard('Pipeline P1', v(kpi?.p1), AppColors.primaryNavy, stage: 'P1'),
+      _kpiCard('Pipeline Won', v(kpi?.won), AppColors.successGreen,
+          stage: 'WON'),
+      _kpiCard('Pipeline Declined', v(kpi?.decline), AppColors.errorRed,
+          stage: 'DECLINE'),
     ];
     return Container(
       color: AppColors.surfaceWhite,
@@ -498,17 +511,144 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
           // Search field + a single consolidated "Filter" button. All filters
           // (tipe customer, HVC, and for supervisors wilayah/cabang/RM) live in
           // the sheet the button opens — keeping the header uncluttered.
+          _buildSearchRow(),
+        ],
+      ),
+    );
+  }
+
+  /// Baris pencarian: kolom cari + chip filter aktif + tombol Filter.
+  ///
+  /// Chip filter aktif hidup di BARIS YANG SAMA dan mengambil ruangnya dari
+  /// kolom cari, jadi setiap filter baru memendekkan kolom itu. Diletakkan
+  /// terpisah di bawahnya, deretan chip mudah terlewat justru saat paling
+  /// penting: ketika daftar tampak kosong karena filter yang orang lupa sedang
+  /// menyala.
+  ///
+  /// Keduanya memakai [Expanded] dengan flex, bukan lebar tetap: apa pun jumlah
+  /// filternya, barisnya tidak bisa overflow di layar HP. Kolom cari tidak
+  /// pernah turun di bawah sekitar sepertiga baris, supaya tetap bisa diketik.
+  Widget _buildSearchRow() {
+    final aktif = _activeFilters;
+    // 0 filter → kolom cari penuh. Bertambah → porsinya turun bertahap lalu
+    // berhenti; chip selebihnya dijangkau dengan menggeser, bukan dengan
+    // menyusutkan kolom cari sampai tak terpakai.
+    final chipFlex = aktif.isEmpty ? 0 : (aktif.length >= 3 ? 4 : aktif.length + 1);
+    final searchFlex = aktif.isEmpty ? 10 : (aktif.length >= 3 ? 5 : 8 - aktif.length);
+
+    // Dengan tombol "Customer Saya" ikut hadir, satu baris tidak lagi muat di layar
+    // HP: kolom cari menyusut sampai tinggal ikon kaca pembesar dan chip filter
+    // aktif terpotong di tengah kata. Karena itu susunannya dipecah dua baris —
+    // kolom cari selebar layar, kendali filter di bawahnya. Pemakai yang tidak
+    // mendapat tombol itu tetap memakai susunan satu baris seperti semula.
+    if (_showOwnCustomersButton) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSearchField(),
+          const SizedBox(height: 10),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _buildSearchField()),
-                const SizedBox(width: 10),
                 _buildFilterButton(),
+                const SizedBox(width: 8),
+                _buildOwnCustomersButton(),
+                if (aktif.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: aktif.map(_activeFilterPill).toList(),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ],
+      );
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: searchFlex, child: _buildSearchField()),
+          if (aktif.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              flex: chipFlex,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: aktif.map(_activeFilterPill).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 10),
+          _buildFilterButton(),
+        ],
+      ),
+    );
+  }
+
+  /// Tombol "Customer Saya" hanya berguna bila cakupan pemakai memang melampaui
+  /// dirinya sendiri. Untuk RM cabang daftarnya sudah berisi miliknya saja, jadi
+  /// tombolnya akan jadi hiasan yang tidak pernah mengubah apa pun.
+  ///
+  /// Syarat kedua: pemakainya memang MEMILIKI customer. BM/RO/ADMIN tidak pernah
+  /// jadi pemilik customer, jadi bagi mereka tombol ini hanya akan mengosongkan
+  /// daftar — kekacauan yang tidak menolong siapa pun.
+  bool get _showOwnCustomersButton =>
+      _cs.scopeWiderThanOwn && _cs.ownRmId != null && _canAddCustomer;
+
+  /// Pintasan satu ketukan ke customer sendiri, di samping tombol Filter.
+  ///
+  /// Sengaja berdiri sendiri, bukan disembunyikan di dalam sheet filter: bagi RM
+  /// yang berkantor di Kanwil inilah tampilan sehari-harinya, sedangkan isi sheet
+  /// dipakai sesekali untuk menengok cabang lain.
+  Widget _buildOwnCustomersButton() {
+    final active = _cs.onlyOwnCustomers;
+    return InkWell(
+      onTap: () => _notifier.toggleOwnCustomers(),
+      borderRadius: AppRadius.radiusFull,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: active ? AppColors.secondaryOrange : AppColors.bgScreen,
+          borderRadius: AppRadius.radiusFull,
+          border: Border.all(
+            color: active ? AppColors.secondaryOrange : AppColors.border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              active ? Icons.person : Icons.person_outline,
+              size: 18,
+              color: active ? Colors.white : AppColors.grayStage,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Customer Saya',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -619,14 +759,88 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   }
 
   /// Count of filters applied through the sheet (drives the button badge).
-  int get _activeFilterCount {
-    int n = 0;
-    if (_entityFilter != null) n++;
-    if (_hvcFilter) n++;
-    if (_regionId != null) n++;
-    if (_branchId != null) n++;
-    if (_rmId != null) n++;
-    return n;
+  int get _activeFilterCount => _activeFilters.length;
+
+  /// Tahap pipeline yang bisa dipilih, berikut labelnya. Urutannya mengikuti
+  /// perjalanan pipeline (P3 paling awal) — sama dengan urutan kartu KPI di
+  /// header, supaya yang dilihat orang di dua tempat itu tidak bertukar posisi.
+  static const List<({String value, String label})> _kStageOptions = [
+    (value: 'P3', label: 'P3'),
+    (value: 'P2', label: 'P2'),
+    (value: 'P1', label: 'P1'),
+    (value: 'WON', label: 'Won'),
+    (value: 'DECLINE', label: 'Decline'),
+  ];
+
+  /// Opsi pengurutan daftar (CR-08). `value`/`dir` dikirim apa adanya ke server,
+  /// yang menerjemahkannya lewat daftar putih — jadi keempatnya harus persis
+  /// cocok dengan `CustomerService.SORT_PROPERTIES`, kalau tidak dibalas 400.
+  ///
+  /// Sengaja TANPA "nilai pipeline": angka itu agregat yang dihitung setelah
+  /// paging di server, bukan kolom customer. Mengurutkannya mengembalikan pola
+  /// query lama yang membuat layar ini memakan puluhan detik pada data besar.
+  static const List<({String value, String dir, String label})> _kSortOptions = [
+    (value: 'name', dir: 'asc', label: 'Nama A-Z'),
+    (value: 'name', dir: 'desc', label: 'Nama Z-A'),
+    (value: 'createdAt', dir: 'desc', label: 'Terbaru'),
+    (value: 'createdAt', dir: 'asc', label: 'Terlama'),
+  ];
+
+  static String _stageLabel(String value) => _kStageOptions
+      .firstWhere((o) => o.value == value, orElse: () => (value: value, label: value))
+      .label;
+
+  /// Filter yang sedang aktif: label untuk ditampilkan + cara mematikannya.
+  ///
+  /// Satu daftar dipakai bersama oleh badge hitungan DAN deretan chip, jadi
+  /// keduanya tidak bisa berbeda — dulu hitungannya ditulis terpisah dan setiap
+  /// filter baru harus diingat untuk ditambahkan ke sana.
+  List<({String label, VoidCallback clear})> get _activeFilters {
+    final out = <({String label, VoidCallback clear})>[];
+    if (_entityFilter != null) {
+      // Yang disimpan filter adalah paramKey; yang dibaca orang paramValue.
+      out.add((
+        label: _entityOptions
+            .firstWhere(
+              (o) => o.key == _entityFilter,
+              orElse: () => ParamRef(_entityFilter!, _entityFilter!),
+            )
+            .value,
+        clear: () => _onEntityChanged(null),
+      ));
+    }
+    if (_hvcFilter) {
+      out.add((label: 'HVC', clear: _onHvcToggle));
+    }
+    if (_stageFilter != null) {
+      out.add((
+        label: _stageLabel(_stageFilter!),
+        clear: () => _onStageChanged(null),
+      ));
+    }
+    if (_regionId != null) {
+      out.add((
+        label: _officeName(_regions, _regionId!),
+        clear: () => _onRegionChanged(null),
+      ));
+    }
+    if (_branchId != null) {
+      out.add((
+        label: _officeName(_branches, _branchId!),
+        clear: () => _onBranchChanged(null),
+      ));
+    }
+    if (_rmId != null) {
+      out.add((label: _rmName ?? 'RM terpilih', clear: () => _onRmChanged(null, null)));
+    }
+    return out;
+  }
+
+  String _officeName(List<ScopeOffice> options, String id) {
+    for (final o in options) {
+      if (o.id == id) return o.name;
+    }
+    return id;
   }
 
   Future<void> _openFilterSheet() async {
@@ -728,38 +942,80 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
               runSpacing: 8,
               children: [
                 _buildFilterChip('Semua', null, refresh),
+                // Nilai filter memakai paramKey, BUKAN paramValue. Customer
+                // menyimpan entityCategory sebagai paramKey (mis. 'SWASTA'), baik
+                // di basis data maupun pada jalur saring di aplikasi. Dulu chip ini
+                // mengirim paramValue ('Swasta'), lalu dibandingkan sama persis,
+                // sehingga lima dari sembilan pilihan selalu menghasilkan 0 baris.
                 for (final o in _entityOptions)
-                  _buildFilterChip(o.value, o.value, refresh),
+                  _buildFilterChip(o.value, o.key, refresh),
               ],
             ),
             if (_isPaged) ...[
               const SizedBox(height: 18),
+              _sheetSectionLabel('Tahap Pipeline'),
+              const SizedBox(height: 4),
+              const Text(
+                'Menampilkan customer yang punya pipeline di tahap ini.',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _stageChip('Semua', null, refresh),
+                  for (final o in _kStageOptions)
+                    _stageChip(o.label, o.value, refresh),
+                ],
+              ),
+              const SizedBox(height: 18),
               _sheetSectionLabel('Kategori Khusus'),
               const SizedBox(height: 10),
               Align(alignment: Alignment.centerLeft, child: _hvcChip(refresh)),
+              const SizedBox(height: 18),
+              _sheetSectionLabel('Urutkan'),
+              const SizedBox(height: 4),
+              const Text(
+                'Berlaku untuk seluruh daftar, bukan hanya halaman ini.',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final o in _kSortOptions) _sortChip(o, refresh),
+                ],
+              ),
+            ],
+            // Filter wilayah/cabang digerbangi KETERSEDIAAN cakupan, bukan nama
+            // peran: RM yang berkantor di Kanwil (CR-18) boleh melihat seluruh
+            // cabang di bawahnya padahal perannya tetap RM. Server yang menentukan
+            // isi daftarnya lewat /api/dashboard/scope-offices — untuk RM cabang
+            // daftar itu kosong, jadi bagian ini tidak muncul sama sekali.
+            if (_regions.isNotEmpty || _branches.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _sheetSectionLabel('Wilayah & Cabang'),
+              const SizedBox(height: 10),
+              if (_regions.isNotEmpty)
+                _filterDropdown(
+                  hint: 'Semua wilayah',
+                  value: _regionId,
+                  options: _regions,
+                  onChanged: (v) => refresh(() => _onRegionChanged(v)),
+                ),
+              if (_branches.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _filterDropdown(
+                  hint: 'Semua cabang',
+                  value: _branchId,
+                  options: _branches,
+                  onChanged: (v) => refresh(() => _onBranchChanged(v)),
+                ),
+              ],
             ],
             if (_isSupervisor) ...[
-              if (_regions.isNotEmpty || _branches.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                _sheetSectionLabel('Wilayah & Cabang'),
-                const SizedBox(height: 10),
-                if (_regions.isNotEmpty)
-                  _filterDropdown(
-                    hint: 'Semua wilayah',
-                    value: _regionId,
-                    options: _regions,
-                    onChanged: (v) => refresh(() => _onRegionChanged(v)),
-                  ),
-                if (_branches.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _filterDropdown(
-                    hint: 'Semua cabang',
-                    value: _branchId,
-                    options: _branches,
-                    onChanged: (v) => refresh(() => _onBranchChanged(v)),
-                  ),
-                ],
-              ],
               const SizedBox(height: 18),
               _sheetSectionLabel('Nama RM'),
               const SizedBox(height: 10),
@@ -1290,20 +1546,42 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
   }
 
   /// A compact fixed-width KPI card for the horizontally scrolling header row.
-  Widget _kpiCard(String label, String value, Color valueColor) =>
-      _buildHeaderStatCard(label: label, value: value, valueColor: valueColor);
+  ///
+  /// [stage] = tahap yang dipasang saat kartu ditekan (CR-06); `null` untuk kartu
+  /// Total Customer, yang justru MELEPAS filter tahap sehingga daftar kembali ke
+  /// himpunan penuh yang dihitung kartu itu. Filter yang sama dipakai chip di
+  /// sheet, jadi menekan kartu = memilih chip: daftar, angka, dan chip filter
+  /// aktif bergerak bersama, dan mematikannya kembali cukup dengan menekan ulang.
+  ///
+  /// Di jalur non-paged (feed customer agent) kartu dibiarkan mati: hitungannya
+  /// tidak sadar-tahap, jadi tautan ke daftar per tahap akan menjanjikan sesuatu
+  /// yang tidak bisa ditepati.
+  Widget _kpiCard(String label, String value, Color valueColor,
+          {String? stage}) =>
+      _buildHeaderStatCard(
+        label: label,
+        value: value,
+        valueColor: valueColor,
+        selected: stage != null && _stageFilter == stage,
+        onTap: _isPaged ? () => _onStageChanged(stage) : null,
+      );
 
   Widget _buildHeaderStatCard({
     required String label,
     required String value,
     required Color valueColor,
+    VoidCallback? onTap,
+    bool selected = false,
   }) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
+        color: selected ? AppColors.navyBg : AppColors.surfaceWhite,
         borderRadius: AppRadius.radiusMd,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: selected ? AppColors.primaryNavy : AppColors.border,
+          width: selected ? 1.5 : 1,
+        ),
         boxShadow: const [AppShadows.level1],
       ),
       child: Column(
@@ -1336,6 +1614,17 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    // InkWell dibungkus Material agar riak sentuhnya terlihat di atas kartu yang
+    // sudah punya latar sendiri; tanpa itu kartu terasa mati walau bisa ditekan.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.radiusMd,
+        child: card,
       ),
     );
   }
@@ -1403,6 +1692,112 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.white : AppColors.textSecondary,
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Chip tahap pipeline di dalam sheet. Bentuknya sengaja sama persis dengan
+  /// [_buildFilterChip] — dua deret chip bersebelahan yang berbeda gaya akan
+  /// terbaca sebagai dua jenis kontrol yang berbeda perilakunya, padahal sama.
+  Widget _stageChip(
+    String label,
+    String? stageValue,
+    void Function(VoidCallback) refresh,
+  ) {
+    final isSelected = _stageFilter == stageValue;
+    return GestureDetector(
+      onTap: () => refresh(() => _onStageChanged(stageValue)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryNavy : AppColors.surfaceWhite,
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: isSelected ? AppColors.primaryNavy : AppColors.border,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Chip pilihan urutan di dalam sheet (CR-08). Bentuknya sama dengan
+  /// [_stageChip] karena perilakunya sama: sekali ketuk, langsung berlaku.
+  ///
+  /// Bedanya satu dan disengaja — chip ini TIDAK bisa dimatikan dengan
+  /// mengetuknya lagi. Selalu ada satu urutan yang berlaku, jadi "tanpa urutan"
+  /// bukan keadaan yang bisa dipilih, dan chip yang bisa dimatikan akan
+  /// menjanjikan sesuatu yang tidak ada.
+  Widget _sortChip(
+    ({String value, String dir, String label}) option,
+    void Function(VoidCallback) refresh,
+  ) {
+    final isSelected = _sortBy == option.value && _sortDir == option.dir;
+    return GestureDetector(
+      onTap: () => refresh(() => _onSortChanged(option.value, option.dir)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryNavy : AppColors.surfaceWhite,
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: isSelected ? AppColors.primaryNavy : AppColors.border,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          option.label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Satu chip filter aktif di header: labelnya + silang untuk mematikannya.
+  Widget _activeFilterPill(({String label, VoidCallback clear}) f) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Container(
+        padding: const EdgeInsets.only(left: 10, right: 4),
+        decoration: BoxDecoration(
+          color: AppColors.navyBg,
+          borderRadius: AppRadius.radiusFull,
+          border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              f.label,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primaryNavy,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded,
+                  size: 13, color: AppColors.primaryNavy),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+              splashRadius: 12,
+              tooltip: 'Hapus filter ${f.label}',
+              onPressed: f.clear,
+            ),
+          ],
         ),
       ),
     );

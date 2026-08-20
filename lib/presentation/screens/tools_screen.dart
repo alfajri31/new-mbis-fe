@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../src/app.dart';
 import '../widgets/glass_app_bar.dart';
+import '../providers/assistant_provider.dart' show canUseAssistant;
 
 /// S-301 — Tools Hub. Entry point to the field tools.
 class ToolsScreen extends StatelessWidget {
@@ -30,26 +31,22 @@ class ToolsScreen extends StatelessWidget {
         bg: AppColors.navyBg,
         route: '$basePath/product-knowledge',
       ),
-      // /api/visits/me returns only the caller's OWN visits, so an RM gets its
-      // visit history while a supervisor would get an empty map. Supervisors go
-      // to the office-scoped map instead — the same one the dashboard opens.
-      supervisor
-          ? _Tool(
-              icon: '📍',
-              label: 'Peta Visit',
-              desc:
-                  'Peta lokasi kunjungan RM dalam cakupan kantor Anda, bisa difilter per kantor',
-              bg: AppColors.orangeLight,
-              route: '$basePath/visit-map',
-            )
-          : _Tool(
-              icon: '📍',
-              label: 'GPS Tracking',
-              desc:
-                  'Pantau lokasi & riwayat kunjungan lapangan, verifikasi visit nasabah',
-              bg: AppColors.orangeLight,
-              route: '$basePath/gps',
-            ),
+      // SATU peta untuk semua peran. Dulu ada dua layar terpisah karena layar RM
+      // memakai `/api/visits/me` yang hanya berisi kunjungan pemanggil — penyelia
+      // membukanya dan mendapat peta kosong. Peta ini memakai endpoint ber-cakupan
+      // (`/api/dashboard/visit-locations`) yang sejak awal sudah menangani RM
+      // sebagai DataScope OWNER, jadi dua layar itu tidak pernah benar-benar
+      // dibutuhkan — dan dua peta bernama mirip justru sudah terbukti membuat
+      // orang (termasuk penulis backlog) salah menunjuk layar.
+      _Tool(
+        icon: '📍',
+        label: 'Peta Kunjungan',
+        desc: supervisor
+            ? 'Peta lokasi kunjungan RM dalam cakupan kantor Anda, bisa difilter per kantor'
+            : 'Peta lokasi & riwayat kunjungan lapangan Anda, verifikasi visit nasabah',
+        bg: AppColors.orangeLight,
+        route: '$basePath/visit-map',
+      ),
       _Tool(
         icon: '🧮',
         label: 'Kalkulator Premi',
@@ -60,8 +57,9 @@ class ToolsScreen extends StatelessWidget {
       ),
     ];
 
-    // AI Assistant — RM only (ADMIN configures activities via Profil → Kelola Aktivitas AI).
-    if (roles.contains('RM')) {
+    // AI Assistant — RM, BM, pimpinan Kanwil, dan KUP (CR-17). ADMIN mengatur
+    // aktivitasnya lewat Profil → Kelola Aktivitas AI, bukan dari sini.
+    if (canUseAssistant(roles)) {
       tools.add(
         _Tool(
           icon: '🤖',
@@ -100,6 +98,8 @@ class ToolsScreen extends StatelessWidget {
       extendBodyBehindAppBar: true,
       appBar: GlassAppBar(
         title: 'Tools',
+        // Body layar ini full-bleed (ListView tanpa MaxWidthBody).
+        contentMaxWidth: double.infinity,
         leading: pushed
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),

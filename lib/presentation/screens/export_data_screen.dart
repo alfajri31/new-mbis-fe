@@ -123,7 +123,8 @@ class _ExportDataScreenState extends ConsumerState<ExportDataScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Ekspor Data', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Ekspor Data', showBack: true, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: ListView(
           padding: EdgeInsets.fromLTRB(

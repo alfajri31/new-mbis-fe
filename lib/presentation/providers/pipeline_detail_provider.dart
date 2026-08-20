@@ -146,7 +146,10 @@ class PipelineDetailNotifier extends Notifier<PipelineDetailState> {
         isLoading: false,
       );
     } catch (e) {
-      state = state.copyWith(error: e.toString(), isLoading: false);
+      // Sama seperti CustomerDetailProvider: layar menampilkan pesan ini apa
+      // adanya, jadi awalan teknisnya dibuang.
+      state = state.copyWith(
+          error: e.toString().replaceFirst('Exception: ', ''), isLoading: false);
     }
   }
 }

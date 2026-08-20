@@ -44,6 +44,8 @@ class _PindahRmScreenState extends ConsumerState<PindahRmScreen>
       appBar: GlassAppBar(
         title: 'Pindah RM',
         showBack: true,
+        contentMaxWidth: MaxWidthBody.defaultMaxWidth,
+
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primaryNavy,

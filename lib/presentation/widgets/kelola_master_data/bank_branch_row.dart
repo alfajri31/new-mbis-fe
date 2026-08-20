@@ -12,11 +12,16 @@ class BankBranchRow extends StatelessWidget {
     required this.branch,
     required this.onEdit,
     required this.onDelete,
+    this.canEdit = true,
   });
 
   final BankBranchItem branch;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// False bila induknya bukan bank HIMBARA sementara pemanggilnya kurator
+  /// DIV_SOE — cabangnya boleh dilihat, tidak disunting.
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -47,19 +52,22 @@ class BankBranchRow extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'edit') onEdit();
-            if (v == 'delete') onDelete();
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'edit', child: Text('Edit')),
-            PopupMenuItem(
-              value: 'delete',
-              child: Text('Hapus', style: TextStyle(color: AppColors.errorRed)),
-            ),
-          ],
-        ),
+        trailing: canEdit
+            ? PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'edit') onEdit();
+                  if (v == 'delete') onDelete();
+                },
+                itemBuilder: (_) => const <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child:
+                        Text('Hapus', style: TextStyle(color: AppColors.errorRed)),
+                  ),
+                ],
+              )
+            : null,
       ),
     );
   }

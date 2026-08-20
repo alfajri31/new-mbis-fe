@@ -224,6 +224,11 @@ class BumnRepository {
 
   /// Pruned BUMN tree for the screen: branches that contain a customer, with
   /// ancestors kept as the drill-down path (GET /api/bumns/customer-tree).
+  ///
+  /// Ter-scope di server: hanya cabang yang customer-nya masuk cakupan pemanggil
+  /// (RM miliknya sendiri, atasan cabang sesuai hirarki kantornya, peran kantor
+  /// pusat nasional). Klien tidak menyaring apa pun — jangan menambahkan filter
+  /// cakupan di sini, karena yang mengikat hanya penyaringan di server.
   Future<List<BumnTreeCustomer>> getBumnCustomerTree() async {
     final response = await apiClient.get('/api/bumns/customer-tree');
     if (response.statusCode != 200) {
@@ -235,8 +240,9 @@ class BumnRepository {
         .toList();
   }
 
-  /// All BUMN (from the 515-node master ecosystem) that have pipelines, globally
-  /// (not scoped to the caller's office). Drives the BUMN screen list.
+  /// Simpul BUMN (dari ekosistem master ±515 node) yang punya pipeline DALAM
+  /// CAKUPAN pemanggil. Dulu endpoint ini nasional untuk siapa pun; sejak
+  /// cakupannya dipaksa di server, RM hanya menerima miliknya sendiri.
   Future<List<BumnView>> getBumnViews() async {
     final response = await apiClient.get('/api/bumns');
     if (response.statusCode != 200) {
@@ -246,7 +252,9 @@ class BumnRepository {
     return list.map((j) => _toView(j as Map<String, dynamic>)).toList();
   }
 
-  /// Global BUMN KPIs: total (515), with-pipeline, ever-won, realisasi premi, stages.
+  /// KPI layar BUMN. `total` = ukuran ekosistem master (±515) dan tetap angka
+  /// global — ia penyebut untuk "BUMN ber-Pipeline". Sisanya (with-pipeline,
+  /// ever-won, realisasi premi, rincian tahap) mengikuti cakupan pemanggil.
   Future<PartnerKpi> getBumnKpi() async {
     final response = await apiClient.get('/api/bumns/kpi');
     if (response.statusCode != 200) {

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/responsive.dart';
 import '../../src/app.dart';
+import '../../src/auth/roles.dart';
 import 'dashboard_screen.dart';
 import 'customer_list_screen.dart';
 import 'bumn_screen.dart';
@@ -11,6 +12,7 @@ import 'tools_screen.dart';
 import 'kelola_screen.dart';
 import 'rm_performance_screen.dart';
 import 'profil_screen.dart';
+import '../providers/assistant_provider.dart';
 import '../widgets/draggable_ai_button.dart';
 
 /// RM/BM/RO/KUP/ADMIN shell. [index] is driven by the URL (see [router] —
@@ -60,24 +62,34 @@ class _MainScreenState extends State<MainScreen> {
     return MbisApp.isSupervisorRole(list);
   }
 
-  /// ADMIN dan seluruh pimpinan kantor (BM/RO/KUP) mendapat tab "Kelola"
-  /// (index 6) di samping tab RM, supaya konsol yang boleh mereka pakai cukup
-  /// satu ketukan — tidak lagi terselip di Profil. Hub-nya menyaring kartunya
-  /// sendiri per peran. Tools ikut di dalamnya karena tab 4 mereka dipakai
-  /// daftar kinerja RM, jadi tak ada ruang untuk tab Tools tersendiri.
+  /// ADMIN, seluruh pimpinan kantor (BM/RO/KUP), dan divisi kantor pusat yang
+  /// mengelola satu daftar master mendapat tab "Kelola" (index 6) di samping tab
+  /// RM, supaya konsol yang boleh mereka pakai cukup satu ketukan — tidak lagi
+  /// terselip di Profil. Hub-nya menyaring kartunya sendiri per peran. Tools ikut
+  /// di dalamnya karena tab 4 mereka dipakai daftar kinerja RM, jadi tak ada ruang
+  /// untuk tab Tools tersendiri.
+  ///
+  /// DIV_AUDIT & DIV_PROGRAM sengaja TIDAK dapat tab ini: mereka hanya boleh
+  /// melihat, dan semua yang boleh mereka lihat sudah ada di tab Dashboard,
+  /// Customer, BUMN, Broker, dan Tools. Memberi mereka hub Kelola hanya akan
+  /// memunculkan pintu-pintu yang seluruhnya 403.
   bool get _hasKelolaTab {
+    // Satu daftar peran dipakai bersama gerbang rute di router, supaya tab yang
+    // disembunyikan dan URL yang ditolak tidak pernah berbeda aturannya.
     final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
-    return roles.contains('ADMIN') ||
-        roles.contains('BM') ||
-        roles.contains('RO') ||
-        roles.contains('KUP');
+    return Roles.hasAny(roles, Roles.kelolaHubRoles);
   }
 
-  /// RM gets the draggable AI quick-access button (others manage/don't run AI).
-  bool get _isRm {
+  /// Boleh memakai pintasan Tanya Dubi yang mengambang.
+  ///
+  /// Dulu dikunci ke peran RM saja. CR-17 membuka Tanya Dubi untuk BM, pimpinan
+  /// Kanwil, dan KUP — tapi gerbang di sini ikut tertinggal, sehingga mereka boleh
+  /// memakai fiturnya namun kehilangan pintasannya. Kini memakai daftar peran
+  /// bersama [kAssistantRoles] supaya tidak ada lagi salinan aturan yang menyimpang.
+  bool get _canUseAssistant {
     final roles = MbisApp.of(context)?.session?.user.roles;
     final list = (roles as List?)?.map((e) => e.toString()).toList();
-    return list?.contains('RM') ?? false;
+    return list != null && list.any(kAssistantRoles.contains);
   }
 
   void _onTabTapped(int index) {
@@ -192,7 +204,12 @@ class _MainScreenState extends State<MainScreen> {
     final selectedRail = railTabs.indexOf(widget.index);
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
-      body: Row(
+      // Tombol Tanya Dubi dulu HANYA dipasang di shell HP, jadi di web/tablet ia
+      // hilang sama sekali — padahal pemakai web-lah yang paling sering memakainya
+      // dari meja. Dibungkus Stack agar tetap mengambang di atas area konten.
+      body: Stack(
+        children: [
+          Row(
         children: [
           // NavigationRail tidak bisa men-scroll destinasinya sendiri: dengan 7 menu
           // (ADMIN) di layar landscape tingginya kurang dan Flutter melapor
@@ -236,6 +253,10 @@ class _MainScreenState extends State<MainScreen> {
           Expanded(
             child: IndexedStack(index: widget.index, children: screens),
           ),
+            ],
+          ),
+          if (_canUseAssistant)
+            const Positioned.fill(child: DraggableAiButton()),
         ],
       ),
     );
@@ -252,8 +273,9 @@ class _MainScreenState extends State<MainScreen> {
             index: widget.index,
             children: screens,
           ),
-          // AssistiveTouch-style AI button, draggable, RM only.
-          if (_isRm) const Positioned.fill(child: DraggableAiButton()),
+          // Tombol AI gaya AssistiveTouch, bisa digeser.
+          if (_canUseAssistant)
+            const Positioned.fill(child: DraggableAiButton()),
         ],
       ),
       bottomNavigationBar: Container(

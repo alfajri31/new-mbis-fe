@@ -1,0 +1,48 @@
+CATATAN RILIS PLAY STORE — versi 1.0.1 (versionCode 7)
+Disusun 7 Agustus 2026 dari commit yang benar-benar masuk branch fix/bug-pilotting.
+
+Batas Play: 500 karakter per bahasa. Naskah di bawah = **487 karakter**, jadi hanya
+tersisa 13 karakter. Menambah satu baris pasti melewati batas — buang satu baris lain
+kalau ada yang lebih penting.
+
+Hitung ulang setelah menyunting, dan JANGAN pakai `wc -m` di Git Bash mesin ini:
+locale-nya bukan UTF-8 sehingga ia menghitung BYTE, dan tiap "•" dihitung 3 — naskah
+ini terbaca 504 (seolah melanggar batas) padahal sebenarnya 487. Yang benar:
+  perl -CSD -ne 'chomp; $t+=length($_); $n++; END{print $t+$n-1,"\n"}' berkas.txt
+
+=== TEMPEL KE KOLOM "Catatan rilis" (bahasa Indonesia) ===
+
+• Impor rekap realisasi resmi dari kantor pusat, termasuk perbaikan pencocokan ke RM.
+• Dashboard memisahkan realisasi resmi dari pipeline yang sudah WON.
+• Peran divisi kantor pusat dan Divisi SOE dikenali di menu Kelola.
+• Filter tahap pipeline pada daftar nasabah.
+• Ubah nasabah, pipeline, dan catatan kunjungan lewat formulir penuh.
+• Admin dapat menambah agen serta menghapus nasabah dan pipeline.
+• Nomor CIF agen kini diisi manual.
+• Perbaikan isian desimal dan tampilan nominal.
+
+=== BENTUK BERTAG (hanya bila memakai kotak tempel multi-bahasa / Publishing API) ===
+
+<id-ID>
+• Impor rekap realisasi resmi dari kantor pusat, termasuk perbaikan pencocokan ke RM.
+• Dashboard memisahkan realisasi resmi dari pipeline yang sudah WON.
+• Peran divisi kantor pusat dan Divisi SOE dikenali di menu Kelola.
+• Filter tahap pipeline pada daftar nasabah.
+• Ubah nasabah, pipeline, dan catatan kunjungan lewat formulir penuh.
+• Admin dapat menambah agen serta menghapus nasabah dan pipeline.
+• Nomor CIF agen kini diisi manual.
+• Perbaikan isian desimal dan tampilan nominal.
+</id-ID>
+
+=== YANG SENGAJA TIDAK DITULIS ===
+
+Catatan rilis dibaca pengguna aplikasi, bukan tim IT. Jadi perubahan berikut
+ditinggalkan meski ikut dalam build:
+
+- Gerbang peran di setiap endpoint tulis — pengerasan internal, tidak terlihat
+  pemakai, dan menyebut celah otorisasi di teks publik tidak ada gunanya.
+- Perhitungan Potensi dari rate premi (dulu dari TSI mentah) — angka di layar
+  berubah cukup besar. Kalau ingin pemakai tidak kaget, ini lebih tepat
+  disampaikan lewat pengumuman in-app daripada catatan rilis.
+- Jejak persetujuan agen dan jalur langsung kantor pusat — hanya relevan bagi
+  pengelola agen, sudah terwakili baris "Admin dapat menambah agen".

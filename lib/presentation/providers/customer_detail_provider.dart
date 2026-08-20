@@ -128,7 +128,10 @@ class CustomerDetailNotifier extends Notifier<CustomerDetailState> {
         isLoading: false,
       );
     } catch (e) {
-      state = state.copyWith(error: e.toString(), isLoading: false);
+      // Buang awalan "Exception: " supaya yang terbaca kalimat untuk manusia,
+      // bukan jejak teknis. Layar ini memakai pesannya apa adanya.
+      state = state.copyWith(
+          error: e.toString().replaceFirst('Exception: ', ''), isLoading: false);
     }
   }
 

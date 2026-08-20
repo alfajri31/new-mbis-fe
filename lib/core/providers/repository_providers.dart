@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mbis/src/admin/account_repository.dart';
 import 'package:mbis/src/admin/export_repository.dart';
 import 'package:mbis/src/admin/policy_repository.dart';
+import 'package:mbis/src/admin/realisasi_import_repository.dart';
 import 'package:mbis/src/admin/target_import_repository.dart';
 import 'package:mbis/src/agent/agent_repository.dart';
 import 'package:mbis/src/announcement/announcement_repository.dart';
@@ -115,6 +116,12 @@ final exportRepoProvider = Provider<ExportRepository>(
 
 final targetImportRepoProvider = Provider<TargetImportRepository>(
   (ref) => TargetImportRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+/// Unggahan rekap realisasi RESMI dari pusat (ADMIN). Terpisah dari impor target
+/// meski berkas asalnya sama: yang satu menulis target, yang satu realisasi.
+final realisasiImportRepoProvider = Provider<RealisasiImportRepository>(
+  (ref) => RealisasiImportRepository(apiClient: ref.watch(apiClientProvider)),
 );
 
 final adminPolicyRepoProvider = Provider<AdminPolicyRepository>(

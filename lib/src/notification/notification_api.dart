@@ -56,6 +56,7 @@ class AppNotification {
       case 'TENDER_REMINDER':
       case 'AGENT_LICENSE_EXPIRING':
       case 'PIPELINE_STAGNANT':
+      case 'POLICY_RENEWAL':
       case 'RM_TRANSFER':
         return 'warning';
       case 'ANNOUNCEMENT':

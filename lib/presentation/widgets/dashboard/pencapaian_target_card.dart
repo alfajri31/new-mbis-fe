@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../src/dashboard/dashboard_periode.dart';
 import '../../../src/dashboard/dashboard_repository.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/format.dart';
@@ -17,7 +18,16 @@ class PencapaianTargetCard extends StatelessWidget {
     required this.categories,
     required this.selectedCategory,
     required this.onCategoryChanged,
+    this.periode = DashboardPeriode.ytd,
+    this.angka,
   });
+
+  /// Potongan periode terpilih (CR-02) — hanya untuk penamaan; angkanya di [angka].
+  final DashboardPeriode periode;
+
+  /// Target & realisasi kategori terpilih untuk [periode]. null bila data kategori
+  /// belum termuat; kartu lalu jatuh ke angka ringkasan seperti sebelumnya.
+  final AngkaPeriode? angka;
 
   final DashboardSummary? summary;
 
@@ -32,20 +42,35 @@ class PencapaianTargetCard extends StatelessWidget {
     final s = summary;
     final cat =
         selectedCat; // kategori terpilih (mengalahkan angka summary lama)
-    // Target yang ditampilkan = target SETAHUN penuh (admin upload target setahun),
-    // dibandingkan dengan realisasi berjalan. Bukan target YTD.
-    final double? realVal = cat?.realisasiYtd ?? s?.totalRealization;
-    final double? targetVal = cat?.targetFullYear ?? s?.premiTarget;
-    final realisasi = realVal != null ? AppFormat.currencyShort(realVal) : '–';
-    final target = targetVal != null ? AppFormat.currencyShort(targetVal) : '–';
-    final rawPct = cat != null
-        ? cat.progressFullYear
+    // Pembandingnya target YTD — target sampai bulan berjalan, bukan target setahun.
+    //
+    // Sebelumnya kartu ini memakai targetFullYear padahal judulnya sudah "Target YTD",
+    // sehingga realisasi berjalan dibagi target 12 bulan dan pencapaian RM tampil jauh
+    // lebih kecil dari sebenarnya (umpan balik piloting Tangerang). Target setahun tetap
+    // ditampilkan di baris bawah sebagai konteks, jadi tidak ada angka yang hilang.
+    //
+    // Jalur tanpa kategori (mis. agen, atau /categories gagal dimuat) tidak punya angka
+    // target YTD — di situ saja kartu jatuh kembali ke target setahun, dan labelnya ikut
+    // menyesuaikan supaya tidak ada klaim yang menyesatkan.
+    //
+    // Angka periode (CR-02) dihitung di klien dari 12 bulan yang sudah dikirim server;
+    // YTD hanyalah salah satu potongannya, bukan kasus istimewa lagi.
+    final bool adaTargetYtd = cat != null && angka != null;
+    final bool belumTiba = angka?.belumTiba ?? false;
+    final double? realVal = angka?.realisasi ?? s?.totalRealization;
+    final double? targetVal = angka?.target ?? s?.premiTarget;
+    final realisasi =
+        (belumTiba || realVal == null) ? '–' : AppFormat.currencyShort(realVal);
+    final target =
+        (belumTiba || targetVal == null) ? '–' : AppFormat.currencyShort(targetVal);
+    final rawPct = angka != null
+        ? angka!.progress
         : ((s != null && s.premiTarget > 0)
               ? s.totalRealization / s.premiTarget
               : 0.0);
     final pct = rawPct.clamp(0.0, 1.0);
     final title = cat != null
-        ? 'Realisasi vs Target — ${cat.label}'
+        ? 'Realisasi vs Target ${periode.label} — ${cat.label}'
         : 'Realisasi vs Target Tahun Ini';
 
     return Container(
@@ -77,8 +102,12 @@ class PencapaianTargetCard extends StatelessWidget {
                       ),
               ),
               const SizedBox(width: 8),
+              // Periode yang belum tiba tidak punya pencapaian. Menuliskan "0%"
+              // di sana terbaca sebagai kegagalan RM, padahal bulannya memang
+              // belum berjalan — persis yang dihindari oleh baris rupiah di
+              // bawah yang sudah memakai tanda "–".
               Text(
-                '${(rawPct * 100).round()}%',
+                belumTiba ? '–' : '${(rawPct * 100).round()}%',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -128,7 +157,7 @@ class PencapaianTargetCard extends StatelessWidget {
                 ),
               ),
               Text(
-                'Target $target',
+                adaTargetYtd ? 'Target ${periode.label} $target' : 'Target $target',
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary,
@@ -136,6 +165,17 @@ class PencapaianTargetCard extends StatelessWidget {
               ),
             ],
           ),
+          // Periode yang belum tiba (mis. Triwulan IV dilihat bulan Agustus) dinyatakan
+          // apa adanya. Tanpa ini kartu menampilkan 0% dan terbaca seolah RM gagal
+          // total, padahal periodenya memang belum berjalan.
+          if (belumTiba)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Periode ini belum berjalan.',
+                style: TextStyle(fontSize: 10, color: AppColors.grayStage),
+              ),
+            ),
         ],
       ),
     );

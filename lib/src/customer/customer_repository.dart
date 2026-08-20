@@ -157,7 +157,15 @@ class CustomerDetailModel {
   final bool isBumn;
   final bool isHvc;
   final String? bumnName;
+  /// FK master_bumn. Dipakai layar edit untuk memilih ulang node BUMN yang sama —
+  /// nama saja tidak cukup karena struktur relasi & induk diturunkan dari id ini.
+  final String? bumnId;
   final List<BumnPathNode> bumnPath; // Holding → … → this node
+  // Cabang bank customer (kategori PERBANKAN) — id + nama untuk prefill picker.
+  final String? bankBranchId;
+  final String? bankBranchName;
+  final String? bankId;
+  final String? bankName;
   final bool isBlacklisted;
   final String? state;
   final String? npwp;
@@ -176,6 +184,12 @@ class CustomerDetailModel {
   /// Hak lihat lebih luas dari hak ubah, jadi flag ini tidak bisa disimpulkan
   /// dari peran saja.
   final bool canEdit;
+
+  /// Pemanggil boleh MENAMBAH pipeline pada customer ini — aturannya berbeda dari
+  /// [canEdit]: menyunting customer dibatasi kepemilikan, menambah pipeline mengikuti
+  /// cakupan tulis atas pembuatnya. Dijawab server supaya tombol dan gerbang otorisasi
+  /// tidak bisa berbeda pendapat.
+  final bool canAddPipeline;
   final String? assignedRmName; // RM penanggung jawab
   final String? sourceType;     // AGENT | RM
   final String? sourceName;     // nama agen / RM yang mendata
@@ -197,7 +211,12 @@ class CustomerDetailModel {
     this.isBumn = false,
     this.isHvc = false,
     this.bumnName,
+    this.bumnId,
     this.bumnPath = const [],
+    this.bankBranchId,
+    this.bankBranchName,
+    this.bankId,
+    this.bankName,
     this.isBlacklisted = false,
     this.state,
     this.npwp,
@@ -213,6 +232,7 @@ class CustomerDetailModel {
     this.picPhone,
     this.picJabatan,
     this.canEdit = false,
+    this.canAddPipeline = true,
     this.assignedRmName,
     this.sourceType,
     this.sourceName,
@@ -229,6 +249,10 @@ class CustomerDetailModel {
     return CustomerDetailModel(
       id: json['id'],
       canEdit: json['canEdit'] == true,
+      // Default true bila server belum mengirimnya: server tetap menolak lewat 403
+      // kalau memang tidak berhak, sedangkan default false akan mencabut tombol dari
+      // RM yang sebenarnya berhak begitu klien bertemu server versi lama.
+      canAddPipeline: json['canAddPipeline'] != false,
       name: json['name'],
       cifNumber: json['cifNumber'],
       legalEntity: json['legalEntity'],
@@ -238,6 +262,11 @@ class CustomerDetailModel {
       isBumn: json['isBumn'] == true,
       isHvc: json['isHvc'] == true,
       bumnName: json['bumnName'],
+      bumnId: json['bumnId'],
+      bankBranchId: json['bankBranchId'],
+      bankBranchName: json['bankBranchName'],
+      bankId: json['bankId'],
+      bankName: json['bankName'],
       bumnPath: (json['bumnPath'] as List<dynamic>? ?? [])
           .map((e) => BumnPathNode.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -432,7 +461,9 @@ class CustomerRepository {
   }
 
   /// One page of the scope-aware customer list (server-side paged + filtered).
-  /// [search] matches the customer name; [entity] filters by entity category.
+  /// [search] matches the customer name, NPWP, or NIB; [entity] filters by entity
+  /// category. [sort] menerima `name` atau `createdAt`, [dir] menerima `asc`/`desc` —
+  /// server menolak nilai lain, jadi jangan mengarang nama kolom di sini.
   Future<CustomerListPage> getCustomersPaged({
     int page = 0,
     int size = 12,
@@ -442,6 +473,9 @@ class CustomerRepository {
     String? branchId,
     String? rmId,
     bool hvc = false,
+    String? stage,
+    String? sort,
+    String? dir,
   }) async {
     final params = <String, String>{
       'page': '$page',
@@ -452,6 +486,13 @@ class CustomerRepository {
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
       if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
       if (hvc) 'hvc': 'true',
+      // Disaring di server, bukan di klien: daftar ini berhalaman, jadi menyaring
+      // hasil satu halaman akan menampilkan "3 dari 20" padahal yang cocok ratusan.
+      if (stage != null && stage.isNotEmpty) 'stage': stage,
+      // Diurutkan di server dengan alasan yang persis sama: mengurutkan di klien
+      // hanya menata 20 baris yang kebetulan terambil, bukan seluruh daftar.
+      if (sort != null && sort.isNotEmpty) 'sort': sort,
+      if (dir != null && dir.isNotEmpty) 'dir': dir,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
@@ -503,6 +544,7 @@ class CustomerRepository {
     String? branchId,
     String? rmId,
     bool hvc = false,
+    String? stage,
   }) async {
     final params = <String, String>{
       if (search != null && search.isNotEmpty) 'search': search,
@@ -511,6 +553,7 @@ class CustomerRepository {
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
       if (rmId != null && rmId.isNotEmpty) 'rmId': rmId,
       if (hvc) 'hvc': 'true',
+      if (stage != null && stage.isNotEmpty) 'stage': stage,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
@@ -539,8 +582,13 @@ class CustomerRepository {
     final response = await apiClient.get('/api/customers/$id');
     if (response.statusCode == 200) {
       return CustomerDetailModel.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 403 || response.statusCode == 404) {
+      // Penolakan hak akses, bukan gangguan sistem. Sebelumnya keduanya keluar
+      // sebagai "Exception: Failed to load customer detail" berikut tombol Retry,
+      // sehingga pemakai mengira aplikasinya rusak padahal memang bukan haknya.
+      throw Exception('Customer ini di luar cakupan Anda.');
     } else {
-      throw Exception('Failed to load customer detail');
+      throw Exception('Gagal memuat detail customer. Coba lagi beberapa saat.');
     }
   }
 

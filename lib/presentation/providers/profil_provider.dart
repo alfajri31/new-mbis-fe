@@ -41,6 +41,15 @@ class ProfileData {
   }
 }
 
+/// Nilai pertama yang bukan null/kosong, sebagai String. Null bila semuanya kosong.
+String? _firstNonEmpty(Object? a, Object? b) {
+  for (final v in [a, b]) {
+    final s = v?.toString().trim();
+    if (s != null && s.isNotEmpty) return s;
+  }
+  return null;
+}
+
 const Object _keep = Object();
 
 /// State layar profil — memegang future load (pola FutureBuilder lama) beserta
@@ -110,7 +119,10 @@ class ProfilNotifier extends Notifier<ProfilState> {
       name: me['name'] ?? '-',
       nip: me['nip'] ?? '-',
       email: me['email'] ?? '-',
-      office: me['officeId']?.toString() ?? '-',
+      // Nama kantornya, bukan kodenya: "KC-01" tidak berarti apa-apa bagi yang
+      // membacanya. officeId hanya dipakai sebagai cadangan bila server lama
+      // belum mengirim officeName, supaya kolomnya tidak mendadak kosong.
+      office: _firstNonEmpty(me['officeName'], me['officeId']) ?? '-',
       role: roles.isNotEmpty ? roles.first.toString() : 'Relationship Manager',
       jabatan: me['jabatan']?.toString() ?? '',
       isConnect: me['isConnect'] == true,

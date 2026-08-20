@@ -2,6 +2,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../src/visit/visit_gallery.dart';
+import '../../src/visit/visit_photo_stamp.dart';
+import '../../utils/format.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/field_label.dart';
@@ -22,12 +26,31 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
 
   // Form/interaktif (tetap di widget): toggle, GPS/foto picker, date/time picker,
   // input teks, dan flag validasi follow-up — semua diedit/dipicu langsung user.
-  bool _isVisit = false;
+  // CR-11 (MTR-8): jenis kunjungan default = Lapangan. Kunjungan lapangan adalah
+  // aktivitas yang paling sering dicatat RM, jadi nilai awalnya dibuat menyala dan
+  // pengguna mematikannya hanya saat mencatat Call. Konsekuensi yang disengaja:
+  // bagian GPS & foto langsung tampil dan ikut divalidasi — keduanya memang syarat
+  // kunjungan lapangan. Tidak ada GPS yang diambil otomatis saat layar dibuka;
+  // pengambilan lokasi tetap menunggu ketukan pengguna.
+  bool _isVisit = true;
   double? _gpsLat;
   double? _gpsLng;
   String _gpsLabel = '';
   bool _locatingGps = false;
+  /// Foto MENTAH dari kamera. Disimpan terpisah dari [_photoBytes] yang sudah
+  /// dicap, supaya pencapan ulang (mis. RM menyegarkan lokasi setelah memotret)
+  /// selalu berangkat dari gambar bersih — bukan menumpuk cap di atas cap.
+  Uint8List? _photoRaw;
   Uint8List? _photoBytes;
+
+  /// Penanda kombinasi (foto, lokasi) yang salinannya sudah masuk galeri, supaya
+  /// satu foto tidak tersimpan berkali-kali. Berubah hanya bila fotonya diganti
+  /// atau titik lokasinya benar-benar bergeser.
+  String? _archivedSignature;
+
+  /// Pencapan sedang berjalan. Menjaga panggilan yang datang selama proses itu
+  /// tidak ikut masuk — lihat [_stampAndArchivePhoto].
+  bool _archiving = false;
   String? _photoName;
   String _deskripsi = '';
   String _rencanaTindakLanjut = '';
@@ -110,10 +133,79 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
       if (address != null && address.isNotEmpty) {
         setState(() => _gpsLabel = '$address\n$coordLabel');
       }
+      // Sesudah alamat selesai dicari, bukan sebelumnya: capnya memuat alamat itu.
+      await _stampAndArchivePhoto();
     } catch (e) {
       _showLocationError('Gagal mengambil lokasi: $e');
     } finally {
       if (mounted) setState(() => _locatingGps = false);
+    }
+  }
+
+  /// Tanam cap ke foto lalu simpan salinannya ke galeri — dijalankan begitu FOTO
+  /// dan LOKASI sama-sama ada, mana pun yang belakangan.
+  ///
+  /// Sengaja bukan saat tombol simpan ditekan: RM mengharapkan foto sudah ada di
+  /// galeri segera setelah memotret, dan menunda sampai pengiriman berarti foto
+  /// hilang bila formulirnya ditinggalkan atau aplikasi tertutup.
+  ///
+  /// Sengaja juga bukan tepat saat rana ditekan: capnya memuat lokasi, sedangkan
+  /// RM boleh memotret lebih dulu baru mengambil GPS. Menunggu keduanya siap
+  /// adalah satu-satunya titik yang memenuhi dua tuntutan itu sekaligus.
+  Future<void> _stampAndArchivePhoto() async {
+    final raw = _photoRaw;
+    if (raw == null || !_hasGps) return;
+
+    // Penanda sengaja hanya memuat FOTO, bukan foto+koordinat. Koordinat GPS
+    // bergoyang beberapa meter tiap kali diambil, jadi penanda yang ikut memuatnya
+    // akan berubah pada setiap pengambilan ulang dan galeri terisi salinan baru
+    // terus-menerus — terbukti di perangkat: satu kunjungan meninggalkan SEMBILAN
+    // berkas. Satu kunjungan = satu salinan galeri.
+    final signature = '${raw.length}';
+    final sudahDiarsipkan = _archivedSignature == signature;
+
+    // Palang masuk dipasang SEBELUM await pertama: penanda baru terisi setelah
+    // pencapan selesai (ratusan milidetik untuk foto belasan megapiksel), sehingga
+    // panggilan yang datang selama jeda itu akan lolos penjaga di atas.
+    if (_archiving) return;
+    _archiving = true;
+    try {
+      final now = DateTime.now();
+      final stamped = await VisitPhotoStamp.apply(
+        bytes: raw,
+        takenAt: now,
+        timeZoneLabel: AppFormat.timeZoneLabel(now),
+        locationLabel: _gpsLabel,
+        latitude: _gpsLat,
+        longitude: _gpsLng,
+      );
+      if (!mounted) return;
+      // Pencapan SELALU diperbarui walau salinan galerinya sudah ada, supaya foto
+      // yang terunggah memuat lokasi terakhir — itu yang jadi bukti kunjungan.
+      setState(() {
+        _photoBytes = stamped;
+        _archivedSignature = signature;
+      });
+      if (sudahDiarsipkan) return; // galeri cukup satu salinan per foto
+
+      // Best-effort: galeri adalah SALINAN kenyamanan. Kegagalannya hanya
+      // diberitahukan, tidak boleh menghalangi pencatatan kunjungan.
+      final saved = await VisitGallery.save(
+        stamped,
+        name: 'kunjungan-${now.millisecondsSinceEpoch}',
+      );
+      if (!mounted) return;
+      final warning = VisitGallery.messageFor(saved);
+      if (warning != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(warning),
+            backgroundColor: AppColors.secondaryOrange,
+          ),
+        );
+      }
+    } finally {
+      _archiving = false;
     }
   }
 
@@ -135,9 +227,12 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     final bytes = await shot.readAsBytes();
     if (!mounted) return;
     setState(() {
+      _photoRaw = bytes;
       _photoBytes = bytes;
       _photoName = shot.name;
+      _archivedSignature = null; // foto baru → cap & arsip harus diulang
     });
+    await _stampAndArchivePhoto();
   }
 
   String _getMonthName(int month) {
@@ -256,6 +351,16 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
       ).toIso8601String();
     }
 
+    // CR-12 (MTR-7): pencapan & penyimpanan ke galeri sudah terjadi lebih awal —
+    // begitu foto dan lokasi sama-sama ada. Panggilan di sini semata JARING
+    // PENGAMAN untuk urutan tak lazim (mis. pencapan sempat gagal): ia idempoten,
+    // jadi foto yang sudah tercap tidak dicap dua kali dan salinan galerinya tidak
+    // bertambah. Tanpa jaring ini, satu kegagalan diam-diam berarti foto bukti
+    // terunggah TANPA cap.
+    await _stampAndArchivePhoto();
+    if (!mounted) return;
+    final Uint8List? photoBytes = _photoBytes;
+
     // Simpan (flag `saving` + panggilan repo) dipindah ke notifier; validasi,
     // snackbar, dan navigasi tetap di sini.
     final ok = await _notifier.submit(
@@ -268,7 +373,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
           : _rencanaTindakLanjut.trim(),
       gpsLatitude: _gpsLat?.toString(),
       gpsLongitude: _gpsLng?.toString(),
-      photoBytes: _photoBytes,
+      photoBytes: photoBytes,
       photoName: _photoName,
     );
     if (!mounted) return;
@@ -367,8 +472,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
                             _gpsLat = null;
                             _gpsLng = null;
                             _gpsLabel = '';
+                            _photoRaw = null;
                             _photoBytes = null;
                             _photoName = null;
+                            _archivedSignature = null;
                           }
                         });
                       },
@@ -818,7 +925,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Lokasi saat ini terekam ✓',
+                    'Lokasi saat ini terekam',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.successGreen,

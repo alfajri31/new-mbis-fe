@@ -32,6 +32,9 @@ class AnnouncementFormScreen extends ConsumerStatefulWidget {
 
 class _AnnouncementFormScreenState
     extends ConsumerState<AnnouncementFormScreen> {
+  /// Lebar kolom form; dirujuk juga oleh GlassAppBar agar judul sejajar dengan isinya.
+  static const double _formMaxWidth = 640;
+
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
@@ -108,14 +111,17 @@ class _AnnouncementFormScreenState
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: GlassAppBar(title: _isEdit ? 'Edit Pengumuman' : 'Buat Pengumuman', showBack: true),
+      appBar: GlassAppBar(
+          title: _isEdit ? 'Edit Pengumuman' : 'Buat Pengumuman',
+          showBack: true,
+          contentMaxWidth: _formMaxWidth),
       body: SafeArea(
         child: Form(
           key: _formKey,
           // Cap the form width and centre it on desktop; on phones it fills width.
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
+              constraints: const BoxConstraints(maxWidth: _formMaxWidth),
               child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [

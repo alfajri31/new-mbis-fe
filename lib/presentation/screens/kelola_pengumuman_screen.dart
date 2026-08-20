@@ -182,7 +182,8 @@ class _KelolaPengumumanScreenState
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Kelola Pengumuman', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Kelola Pengumuman', showBack: true, contentMaxWidth: double.infinity),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(),
         backgroundColor: AppColors.primaryNavy,

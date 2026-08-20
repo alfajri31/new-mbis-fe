@@ -16,7 +16,20 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+7
+# Nama versi TETAP 1.0.1 (keputusan user, 2026-08-07 & ditegaskan lagi 2026-08-10)
+# — update pertama sesudah rilis perdana 1.0.0. Isi build ini sama dengan yang
+# disiapkan 7 Agustus, jadi nama versinya tidak ikut naik.
+#
+# versionCode 8: kode 7 ternyata SUDAH diunggah ke Play (dikonfirmasi user
+# 2026-08-10; catatan lama di sini yang menulis "dibangun tapi tidak pernah
+# diunggah" keliru). Kode terpakai berlaku SELAMANYA — tidak bisa dipakai ulang
+# bahkan untuk bundle yang tidak pernah terbit — jadi 8 adalah angka bebas
+# berikutnya. Pengguna tidak pernah melihat versionCode, hanya nama versi.
+#
+# versionCode WAJIB naik tiap unggahan dan tidak pernah bisa dipakai ulang.
+# Bagian sebelum `+` dijaga test/src/config/app_version_drift_test.dart supaya
+# tetap sama dengan versiAplikasi di lib/src/config/app_version.dart.
+version: 1.0.1+8
 
 environment:
   # ^3.12.0 (not 3.12.2) so the Docker build can use the cirruslabs flutter:3.44.0
@@ -62,6 +75,27 @@ dependencies:
   geolocator: ^13.0.1
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
+  # Foto kunjungan bercap waktu & lokasi (CR-12). `image` menanam teksnya ke PIKSEL
+  # (bukan EXIF, yang hilang begitu gambar dikompres ulang/di-share); sudah lama ikut
+  # sebagai dependensi transitif, di sini hanya dinaikkan jadi langsung karena kini
+  # dipakai kode kita sendiri. `gal` menyimpan hasilnya ke galeri perangkat.
+  #
+  # IZIN — sudah diperiksa ke sumber paketnya, bukan diasumsikan: AndroidManifest milik
+  # `gal` KOSONG, jadi ia tidak menambah izin apa pun ke merged manifest. Konsekuensinya
+  # per README-nya: simpan-ke-album berjalan tanpa izin di Android 11+ (API 30+), tetapi
+  # Android <=10 menuntut APLIKASI ini mendeklarasikan sendiri
+  # WRITE_EXTERNAL_STORAGE(maxSdkVersion=29) + requestLegacyExternalStorage.
+  #
+  # Deklarasi itu SENGAJA TIDAK ditambahkan: aplikasi ini sudah tayang di Play Store dan
+  # izin medianya sengaja dipangkas (lihat tools:node="remove" di AndroidManifest), jadi
+  # menambah izin penyimpanan adalah keputusan rilis, bukan keputusan teknis. Akibatnya
+  # di Android 7-10 penyimpanan ke galeri gagal dengan pesan yang jelas dan kunjungannya
+  # TETAP tersimpan (lihat visit_gallery.dart). Kalau cabang menginginkannya di perangkat
+  # lama, tambahkan dua baris itu di AndroidManifest — tidak ada perubahan kode lain.
+  #
+  # `gal` juga tidak punya implementasi web; setiap pemanggilan wajib dijaga kIsWeb.
+  image: ^4.8.0
+  gal: ^2.3.3
   # Native (mobile/desktop) file opening: write the fetched bytes to a temp file
   # and hand it to the OS viewer (e.g. a PDF reader). Web uses package:web (see
   # file_opener_web.dart) — path_provider has no web implementation.

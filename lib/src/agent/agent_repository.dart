@@ -132,9 +132,14 @@ class AgentModel {
   final String name;
   final String type; // AGENT | TPM
   final String status; // DRAFT | WAITING_APPROVAL | WAITING_LICENSE | WAITING_RM_DOCS | WAITING_CIF | ACTIVE | REJECTED | INACTIVE | EXPIRED | WAITING_RENEWAL
+  /// Kantor tempat agen terdaftar. Ikut kantor RM pengaju; untuk pengajuan dari
+  /// kantor pusat (DIV_AGEN) dipilih eksplisit saat mendaftar.
+  final String officeId;
   final String phone;
   final String email;
   final String npwp;
+  /// Alamat bebas-teks di luar alamat KTP/domisili terstruktur.
+  final String address;
   final String bankName;
   final String accountNumber;
   final String ktpNumber;
@@ -152,6 +157,10 @@ class AgentModel {
   final double? commissionRate;
   final String rejectionReason;
   final String createdAt;
+
+  /// 'BRANCH' = disetujui pimpinan kantor; 'DIRECT' = jalur langsung kantor pusat
+  /// tanpa persetujuan cabang; '' = agen dari sebelum jejak ini ada (V59).
+  final String approvalPath;
   // Alamat KTP
   final String ktpAddress;
   final String ktpProvince;
@@ -177,9 +186,11 @@ class AgentModel {
     required this.name,
     required this.type,
     required this.status,
+    this.officeId = '',
     required this.phone,
     required this.email,
     required this.npwp,
+    this.address = '',
     required this.bankName,
     required this.accountNumber,
     required this.ktpNumber,
@@ -194,6 +205,7 @@ class AgentModel {
     this.commissionRate,
     required this.rejectionReason,
     required this.createdAt,
+    this.approvalPath = '',
     required this.ktpAddress,
     required this.ktpProvince,
     required this.ktpCity,
@@ -220,9 +232,11 @@ class AgentModel {
       name: s(j['name']),
       type: j['type']?.toString() ?? 'AGENT',
       status: j['status']?.toString() ?? 'DRAFT',
+      officeId: s(j['officeId']),
       phone: s(j['phone']),
       email: s(j['email']),
       npwp: s(j['npwp']),
+      address: s(j['address']),
       bankName: s(j['bankName']),
       accountNumber: s(j['accountNumber']),
       ktpNumber: s(j['ktpNumber']),
@@ -237,6 +251,7 @@ class AgentModel {
       commissionRate: (j['commissionRate'] as num?)?.toDouble(),
       rejectionReason: s(j['rejectionReason']),
       createdAt: s(j['createdAt']),
+      approvalPath: s(j['approvalPath']),
       ktpAddress: s(j['ktpAddress']),
       ktpProvince: s(j['ktpProvince']),
       ktpCity: s(j['ktpCity']),
@@ -302,6 +317,65 @@ class AgentDocumentModel {
         status: j['status']?.toString() ?? 'PENDING',
         rejectionReason: j['rejectionReason']?.toString(),
       );
+}
+
+/// Satu kantor untuk pemilih "Kantor Agen" (GET /api/offices).
+class OfficeOption {
+  final String id;
+  final String name;
+  final String type; // REGIONAL | BRANCH | HEAD_OFFICE
+
+  OfficeOption({required this.id, required this.name, required this.type});
+
+  factory OfficeOption.fromJson(Map<String, dynamic> j) => OfficeOption(
+        id: j['id']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        type: j['type']?.toString() ?? '',
+      );
+}
+
+/// Satu baris riwayat koreksi profil agen (GET /api/agents/{id}/profile-changes).
+///
+/// [changedFields] berisi NAMA field yang berubah, dipisah "; " — bukan nilai
+/// lama/barunya. Nilainya tidak disimpan server karena PII (NIK, NPWP, no.
+/// rekening), jadi layar riwayat hanya bisa menjawab "siapa mengubah apa dan
+/// kenapa", bukan "dari nilai berapa ke berapa".
+class AgentProfileChangeModel {
+  final String id;
+  final String changedBy;
+  final String changedByName;
+  final String changedAt;
+  final String reason;
+  final String changedFields;
+
+  AgentProfileChangeModel({
+    required this.id,
+    required this.changedBy,
+    required this.changedByName,
+    required this.changedAt,
+    required this.reason,
+    required this.changedFields,
+  });
+
+  /// Field yang berubah sebagai daftar, untuk dirender jadi chip.
+  List<String> get fields => changedFields
+      .split(';')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  factory AgentProfileChangeModel.fromJson(Map<String, dynamic> j) {
+    String s(dynamic v) => (v ?? '').toString();
+    return AgentProfileChangeModel(
+      id: s(j['id']),
+      changedBy: s(j['changedBy']),
+      // Akun pengubah bisa sudah dihapus — jatuh ke id supaya barisnya tetap bermakna.
+      changedByName: (j['changedByName'] ?? j['changedBy'] ?? '-').toString(),
+      changedAt: s(j['changedAt']),
+      reason: s(j['reason']),
+      changedFields: s(j['changedFields']),
+    );
+  }
 }
 
 /// Credentials returned when admin issues a CIF + login account.
@@ -421,11 +495,16 @@ class AgentRepository {
   }
 
   /// RM registers a new Agent/TPM (POST /api/agents). [type] is 'AGENT' or 'TPM'.
+  ///
+  /// [officeId] hanya dipakai bila pengaju TIDAK duduk di sebuah kantor — yaitu
+  /// pengelola agen kantor pusat (DIV_AGEN), yang harus menyebut kantor agennya.
+  /// Untuk RM server mengabaikannya: kantor agen selalu mengikuti kantor pengaju.
   Future<AgentModel> createAgent({
     required String name,
     required String type,
     required String phone,
     required String email,
+    String? officeId,
     String? npwp,
     String? bankName,
     String? accountNumber,
@@ -456,6 +535,7 @@ class AgentRepository {
       'type': type,
       'phone': phone,
       'email': email,
+      'officeId': ?officeId,
       'npwp': npwp,
       'bankName': bankName,
       'accountNumber': accountNumber,
@@ -550,10 +630,122 @@ class AgentRepository {
     throw Exception(_message(res.body, 'Gagal menyimpan perubahan agen'));
   }
 
+  /// Seluruh kantor (KW + KC) untuk pemilih "Kantor Agen".
+  ///
+  /// Sengaja TIDAK disaring ke BRANCH saja seperti dropdown referral: agen boleh
+  /// bernaung di kantor wilayah, bukan hanya cabang.
+  Future<List<OfficeOption>> offices() async {
+    final res = await apiClient.get('/api/offices');
+    if (res.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(res.body);
+      return list
+          .map((j) => OfficeOption.fromJson(j as Map<String, dynamic>))
+          .toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+    throw Exception(_message(res.body, 'Gagal memuat daftar kantor'));
+  }
+
+  // ── Koreksi profil oleh pengelola agen kantor pusat ───────────────────────
+
+  /// Mengoreksi data agen pada status APA PUN, termasuk ACTIVE
+  /// (PUT /api/agents/{id}/profile — ADMIN &amp; DIV_AGEN).
+  ///
+  /// Berbeda dari [updateAgent] yang menuntut payload penuh: di sini field yang
+  /// `null` TIDAK dikirim sama sekali, dan server memaknainya "jangan diubah".
+  /// Kirim hanya yang benar-benar dikoreksi — payload penuh berisiko menghapus
+  /// data yang kebetulan tidak dimuat layar. String kosong berarti "kosongkan".
+  ///
+  /// [reason] wajib dan tersimpan di riwayat ([getProfileChanges]).
+  Future<AgentModel> updateAgentProfile(
+    String id, {
+    required String reason,
+    String? name,
+    String? phone,
+    String? email,
+    String? npwp,
+    String? address,
+    String? bankName,
+    String? accountNumber,
+    String? ktpNumber,
+    String? birthDate,
+    String? gender,
+    String? ktpAddress,
+    String? ktpProvince,
+    String? ktpCity,
+    String? ktpDistrict,
+    String? ktpSubdistrict,
+    String? ktpRt,
+    String? ktpRw,
+    String? ktpPostalCode,
+    String? domicileAddress,
+    String? domicileProvince,
+    String? domicileCity,
+    String? domicileDistrict,
+    String? domicileSubdistrict,
+    String? domicileRt,
+    String? domicileRw,
+    String? domicilePostalCode,
+  }) async {
+    final res = await apiClient.put('/api/agents/$id/profile', body: {
+      'reason': reason,
+      'name': ?name,
+      'phone': ?phone,
+      'email': ?email,
+      'npwp': ?npwp,
+      'address': ?address,
+      'bankName': ?bankName,
+      'accountNumber': ?accountNumber,
+      'ktpNumber': ?ktpNumber,
+      'birthDate': ?birthDate,
+      'gender': ?gender,
+      'ktpAddress': ?ktpAddress,
+      'ktpProvince': ?ktpProvince,
+      'ktpCity': ?ktpCity,
+      'ktpDistrict': ?ktpDistrict,
+      'ktpSubdistrict': ?ktpSubdistrict,
+      'ktpRt': ?ktpRt,
+      'ktpRw': ?ktpRw,
+      'ktpPostalCode': ?ktpPostalCode,
+      'domicileAddress': ?domicileAddress,
+      'domicileProvince': ?domicileProvince,
+      'domicileCity': ?domicileCity,
+      'domicileDistrict': ?domicileDistrict,
+      'domicileSubdistrict': ?domicileSubdistrict,
+      'domicileRt': ?domicileRt,
+      'domicileRw': ?domicileRw,
+      'domicilePostalCode': ?domicilePostalCode,
+    });
+    if (res.statusCode == 200) {
+      return AgentModel.fromJson(jsonDecode(res.body));
+    }
+    throw Exception(_message(res.body, 'Gagal menyimpan koreksi data agen'));
+  }
+
+  /// Riwayat koreksi profil agen, terbaru dulu (ADMIN &amp; DIV_AGEN).
+  Future<List<AgentProfileChangeModel>> getProfileChanges(String id) async {
+    final res = await apiClient.get('/api/agents/$id/profile-changes');
+    if (res.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(res.body);
+      return list
+          .map((j) => AgentProfileChangeModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(_message(res.body, 'Gagal memuat riwayat koreksi'));
+  }
+
   // ── Back-office workflow (RM / BM / ADMIN) ────────────────────────────────
 
-  /// Agents visible to the caller (RM: own links; supervisor: office subtree; admin: all).
-  Future<List<AgentModel>> getAgents() => _agentList('/api/agents');
+  /// Agen yang terlihat oleh pemanggil (supervisor: subtree kantor + kanwil di
+  /// atasnya; admin: seluruhnya).
+  ///
+  /// [officeScope] hanya berpengaruh bagi RM: bila true ia mendapat DIREKTORI nama
+  /// agen AKTIF di kantornya (subtree + kanwil) — hanya id/nama/tipe/status/kantor,
+  /// TANPA data pribadi — untuk dropdown sumber pipeline. Tanpa flag ini seorang RM
+  /// mendapat pengajuan yang ia ajukan sendiri; itulah isi layar "Pengajuan Agen /
+  /// TPM", karena mengurus agen yang sudah terdaftar bukan lagi urusan RM.
+  Future<List<AgentModel>> getAgents({bool officeScope = false}) =>
+      _agentList('/api/agents${officeScope ? '?scope=office' : ''}');
 
   /// Agents in the BM's office waiting for approval.
   Future<List<AgentModel>> getPending() => _agentList('/api/agents/pending');
@@ -600,6 +792,15 @@ class AgentRepository {
   /// BM approves an agent awaiting approval.
   Future<AgentModel> approve(String id) =>
       _agentAction('/api/agents/$id/approve', 'Gagal menyetujui agen');
+
+  /// Kantor pusat (ADMIN/DIV_AGEN) meloloskan pengajuan DRAFT/REJECTED tanpa
+  /// persetujuan cabang — dipakai terutama saat memindahkan data agen lama.
+  ///
+  /// Field wajib & dokumen registrasi wajib TETAP diperiksa server; hanya memo
+  /// yang dikecualikan, karena untuk agen lama usulan internalnya tidak pernah ada.
+  Future<AgentModel> approveDirect(String id) =>
+      _agentAction('/api/agents/$id/direct-approve',
+          'Gagal memasukkan agen secara langsung');
 
   /// BM rejects an agent with an optional reason.
   Future<AgentModel> reject(String id, {String? reason}) =>
@@ -681,9 +882,12 @@ class AgentRepository {
     throw Exception(_message(res.body, 'Gagal memuat rate komisi'));
   }
 
-  /// Admin issues the CIF + creates the agent's login account.
-  Future<AgentCredentialModel> issueCif(String id) async {
-    final res = await apiClient.post('/api/agents/$id/issue-cif');
+  /// Menerbitkan CIF + akun login agen.
+  ///
+  /// [cif] DIKETIK pengelola agen kantor pusat, bukan dibangkitkan server: nomornya
+  /// berasal dari sistem inti, dan ia sekaligus menjadi NIP login agen.
+  Future<AgentCredentialModel> issueCif(String id, {required String cif}) async {
+    final res = await apiClient.post('/api/agents/$id/issue-cif', body: {'cif': cif});
     if (res.statusCode == 200) {
       return AgentCredentialModel.fromJson(jsonDecode(res.body));
     }

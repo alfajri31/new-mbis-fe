@@ -81,7 +81,7 @@ class _AjukanKomisiScreenState extends ConsumerState<AjukanKomisiScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Komisi'),
+      appBar: const GlassAppBar(title: 'Komisi', contentMaxWidth: double.infinity),
       body: FutureBuilder<List<CommissionModel>>(
         future: _future,
         builder: (context, snapshot) {

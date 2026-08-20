@@ -23,6 +23,12 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
   // UI-ephemeral (tetap di widget): filter pencarian client-side.
   String _query = '';
 
+  /// Kotak pencarian butuh controller sendiri. Tanpa ini isinya hilang dari
+  /// layar setiap daftar dimuat ulang (mis. sesudah menyimpan perubahan akun),
+  /// sementara [_query] tetap memegang kata kunci lama — kotaknya terlihat
+  /// kosong tetapi daftarnya masih tersaring, dan pemakai mengira barisnya hilang.
+  final TextEditingController _searchCtrl = TextEditingController();
+
   // State bisnis/async dikelola KelolaAkunNotifier. Getter berikut memproksinya
   // agar seluruh kode build/widget di bawah tetap memakai nama lama tanpa diubah.
   KelolaAkunState get _ks => ref.read(kelolaAkunProvider);
@@ -47,6 +53,12 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
       if (!mounted) return;
       _notifier.start();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _fetch() => _notifier.fetch();
@@ -145,6 +157,7 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: TextField(
+        controller: _searchCtrl,
         onChanged: (v) => setState(() => _query = v),
         style: AppInput.fieldText,
         decoration: InputDecoration(
@@ -486,16 +499,27 @@ class _AccountFormState extends State<_AccountForm> {
               Text(_isEdit ? 'Edit Akun' : 'Tambah Akun',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
+              // NIP boleh diubah saat edit: ia identitas login, dan NIP yang
+              // salah ketik dulu hanya bisa dibetulkan lewat migrasi basis data.
+              // Menggantinya memindahkan pintu masuk pemiliknya, jadi bantuannya
+              // ditulis di bawah field supaya admin tidak melakukannya tanpa sadar.
               TextFormField(
                 controller: _nip,
                 style: AppInput.fieldText,
-                enabled: !_isEdit, // NIP is the login id; immutable after creation.
                 decoration: _dec('NIP / ID Login',
                     hint: _isEdit ? null : 'mis. 199001012015031001'),
-                validator: (v) => (!_isEdit && (v == null || v.trim().isEmpty))
-                    ? 'Wajib diisi'
-                    : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
               ),
+              if (_isEdit) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'NIP dipakai untuk login. Bila diubah, beri tahu pemiliknya — '
+                  'sesi yang sedang berjalan tetap aktif, tetapi login berikutnya '
+                  'memakai NIP baru.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
@@ -646,6 +670,7 @@ class _AccountFormState extends State<_AccountForm> {
       if (_isEdit) {
         await widget.repo.updateAccount(
           widget.item!.id,
+          nip: _nip.text.trim(),
           name: _name.text.trim(),
           email: _email.text.trim(),
           officeId: _officeId, // '' detaches

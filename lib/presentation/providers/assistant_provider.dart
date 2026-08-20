@@ -7,6 +7,22 @@ import 'package:mbis/src/customer/customer_repository.dart';
 
 const Object _keep = Object();
 
+/// Peran yang boleh MENJALANKAN Tanya Dubi. Cerminan gerbang backend
+/// `@PreAuthorize("hasAnyRole('RM','BM','RO')")` di `AssistantController`.
+///
+/// CR-17 (TNG-3) menambahkan BM dan pimpinan Kanwil (RO) di samping RM. Daftarnya
+/// ditaruh di satu tempat karena aturan yang sama dipakai tiga layar (Tools, detail
+/// customer, layar assistant); tiga salinan `roles.contains('RM')` yang tersebar
+/// adalah cara termudah salah satunya tertinggal saat aturan berubah lagi.
+///
+/// KUP ikut disertakan: backend sudah meloloskannya sejak dulu lewat pewarisan
+/// `ROLE_KUP > ROLE_RM`, hanya menunya yang tersembunyi — jadi ini menutup selisih
+/// lama antara apa yang diizinkan server dan apa yang ditampilkan aplikasi.
+const Set<String> kAssistantRoles = {'RM', 'BM', 'RO', 'KUP'};
+
+/// True bila salah satu peran sesi boleh memakai Tanya Dubi.
+bool canUseAssistant(Iterable<String> roles) => roles.any(kAssistantRoles.contains);
+
 /// State AI Assistant — cerminan 1:1 dari field `setState` DATA/LOADING/RESULT di
 /// layar lama. Yang TIDAK ikut (tetap dikelola widget dengan `setState`): controller
 /// teks, nilai chip/multi-chip yang diedit user, langkah wizard (`_step`), dan
@@ -16,7 +32,8 @@ class AssistantState {
   /// Gate sesi/repo siap (dulu `_ready`); body menampilkan spinner selama false.
   final bool ready;
 
-  /// Izin menjalankan aktivitas AI (RM-only). Diturunkan dari peran sesi.
+  /// Izin menjalankan aktivitas AI (RM, BM, RO — lihat [kAssistantRoles]).
+  /// Diturunkan dari peran sesi.
   final bool canRun;
 
   // Customer picker (jalur masuk dari Tools).
@@ -129,7 +146,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   void start({String? customerId}) {
     final session = ref.read(sessionProvider);
     final roles = session?.user.roles ?? const [];
-    state = state.copyWith(canRun: roles.contains('RM'));
+    state = state.copyWith(canRun: canUseAssistant(roles));
     if (customerId != null) {
       loadActivities(customerId);
     } else {

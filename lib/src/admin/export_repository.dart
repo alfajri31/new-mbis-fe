@@ -30,24 +30,13 @@ class ExportRepository {
     throw Exception(_message(res.body, 'Gagal mengekspor data'));
   }
 
-  /// RM self-service export — same report shape as [download]('visits', ...),
-  /// but scoped server-side to the logged-in RM's own visits (item 11,
-  /// after-piloting feedback).
-  Future<({List<int> bytes, String fileName})> downloadMyVisits(
-      DateTime from, DateTime to) async {
-    final f = _date(from), t = _date(to);
-    final res = await apiClient.get('/api/export/visits/me?from=$f&to=$t',
-        timeout: _exportTimeout);
-    if (res.statusCode == 200) {
-      final cd = res.headers['content-disposition'] ?? '';
-      final m = RegExp(r'filename="?([^";]+)"?').firstMatch(cd);
-      return (
-        bytes: res.bodyBytes,
-        fileName: m?.group(1) ?? 'export-visit-saya-$f-$t.xlsx',
-      );
-    }
-    throw Exception(_message(res.body, 'Gagal mengekspor data'));
-  }
+  // `downloadMyVisits` (`/api/export/visits/me`) dihapus bersama layar "Ekspor
+  // Kunjungan Saya" (CR-13): satu-satunya pemakainya. [downloadScoped] dengan
+  // dataset 'visits' memberi hasil yang sama persis untuk seorang RM — server
+  // yang menggerbang scope-nya, jadi RM tanpa filter tetap hanya dapat miliknya.
+  //
+  // Endpoint backend-nya SENGAJA tidak ikut dihapus: klien lama yang belum
+  // diperbarui masih memanggilnya, dan menghapusnya tidak memberi manfaat apa pun.
 
   /// Scoped export ("Ekspor Data"): [dataset] = 'pipelines' | 'visits' dalam rentang
   /// tanggal. Di-scope server (RM → miliknya, atasan → subtree cabang); atasan bisa

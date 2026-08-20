@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
+import '../../core/providers/repository_providers.dart';
 import '../../src/app.dart';
 import '../../src/broker/broker_repository.dart';
 import '../../src/common/partner_kpi.dart';
 import '../../utils/responsive.dart';
 import '../providers/broker_provider.dart';
 import '../widgets/glass_app_bar.dart';
+import '../widgets/kpi_drilldown_sheet.dart';
 import '../widgets/state_views.dart';
 
 /// S-201 — Broker.
@@ -142,7 +144,7 @@ class _BrokerScreenState extends ConsumerState<BrokerScreen> with RouteAware {
               // KPI header is sticky (outside the scroll view); only the list scrolls.
               child: Column(
                 children: [
-                  _buildHeader(topInset),
+                  _buildHeader(topInset, all),
                   Expanded(
                     child: RefreshIndicator(
                       color: AppColors.primaryNavy,
@@ -213,25 +215,54 @@ class _BrokerScreenState extends ConsumerState<BrokerScreen> with RouteAware {
   }
 
   // ── Header: summary chips + search ──────────────────────────────────────
-  Widget _buildHeader(double topInset) {
+  Widget _buildHeader(double topInset, List<BrokerView> all) {
     final k = _kpi;
     String n(int? v) => v?.toString() ?? '–';
     // Row 1 — the broker universe (global): total in the 150-broker master list,
     // how many already have a pipeline / have ever WON, and total realisasi premi.
+    //
+    // Tiap kartu dibuka jadi daftar (CR-06). Daftarnya dirakit dari `all` — data
+    // yang SUDAH dimuat, bukan `visible` yang tersaring kolom cari — supaya jumlah
+    // barisnya cocok dengan angka pada kartunya; kartu KPI datang dari server dan
+    // memang tidak mengikuti kata kunci pencarian.
     final summary = <Widget>[
-      _kpiTile('Total Broker', n(k?.total), AppColors.primaryNavy),
-      _kpiTile('Broker ber-Pipeline', n(k?.withPipeline), AppColors.secondaryOrange),
-      _kpiTile('Broker Pernah Won', n(k?.everWon), AppColors.successGreen),
+      _kpiTile('Total Broker', n(k?.total), AppColors.primaryNavy,
+          onTap: _openAllBrokersSheet),
+      _kpiTile('Broker ber-Pipeline', n(k?.withPipeline), AppColors.secondaryOrange,
+          onTap: () => _openBrokerListSheet(
+                'Broker ber-Pipeline',
+                all.where((v) => v.links.isNotEmpty).toList(),
+                'Belum ada broker dengan pipeline di cakupan Anda.',
+              )),
+      _kpiTile('Broker Pernah Won', n(k?.everWon), AppColors.successGreen,
+          onTap: () => _openBrokerListSheet(
+                'Broker Pernah Won',
+                all
+                    .where((v) => v.links.any((l) => l.stage == 'WON'))
+                    .toList(),
+                'Belum ada broker dengan pipeline WON di cakupan Anda.',
+              )),
       _kpiTile('Realisasi Premi', k?.totalRealisasiPremiShort ?? '–',
-          AppColors.primaryNavy),
+          AppColors.primaryNavy,
+          onTap: () => _openPipelineSheet(
+                'Realisasi Premi',
+                all,
+                (l) => l.stage == 'WON',
+                'Belum ada pipeline WON di cakupan Anda.',
+              )),
     ];
     // Row 2 — pipeline stage breakdown across all broker-sourced pipelines.
     final stages = <Widget>[
-      _kpiTile('Pipeline P3', n(k?.p3), AppColors.grayStage),
-      _kpiTile('Pipeline P2', n(k?.p2), AppColors.secondaryOrange),
-      _kpiTile('Pipeline P1', n(k?.p1), AppColors.primaryNavy),
-      _kpiTile('Pipeline Won', n(k?.won), AppColors.successGreen),
-      _kpiTile('Pipeline Declined', n(k?.decline), AppColors.errorRed),
+      _kpiTile('Pipeline P3', n(k?.p3), AppColors.grayStage,
+          onTap: () => _openStageSheet(all, 'P3')),
+      _kpiTile('Pipeline P2', n(k?.p2), AppColors.secondaryOrange,
+          onTap: () => _openStageSheet(all, 'P2')),
+      _kpiTile('Pipeline P1', n(k?.p1), AppColors.primaryNavy,
+          onTap: () => _openStageSheet(all, 'P1')),
+      _kpiTile('Pipeline Won', n(k?.won), AppColors.successGreen,
+          onTap: () => _openStageSheet(all, 'WON')),
+      _kpiTile('Pipeline Declined', n(k?.decline), AppColors.errorRed,
+          onTap: () => _openStageSheet(all, 'DECLINE')),
     ];
 
     return Container(
@@ -315,8 +346,9 @@ class _BrokerScreenState extends ConsumerState<BrokerScreen> with RouteAware {
     );
   }
 
-  Widget _kpiTile(String label, String value, Color color) {
-    return SizedBox(
+  Widget _kpiTile(String label, String value, Color color,
+      {VoidCallback? onTap}) {
+    final tile = SizedBox(
       width: 128,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
@@ -353,6 +385,119 @@ class _BrokerScreenState extends ConsumerState<BrokerScreen> with RouteAware {
           ],
         ),
       ),
+    );
+    if (onTap == null) return tile;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.radiusMd,
+        child: tile,
+      ),
+    );
+  }
+
+  // ── CR-06: kartu KPI dibuka jadi daftar (bottom banner) ─────────────────
+
+  /// Daftar broker → detail brokernya.
+  void _openBrokerListSheet(String title, List<BrokerView> views, String empty) {
+    showKpiDrilldownSheet(
+      context,
+      title: title,
+      subtitle: 'Tekan satu baris untuk membuka detail brokernya',
+      emptyMessage: empty,
+      rows: [
+        for (final v in views)
+          KpiDrilldownRow(
+            title: v.broker.name,
+            subtitle: '${v.broker.code} · ${v.links.length} pipeline',
+            onTap: () => _showBrokerSheet(v),
+          ),
+      ],
+    );
+  }
+
+  /// Daftar pipeline → pipeline itu di dalam konteks customer-nya.
+  ///
+  /// Judul baris SELALU nama customer, bukan nama broker: daftar pipeline tanpa
+  /// nama customer tidak bisa dipakai siapa pun. Nama broker & tahapnya jadi
+  /// keterangan di bawahnya.
+  void _openPipelineSheet(String title, List<BrokerView> views,
+      bool Function(BrokerLink) where, String empty) {
+    final rows = <KpiDrilldownRow>[];
+    for (final v in views) {
+      for (final l in v.links.where(where)) {
+        rows.add(KpiDrilldownRow(
+          title: l.customer.name,
+          subtitle: '${v.broker.name} · ${l.stage}',
+          trailing: l.premiShort,
+          onTap: () =>
+              context.go('/customer/${l.customer.id}/pipeline/${l.pipelineId}'),
+        ));
+      }
+    }
+    showKpiDrilldownSheet(
+      context,
+      title: title,
+      subtitle: 'Tekan satu baris untuk membuka pipeline-nya',
+      emptyMessage: empty,
+      rows: rows,
+    );
+  }
+
+  void _openStageSheet(List<BrokerView> views, String stage) {
+    _openPipelineSheet(
+      'Pipeline $stage',
+      views,
+      (l) => l.stage == stage,
+      'Belum ada pipeline broker pada tahap $stage di cakupan Anda.',
+    );
+  }
+
+  /// "Total Broker" adalah ukuran daftar master, dan daftar itu TIDAK ikut
+  /// termuat layar ini — `/api/brokers` hanya mengembalikan broker yang punya
+  /// pipeline dalam cakupan. Jadi isinya diambil saat ditekan dari
+  /// `/api/brokers/options` (master, tanpa filter).
+  ///
+  /// Broker yang belum punya pipeline di cakupan pemakai tetap ditampilkan tapi
+  /// tidak bisa ditekan: tidak ada detail yang jujur untuk dibuka, dan justru
+  /// baris-baris inilah yang menjawab "broker mana yang belum kita sentuh".
+  Future<void> _openAllBrokersSheet() async {
+    final loaded = await _future;
+    List<BrokerModel> options;
+    try {
+      options = await ref.read(brokerRepoProvider).getBrokerOptions();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal memuat daftar broker'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final viewById = {
+      for (final v in (loaded ?? const <BrokerView>[])) v.broker.id: v,
+    };
+    showKpiDrilldownSheet(
+      context,
+      title: 'Total Broker',
+      subtitle: 'Seluruh broker pada daftar master',
+      emptyMessage: 'Daftar broker master masih kosong.',
+      rows: [
+        for (final b in options)
+          KpiDrilldownRow(
+            title: b.name,
+            subtitle: viewById.containsKey(b.id)
+                ? '${b.code} · ${viewById[b.id]!.links.length} pipeline'
+                : '${b.code} · belum ada pipeline di cakupan Anda',
+            onTap: viewById.containsKey(b.id)
+                ? () => _showBrokerSheet(viewById[b.id]!)
+                : null,
+          ),
+      ],
     );
   }
 

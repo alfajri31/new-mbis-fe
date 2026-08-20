@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../providers/customer_detail_provider.dart';
+import '../providers/assistant_provider.dart' show canUseAssistant;
 import '../../theme/app_theme.dart';
-import '../../utils/input_formatters.dart';
 import '../../src/nav.dart';
 import '../../src/customer/customer_repository.dart';
 import '../../src/pipeline/pipeline_repository.dart';
@@ -20,6 +19,7 @@ import '../../src/network/api_client.dart';
 import '../../src/network/auth_image.dart';
 import '../../src/common/file_opener.dart';
 import '../../utils/responsive.dart';
+import 'add_customer_screen.dart';
 import 'add_pipeline_screen.dart';
 import '../widgets/customer_detail/customer_bumn_hierarchy.dart';
 import '../widgets/customer_detail/customer_ownership_card.dart';
@@ -155,7 +155,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             IconButton(
               icon: const Icon(Icons.edit_outlined, color: Colors.white),
               tooltip: 'Edit Customer',
-              onPressed: () => _showEditCustomerSheet(_customer!),
+              onPressed: () => _openEditCustomer(_customer!),
+            ),
+          // Hapus permanen: ADMIN saja. Server memakai gerbang yang sama
+          // (isCustomerOwner mengecualikan ADMIN), jadi tombol dan otorisasi
+          // tidak bisa berbeda pendapat.
+          if ((MbisApp.of(context)?.session?.user.roles ?? const [])
+              .contains('ADMIN'))
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              tooltip: 'Hapus Customer',
+              onPressed: () => _confirmDeleteCustomer(customer),
             ),
         ],
       ),
@@ -436,7 +446,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               onTap: () async {
                 await vds.loadLibrary();
                 if (!mounted) return;
-                vds.showVisitDetail(context, _apiClient, v);
+                // Kunjungan bisa diedit dari sheet-nya; muat ulang agar kartu
+                // riwayat menampilkan hasilnya.
+                final changed = await vds.showVisitDetail(context, _apiClient, v);
+                if (changed && mounted) await _fetchData(silent: true);
               },
             ),
       ],
@@ -457,9 +470,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
     // Ketua KUP ikut: ia RM yang merangkap ketua unit, jadi punya portofolio
     // sendiri. Atasan lain (BM/RO) tetap hanya mengawasi.
-    final canCreatePipeline = roles.contains('RM') ||
-        roles.contains('AGENT') ||
-        roles.contains('KUP');
+    // Gerbang peran DAN gerbang objek. Yang kedua datang dari server: sejak CR-18
+    // RM yang berkantor di Kanwil melihat customer se-Kanwil tetapi hanya boleh
+    // menambah pipeline pada customernya sendiri — tanpa ini ia disodori tombol yang
+    // pasti berujung 403 setelah seluruh formulir pipeline terisi.
+    final canCreatePipeline = (roles.contains('RM') ||
+            roles.contains('AGENT') ||
+            roles.contains('KUP')) &&
+        customer.canAddPipeline;
     final aiRoles = MbisApp.of(context)?.session?.user.roles ?? const [];
     return Column(
       children: [
@@ -470,7 +488,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           npwpDisplay: _formatNpwpDisplay(customer.npwp),
         ),
         CustomerAiCard(
-          canRun: aiRoles.contains('RM'),
+          canRun: canUseAssistant(aiRoles),
           results: _aiResults,
           onRun: _openAssistant,
           onResultTap: _showSavedResult,
@@ -922,246 +940,69 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     }
   }
 
-  /// Edit sheet for the company identity/contact + PIC fields.
+  /// Buka formulir customer dalam mode edit.
   ///
-  /// Isinya widget tersendiri ([_EditCustomerSheet]) supaya controller dimiliki
-  /// State-nya: dibuat di `initState`, dibuang di `dispose`. Sebelumnya
-  /// controller dibuat di sini lalu dititipkan ke helper pembuang — pola yang
-  /// membuat masa hidup controller tidak terikat pada widget yang memakainya,
-  /// dan jadi sumber layar merah saat sheet ditutup sambil masih di-rebuild.
-  Future<void> _showEditCustomerSheet(CustomerDetailModel c) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final data = await showModalBottomSheet<Map<String, dynamic>>(
+  /// Memakai [AddCustomerScreen] yang sama dengan alur tambah, menggantikan sheet
+  /// lama yang hanya memuat identitas & PIC — badan hukum, entitas, kategori
+  /// bank/BUMN, HVC, dan titik lokasi dulu tidak pernah bisa diperbaiki setelah
+  /// customer tersimpan. Penyimpanan dikerjakan layar itu sendiri; di sini tinggal
+  /// memuat ulang detailnya.
+  /// Konfirmasi hapus customer (ADMIN).
+  ///
+  /// Menyebut jumlah pipeline-nya karena itu yang menentukan besarnya akibat:
+  /// menghapus customer berpipeline menghapus jejak kerja RM, bukan sekadar satu
+  /// baris nama.
+  Future<void> _confirmDeleteCustomer(CustomerDetailModel c) async {
+    // Hanya pipeline AKTIF yang dihitung di model ini (P3/P2/P1); WON/DECLINE
+    // tidak ikut, jadi angkanya disebut apa adanya sebagai "pipeline aktif".
+    final jumlahPipeline = c.p3Count + c.p2Count + c.p1Count;
+    final ok = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => _EditCustomerSheet(
-        customer: c,
-        npwpDisplay: _formatNpwpDisplay(c.npwp) ?? '',
-      ),
-    );
-    // Simpan dilakukan SETELAH sheet benar-benar tertutup, di luar subtree-nya.
-    if (data == null || !mounted) return;
-    try {
-      await _customerRepo.updateCustomer(c.id, data);
-      if (!mounted) return;
-      await _fetchData(silent: true);
-      messenger.showSnackBar(const SnackBar(content: Text('Customer diperbarui')));
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
-    }
-  }
-
-}
-
-
-/// Isi sheet "Edit Customer". Widget tersendiri agar controller-nya dimiliki
-/// State ini (siklus hidup Flutter biasa), bukan dititipkan ke pemanggil.
-/// `Navigator.pop` mengembalikan payload perubahan; penyimpanan ke server
-/// dikerjakan layar pemanggil setelah sheet tertutup.
-class _EditCustomerSheet extends StatefulWidget {
-  const _EditCustomerSheet({required this.customer, required this.npwpDisplay});
-
-  final CustomerDetailModel customer;
-  final String npwpDisplay;
-
-  @override
-  State<_EditCustomerSheet> createState() => _EditCustomerSheetState();
-}
-
-class _EditCustomerSheetState extends State<_EditCustomerSheet> {
-  late final TextEditingController _name;
-  late final TextEditingController _email;
-  late final TextEditingController _phone;
-  late final TextEditingController _nib;
-  late final TextEditingController _npwp;
-  late final TextEditingController _address;
-  late final TextEditingController _picName;
-  late final TextEditingController _picPhone;
-  late final TextEditingController _picJabatan;
-  late bool _hvc;
-
-  @override
-  void initState() {
-    super.initState();
-    final c = widget.customer;
-    _name = TextEditingController(text: c.name);
-    _email = TextEditingController(text: c.companyEmail ?? '');
-    _phone = TextEditingController(text: c.companyPhone ?? '');
-    _nib = TextEditingController(text: c.nib ?? '');
-    _npwp = TextEditingController(text: widget.npwpDisplay);
-    _address = TextEditingController(text: c.address ?? '');
-    _picName = TextEditingController(text: c.picName ?? '');
-    _picPhone = TextEditingController(text: c.picPhone ?? '');
-    _picJabatan = TextEditingController(text: c.picJabatan ?? '');
-    _hvc = c.isHvc;
-  }
-
-  @override
-  void dispose() {
-    for (final ctrl in [
-      _name,
-      _email,
-      _phone,
-      _nib,
-      _npwp,
-      _address,
-      _picName,
-      _picPhone,
-      _picJabatan,
-    ]) {
-      ctrl.dispose();
-    }
-    super.dispose();
-  }
-
-  Widget _field(
-    String label,
-    TextEditingController ctrl, {
-    int maxLines = 1,
-    TextInputType? kt,
-    List<TextInputFormatter>? inputFormatters,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: TextField(
-      controller: ctrl,
-      maxLines: maxLines,
-      keyboardType: kt,
-      inputFormatters: inputFormatters,
-      style: const TextStyle(fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontSize: 13),
-        isDense: true,
-        border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
-      ),
-    ),
-  );
-
-  void _submit() {
-    if (_name.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nama customer wajib diisi')),
-      );
-      return;
-    }
-    Navigator.of(context).pop(<String, dynamic>{
-      'name': _name.text.trim(),
-      'companyEmail': _email.text.trim(),
-      'companyPhone': _phone.text.trim(),
-      'nib': _nib.text.trim(),
-      // Simpan NPWP sebagai angka murni (UI hanya memformat tampilan).
-      'npwp': _npwp.text.replaceAll(RegExp(r'[^0-9]'), ''),
-      'address': _address.text.trim(),
-      'picName': _picName.text.trim(),
-      'picPhone': _picPhone.text.trim(),
-      'picJabatan': _picJabatan.text.trim(),
-      'isHvc': _hvc,
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Edit Customer',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _field('Nama Customer', _name),
-                  _field(
-                    'Email Perusahaan',
-                    _email,
-                    kt: TextInputType.emailAddress,
-                  ),
-                  _field(
-                    'No. Telepon Perusahaan',
-                    _phone,
-                    kt: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
-                      LengthLimitingTextInputFormatter(20),
-                    ],
-                  ),
-                  _field(
-                    'NIB',
-                    _nib,
-                    kt: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(13),
-                    ],
-                  ),
-                  _field(
-                    'NPWP',
-                    _npwp,
-                    kt: TextInputType.number,
-                    inputFormatters: [NpwpInputFormatter()],
-                  ),
-                  _field('Alamat', _address, maxLines: 2),
-                  _field('Nama PIC', _picName),
-                  _field('No. Telepon PIC', _picPhone, kt: TextInputType.phone),
-                  _field('Jabatan PIC', _picJabatan),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text(
-                      'HVC (High Value Customer)',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    value: _hvc,
-                    activeThumbColor: AppColors.secondaryOrange,
-                    onChanged: (v) => setState(() => _hvc = v),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryNavy,
-                shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-              ),
-              child: const Text(
-                'Simpan',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Hapus customer ini?'),
+        content: Text(
+          'Customer "${c.name}" akan dihapus permanen.'
+          '${jumlahPipeline > 0 ? '\n\nIa masih punya $jumlahPipeline pipeline aktif. '
+              'Hapus atau pindahkan pipeline itu lebih dulu bila datanya masih '
+              'dipakai — penghapusan ini tidak bisa dibatalkan.' : '\n\nTindakan ini tidak bisa dibatalkan.'}',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Hapus',
+                  style: TextStyle(color: AppColors.errorRed))),
         ],
       ),
     );
+    if (ok != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await _customerRepo.deleteCustomer(c.id);
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Customer dihapus'),
+        backgroundColor: AppColors.successGreen,
+      ));
+      navigator.pop(true);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: AppColors.errorRed,
+      ));
+    }
   }
+
+  Future<void> _openEditCustomer(CustomerDetailModel c) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AddCustomerScreen(existing: c)),
+    );
+    if (saved == true && mounted) await _fetchData(silent: true);
+  }
+
 }

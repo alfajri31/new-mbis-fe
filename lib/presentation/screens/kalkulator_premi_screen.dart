@@ -11,6 +11,7 @@ import '../../src/app.dart';
 import '../../src/network/api_client.dart';
 import '../../src/customer/customer_repository.dart';
 import '../../src/premi/premi_estimate_repository.dart';
+import '../../src/premi/premi_rate_repository.dart';
 import '../../src/pdf/premi_invoice_pdf.dart';
 import '../providers/kalkulator_premi_provider.dart';
 import '../widgets/back_app_bar.dart';
@@ -19,13 +20,16 @@ import '../widgets/kalkulator_premi/premi_result_card.dart';
 
 /// S-109 — Kalkulator Premi. Real-time, client-only computation.
 ///
-/// Flow (calc.md): pilih kategori → pilih jenis produk → rate diisi manual
-/// oleh user → khusus Asuransi Umum bisa isi diskon → premi = TSI × rate,
-/// dikali (1 − diskon) bila ada diskon.
+/// Flow (calc.md): pilih kategori → pilih jenis produk → rate terisi dari default
+/// admin dan masih bisa diketik ulang → khusus Asuransi Umum bisa isi diskon →
+/// premi = TSI × rate, dikali (1 − diskon) bila ada diskon.
 ///
-/// Rate produk adalah data rahasia internal perusahaan, sehingga tidak lagi
-/// disimpan/di-auto-fill oleh aplikasi (post-piloting feedback) — user mengisi
-/// sendiri rate-nya setelah memilih produk/jaminan/tenor.
+/// Rate (MTR-2): ADMIN mengisi rate default per slot pilihan lewat layar ini juga,
+/// tersimpan di backend (`/api/premi-rates`). Pengguna kalkulator menerimanya sebagai
+/// angka AWAL begitu pilihannya lengkap, dan boleh menimpanya — timpaan itu hanya
+/// berlaku untuk perhitungan yang sedang berjalan dan TIDAK disimpan ke mana pun.
+/// Slot yang belum diisi admin berperilaku seperti sebelum MTR-2: isian kosong, user
+/// mengetik sendiri. Angka rate tetap tidak pernah ditulis di dalam kode aplikasi.
 ///
 /// - Contractor's All Risk & Machinery Breakdown (Industry) memunculkan 3
 ///   kriteria (CAR-MB.png) hanya untuk label tier (High/Low/Normal Risk),
@@ -58,6 +62,11 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
     text: '0',
   );
 
+  /// Biaya admin NOMINAL (rupiah) di luar premi (CR-21). Bukan persentase: ia
+  /// tidak ikut dasar perhitungan premi maupun aturan minimum premi bond, hanya
+  /// menambah total yang ditagihkan. Kosong/0 = perilaku lama persis.
+  final TextEditingController _biayaAdminController = TextEditingController();
+
   /// Rate (%) is entered manually by the user — takedown of internal rate
   /// data means the app no longer auto-fills or stores it.
   final TextEditingController _rateController = TextEditingController();
@@ -86,12 +95,30 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   void initState() {
     super.initState();
     _kursController.addListener(() => setState(() {}));
+    // Rate default milik admin dimuat sekali di sini, bukan per pilihan produk:
+    // daftarnya kecil dan kalkulator jadi tidak menunggu jaringan tiap ganti pilihan.
+    // Sesudah frame pertama karena butuh context (sesi) dan tidak boleh mengubah
+    // state provider saat build.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRateDefaults());
+  }
+
+  Future<void> _loadRateDefaults() async {
+    if (!mounted) return;
+    final repo = PremiRateRepository(
+      apiClient: ApiClient(session: MbisApp.of(context)?.session),
+    );
+    await ref.read(kalkulatorPremiProvider.notifier).loadRateDefaults(repo);
+    if (!mounted) return;
+    // Hanya mengisi yang MASIH kosong: bila user sempat mengetik rate selagi
+    // daftar dimuat, ketikannya tidak boleh tertimpa default yang baru datang.
+    setState(() => _applyDefaultRate(onlyIfEmpty: true));
   }
 
   @override
   void dispose() {
     _tsiController.dispose();
     _diskonController.dispose();
+    _biayaAdminController.dispose();
     _rateController.dispose();
     _kursController.dispose();
     super.dispose();
@@ -129,6 +156,98 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
     return double.tryParse(_rateController.text);
   }
 
+  // ── Rate default milik admin (MTR-2) ───────────────────────────────────────
+
+  /// True bila pemakai layar ini ADMIN — satu-satunya peran yang boleh MENYIMPAN
+  /// rate default. Gerbang di klien ini hanya menghindarkan pintu yang pasti
+  /// tertutup; yang menentukan tetap server (`/api/admin/premi-rates` → 403).
+  bool get _isAdmin =>
+      (MbisApp.of(context)?.session?.user.roles ?? const <String>[])
+          .contains('ADMIN');
+
+  /// Kunci slot rate untuk pilihan saat ini; null bila pilihan belum lengkap.
+  /// Untuk CAR & MB Industry kuncinya ikut berubah saat kriteria risiko dicentang
+  /// — tier yang berbeda memang rate yang berbeda.
+  String? get _slotKey {
+    if (!_selectionComplete) return null;
+    switch (_category) {
+      case PremiCategory.asuransiUmum:
+        final risk = _product!.risk;
+        return premiSlotKeyUmum(
+          _product!.name,
+          riskTier: risk?.tierCode(_checkedCriteria.length),
+        );
+      case PremiCategory.suretyBond:
+      case PremiCategory.kbg:
+        return premiSlotKeyBond(
+          _category,
+          jaminan: kBondJaminan[_jaminanIdx!],
+          tenor: kBondTenors[_tenorIdx!],
+        );
+      case PremiCategory.customBond:
+        return premiSlotKeyBond(_category, tenor: kBondTenors[_tenorIdx!]);
+    }
+  }
+
+  /// Rate default untuk slot terpilih; null bila belum diisi admin.
+  PremiRateDefault? get _slotDefault {
+    final key = _slotKey;
+    if (key == null) return null;
+    return ref.read(kalkulatorPremiProvider).defaultFor(key);
+  }
+
+  /// True bila isian rate sudah berbeda dari default admin — dipakai untuk
+  /// menyatakan dengan jelas bahwa angka yang tampil bukan lagi angka acuan.
+  bool get _rateOverridden {
+    final def = _slotDefault;
+    if (def == null) return false;
+    return _rateController.text.trim() != _rateText(def.ratePercent);
+  }
+
+  /// Batas bawah rate untuk slot terpilih; null bila slot tanpa batas bawah.
+  double? get _minRate => _slotDefault?.minRatePercent;
+
+  /// True bila rate yang diketik ada DI BAWAH batas bawah slot. Ini kondisi
+  /// terlarang, bukan sekadar peringatan: dokumen proforma tidak boleh terbit dengan
+  /// rate di bawah batas, dan server pun menolaknya saat Estimasi Premi disimpan.
+  bool get _belowMinRate => _slotDefault?.melanggarBatasBawah(_rate) ?? false;
+
+  /// Rate persen untuk isian/label: buang nol berekor (3.5000 → "3.5").
+  String _rateText(double v) {
+    var s = v.toStringAsFixed(4);
+    if (s.contains('.')) {
+      s = s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+    }
+    return s;
+  }
+
+  /// Tulis rate default slot terpilih ke isian rate; kosongkan bila slot belum
+  /// lengkap atau belum punya default.
+  ///
+  /// TIDAK memanggil setState — semua pemanggilnya sudah berada di dalam setState
+  /// milik perubahan pilihan yang memicunya. [onlyIfEmpty] dipakai saat daftar rate
+  /// baru selesai dimuat, agar ketikan user yang sedang berjalan tidak tertimpa.
+  void _applyDefaultRate({bool onlyIfEmpty = false}) {
+    if (onlyIfEmpty && _rateController.text.trim().isNotEmpty) return;
+    final def = _slotDefault;
+    _rateController.text = def == null ? '' : _rateText(def.ratePercent);
+  }
+
+  /// Label slot untuk dialog konfirmasi admin — sebutkan persis apa yang diubah.
+  String get _slotLabel {
+    final tier = _riskTier;
+    switch (_category) {
+      case PremiCategory.asuransiUmum:
+        return tier == null ? _breakdownToc : '$_breakdownToc · $tier';
+      case PremiCategory.suretyBond:
+      case PremiCategory.kbg:
+        return '${_category.label} · ${kBondJaminan[_jaminanIdx!]} · '
+            '${kBondTenors[_tenorIdx!]}';
+      case PremiCategory.customBond:
+        return '${_category.label} · ${kBondTenors[_tenorIdx!]}';
+    }
+  }
+
   bool get _isBond => _category != PremiCategory.asuransiUmum;
 
   /// Premi bruto (sebelum minimum premi bond), dalam IDR.
@@ -150,8 +269,22 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   bool get _minPremiApplied =>
       _isBond && _premiBruto > 0 && _premiBruto < kBondMinPremi;
 
+  /// Biaya admin yang diketik (rupiah, tanpa pemisah ribuan). Dibaca sama seperti
+  /// TSI: karakter non-angka dibuang, supaya "25.000" yang diketik user tidak
+  /// diam-diam terbaca 25.
+  num get _biayaAdmin =>
+      num.tryParse(_biayaAdminController.text.replaceAll(RegExp(r'[^\d]'), '')) ??
+      0;
+
+  /// Yang benar-benar ditagihkan ke nasabah: premi + biaya admin (CR-21).
+  /// Sengaja dihitung DI ATAS [_premi] yang sudah final, bukan di dalamnya —
+  /// aturan minimum premi bond hanya berlaku untuk preminya sendiri.
+  num get _totalTagihan => _premi + _biayaAdmin;
+
   /// True when the current selection is complete enough to compute a premi.
-  bool get _canExport => _rate != null && _tsiOriginal > 0;
+  /// Rate di bawah batas bawah slot menutup ekspor — dokumen yang terbit di bawah
+  /// batas sudah terlanjur sampai ke nasabah, jadi dicegat sebelum PDF dibuat.
+  bool get _canExport => _rate != null && _tsiOriginal > 0 && !_belowMinRate;
 
   // Product breakdown for the invoice (COB → LOB → ToC seperti pipeline).
   String get _breakdownCob =>
@@ -183,6 +316,9 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   void _toggleCriterion(int i) {
     setState(() {
       if (!_checkedCriteria.add(i)) _checkedCriteria.remove(i);
+      // Kriteria menentukan tier (High/Low/Normal), dan tier ikut membentuk kunci
+      // slot — jadi mencentang kriteria berarti pindah ke rate default yang lain.
+      _applyDefaultRate();
     });
   }
 
@@ -197,16 +333,25 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
       _tenorIdx = null;
       _diskonController.text =
           '0'; // fix: reset diskon when leaving Asuransi Umum
-      _rateController.clear();
+      _applyDefaultRate();
     });
   }
 
-  void _onTsiChanged(String v) {
+  void _onTsiChanged(String v) => _formatRupiahField(_tsiController, v);
+
+  /// Biaya admin memakai pemformat yang sama dengan TSI (CR-21): dua isian rupiah
+  /// di satu layar yang berbeda cara ketiknya hanya bikin salah baca.
+  void _onBiayaAdminChanged(String v) =>
+      _formatRupiahField(_biayaAdminController, v);
+
+  /// Menulis ulang isi [c] sebagai angka berpemisah ribuan sambil menjaga kursor
+  /// tetap di ujung.
+  void _formatRupiahField(TextEditingController c, String v) {
     final digits = v.replaceAll(RegExp(r'[^\d]'), '');
     final formatted = digits.isEmpty
         ? ''
         : AppFormat.thousands(int.parse(digits));
-    _tsiController.value = TextEditingValue(
+    c.value = TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
     );
@@ -257,7 +402,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
       setState(() {
         _product = selected;
         _checkedCriteria.clear();
-        _rateController.clear();
+        _applyDefaultRate();
       });
     }
   }
@@ -265,7 +410,10 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   /// Pick a customer from this RM's list, then render & preview the proforma PDF.
   Future<void> _exportPdf() async {
     if (!_canExport) {
-      _snack('Lengkapi produk & TSI dulu sebelum ekspor.');
+      _snack(_belowMinRate
+          ? 'Rate di bawah batas bawah ${_rateText(_minRate!)}%. '
+              'Naikkan rate dulu sebelum ekspor.'
+          : 'Lengkapi produk & TSI dulu sebelum ekspor.');
       return;
     }
     final session = MbisApp.of(context)?.session;
@@ -300,9 +448,15 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
         'kurs': _kurs,
         'tsiIdr': _tsiIdr,
         'ratePercent': _rate!,
+        // Slot dikirim agar server bisa memvalidasi rate terhadap batas bawahnya
+        // sendiri — gerbang layar saja bisa dilewati klien yang dimodifikasi.
+        'slotKey': _slotKey,
         'diskonPercent': _diskon,
         'minPremiApplied': _minPremiApplied,
         'premi': _premi,
+        // Disimpan terpisah dari premi (CR-21): dokumen yang terbit harus bisa
+        // menjelaskan kembali angka totalnya, bukan hanya menampilkan hasil akhir.
+        'biayaAdmin': _biayaAdmin,
       });
     } catch (e) {
       if (mounted) _snack('Gagal menerbitkan nomor dokumen: ${_clean(e)}');
@@ -331,6 +485,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
       diskonPercent: _diskon,
       minPremiApplied: _minPremiApplied,
       premi: _premi,
+      biayaAdmin: _biayaAdmin,
     );
 
     Uint8List bytes;
@@ -392,6 +547,8 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
                 tsiIdr: _tsiIdr,
                 minPremiApplied: _minPremiApplied,
                 premi: _premi,
+                biayaAdmin: _biayaAdmin,
+                totalTagihan: _totalTagihan,
               ),
               const SizedBox(height: AppSpacing.lg),
               _buildExportButton(),
@@ -445,6 +602,12 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
               Expanded(child: _labeled('Diskon (%)', _buildDiskonField())),
             ],
           ),
+          ..._buildRateDefaultSection(),
+          const SizedBox(height: 18),
+          // Biaya admin (CR-21) berdiri sendiri, tidak di baris yang sama dengan
+          // Rate/Diskon: keduanya persen, yang ini rupiah — disandingkan malah
+          // mengundang salah isi.
+          _labeled('Biaya Admin (Rp)', _buildBiayaAdminField()),
         ],
       ),
     );
@@ -502,7 +665,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
               value: _jaminanIdx,
               onChanged: (i) => setState(() {
                 _jaminanIdx = i;
-                _rateController.clear();
+                _applyDefaultRate();
               }),
             ),
           ),
@@ -515,7 +678,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
               value: _tenorIdx,
               onChanged: (i) => setState(() {
                 _tenorIdx = i;
-                _rateController.clear();
+                _applyDefaultRate();
               }),
             ),
           ),
@@ -530,7 +693,7 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
               value: _tenorIdx,
               onChanged: (i) => setState(() {
                 _tenorIdx = i;
-                _rateController.clear();
+                _applyDefaultRate();
               }),
             ),
           ),
@@ -840,16 +1003,22 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
     );
   }
 
-  /// Manual rate (%) input — the app no longer stores/auto-fills internal
-  /// rate data; the user types the rate for the selected product/jaminan/tenor.
+  /// Isian rate (%). Terisi otomatis dari rate default milik admin begitu pilihan
+  /// lengkap (MTR-2), dan tetap bisa diketik ulang — ketikan itu hanya berlaku untuk
+  /// perhitungan yang sedang berjalan. Slot tanpa default tampil kosong seperti dulu.
+  /// Tidak ada angka rate yang disimpan di dalam kode aplikasi.
   Widget _buildRateField() {
     final enabled = _selectionComplete;
+    final melanggar = _belowMinRate;
     return Container(
       height: 52,
       decoration: BoxDecoration(
         color: enabled ? AppColors.surfaceWhite : AppColors.grayBg,
         borderRadius: AppRadius.radiusMd,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: melanggar ? AppColors.errorRed : AppColors.border,
+          width: melanggar ? 1.5 : 1,
+        ),
       ),
       child: TextField(
         controller: _rateController,
@@ -864,6 +1033,391 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         ),
+      ),
+    );
+  }
+
+  /// Keterangan + aksi rate default di bawah isian Rate (MTR-2).
+  ///
+  /// Tiga hal yang harus terbaca jelas di sini, karena angka rate kini bisa datang
+  /// dari orang lain: (1) angka ini default dari admin dan kapan terakhir diubah,
+  /// (2) begitu ditimpa, timpaannya HANYA untuk perhitungan ini, (3) khusus admin,
+  /// dari sinilah default itu disimpan untuk semua pengguna.
+  List<Widget> _buildRateDefaultSection() {
+    final slot = _slotKey;
+    if (slot == null) return const [];
+
+    final def = _slotDefault;
+    final rows = <Widget>[];
+
+    // Pelanggaran batas bawah didahulukan: selama ini menyala, tidak ada yang lebih
+    // penting untuk dibaca di sini.
+    if (_belowMinRate) {
+      rows.add(_rateNote(
+        Icons.block_outlined,
+        AppColors.errorRed,
+        'Rate di bawah batas bawah ${_rateText(_minRate!)}%. Ekspor dokumen '
+            'dinonaktifkan sampai rate dinaikkan.',
+        trailing: TextButton(
+          onPressed: () => setState(
+              () => _rateController.text = _rateText(_minRate!)),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text('Pakai batas bawah', style: TextStyle(fontSize: 12)),
+        ),
+      ));
+    } else if (_minRate != null) {
+      rows.add(_rateNote(
+        Icons.south_east,
+        AppColors.grayStage,
+        'Batas bawah ${_rateText(_minRate!)}% — rate boleh dinaikkan, tidak boleh '
+            'diturunkan di bawah angka ini.',
+      ));
+    }
+
+    // Selama pelanggaran batas bawah menyala, keterangan asal-usul angka ditahan:
+    // yang perlu dikerjakan user cuma satu, dan dua baris nasihat sekaligus justru
+    // mengaburkannya.
+    if (!_belowMinRate) {
+      if (def != null && _rateOverridden) {
+        rows.add(_rateNote(
+          Icons.edit_outlined,
+          AppColors.secondaryOrange,
+          'Diubah dari default ${_rateText(def.ratePercent)}% — berlaku untuk '
+              'perhitungan ini saja, tidak tersimpan.',
+          trailing: TextButton(
+            onPressed: () => setState(_applyDefaultRate),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Pakai default', style: TextStyle(fontSize: 12)),
+          ),
+        ));
+      } else if (def != null) {
+        final oleh =
+            (def.updatedByName ?? '').isEmpty ? '' : ' oleh ${def.updatedByName}';
+        rows.add(_rateNote(
+          Icons.verified_outlined,
+          AppColors.successGreen,
+          'Rate default dari admin · diperbarui '
+              '${AppFormat.dateOnly(def.updatedAt)}$oleh.',
+        ));
+      } else if (_isAdmin) {
+        rows.add(_rateNote(
+          Icons.info_outline,
+          AppColors.grayStage,
+          'Belum ada rate default untuk pilihan ini.',
+        ));
+      }
+    }
+
+    if (_isAdmin) {
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Wrap(
+          children: [
+            TextButton.icon(
+              onPressed: _editRateDefault,
+              icon: const Icon(Icons.tune, size: 16),
+              label: Text(
+                def == null
+                    ? 'Atur rate default & batas bawah'
+                    : 'Ubah rate default & batas bawah',
+                style: const TextStyle(fontSize: 12.5),
+              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primaryNavy),
+            ),
+            if (def != null)
+              TextButton.icon(
+                onPressed: _clearRateDefault,
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label:
+                    const Text('Hapus default', style: TextStyle(fontSize: 12.5)),
+                style: TextButton.styleFrom(foregroundColor: AppColors.errorRed),
+              ),
+          ],
+        ),
+      ));
+    }
+
+    if (rows.isEmpty) return const [];
+    return [const SizedBox(height: 8), ...rows];
+  }
+
+  Widget _rateNote(IconData icon, Color color, String text, {Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style:
+                  const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+
+  /// Atur rate default + batas bawah slot ini (ADMIN).
+  ///
+  /// Keduanya di SATU dialog karena keduanya satu baris data yang sama dan saling
+  /// terikat: default tidak boleh di bawah batas bawahnya sendiri (server menolak),
+  /// dan mengubah salah satunya sendirian mudah menghasilkan pasangan yang mustahil.
+  /// Isian default terisi dari angka yang sedang diketik admin di kalkulator, supaya
+  /// alur "hitung dulu, baru tetapkan" tetap terasa menyambung.
+  Future<void> _editRateDefault() async {
+    final slot = _slotKey;
+    if (slot == null) return;
+    final def = _slotDefault;
+
+    final rateCtrl = TextEditingController(
+      text: _rate != null
+          ? _rateText(_rate!)
+          : (def == null ? '' : _rateText(def.ratePercent)),
+    );
+    final minCtrl = TextEditingController(
+      text: def?.minRatePercent == null ? '' : _rateText(def!.minRatePercent!),
+    );
+
+    final hasil = await showDialog<({double rate, double? min})>(
+      context: context,
+      builder: (ctx) {
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: const Text('Rate default & batas bawah'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_slotLabel,
+                    style: const TextStyle(
+                        fontSize: 12.5, color: AppColors.textSecondary)),
+                const SizedBox(height: 14),
+                _dialogRateField(
+                  controller: rateCtrl,
+                  label: 'Rate default (%)',
+                  hint: 'Angka awal yang tampil ke semua pengguna',
+                ),
+                const SizedBox(height: 12),
+                _dialogRateField(
+                  controller: minCtrl,
+                  label: 'Batas bawah (%)',
+                  hint: 'Kosongkan bila slot ini tanpa batas bawah',
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(error!,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.errorRed)),
+                ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Rate default tampil sebagai angka awal untuk SEMUA pengguna '
+                  'Kalkulator Premi. Batas bawah menolak rate yang lebih rendah, '
+                  'di aplikasi maupun di server.',
+                  style:
+                      TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final rate = double.tryParse(rateCtrl.text.trim());
+                  final minText = minCtrl.text.trim();
+                  final min = minText.isEmpty ? null : double.tryParse(minText);
+                  if (rate == null) {
+                    setDialogState(() => error = 'Rate default wajib diisi.');
+                    return;
+                  }
+                  if (minText.isNotEmpty && min == null) {
+                    setDialogState(() => error = 'Batas bawah bukan angka.');
+                    return;
+                  }
+                  if (rate < 0 || rate > 100 || (min != null && (min < 0 || min > 100))) {
+                    setDialogState(() => error = 'Rate harus antara 0% dan 100%.');
+                    return;
+                  }
+                  if (min != null && rate < min) {
+                    setDialogState(() => error =
+                        'Rate default tidak boleh di bawah batas bawah.');
+                    return;
+                  }
+                  Navigator.pop(ctx, (rate: rate, min: min));
+                },
+                child: const Text('Simpan'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    rateCtrl.dispose();
+    minCtrl.dispose();
+    if (hasil == null || !mounted) return;
+
+    final repo = PremiRateRepository(
+      apiClient: ApiClient(session: MbisApp.of(context)?.session),
+    );
+    try {
+      await ref.read(kalkulatorPremiProvider.notifier).saveRateDefault(
+            repo,
+            slotKey: slot,
+            ratePercent: hasil.rate,
+            minRatePercent: hasil.min,
+            productName:
+                _category == PremiCategory.asuransiUmum ? _product?.name : null,
+            riskTier: _product?.risk?.tierCode(_checkedCriteria.length),
+            jaminan: _jaminanIdx == null ? null : kBondJaminan[_jaminanIdx!],
+            tenor: _tenorIdx == null ? null : kBondTenors[_tenorIdx!],
+          );
+      if (!mounted) return;
+      // Isian kalkulator ikut disamakan dengan default yang baru: admin baru saja
+      // menyatakan angka itulah acuannya, jadi layar tidak boleh tetap menampilkan
+      // angka lain seolah-olah masih "ditimpa".
+      setState(_applyDefaultRate);
+      _snack('Rate default tersimpan.');
+    } catch (e) {
+      if (!mounted) return;
+      _snack(_clean(e));
+    }
+  }
+
+  Widget _dialogRateField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: const [DecimalInputFormatter()],
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle:
+                const TextStyle(fontSize: 11.5, color: AppColors.grayStage),
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Hapus rate default slot ini (ADMIN) — kalkulator kembali ke isian kosong.
+  Future<void> _clearRateDefault() async {
+    final slot = _slotKey;
+    if (slot == null || _slotDefault == null) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus rate default?'),
+        content: Text(
+          '$_slotLabel\n\n'
+          'Setelah dihapus, pengguna kalkulator mengisi sendiri rate untuk '
+          'pilihan ini seperti sebelumnya.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorRed),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final repo = PremiRateRepository(
+      apiClient: ApiClient(session: MbisApp.of(context)?.session),
+    );
+    try {
+      await ref
+          .read(kalkulatorPremiProvider.notifier)
+          .clearRateDefault(repo, slot);
+      if (!mounted) return;
+      setState(_applyDefaultRate);
+      _snack('Rate default dihapus.');
+    } catch (e) {
+      if (!mounted) return;
+      _snack(_clean(e));
+    }
+  }
+
+  /// Isian biaya admin (CR-21). Selalu aktif — biaya admin tidak bergantung
+  /// kategori seperti diskon; kosong berarti tanpa biaya admin.
+  Widget _buildBiayaAdminField() {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: AppRadius.radiusMd,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(left: 14, right: 6),
+            child: Text(
+              'Rp',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _biayaAdminController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: _onBiayaAdminChanged,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+              ),
+              decoration: const InputDecoration(
+                hintText: '0',
+                hintStyle: TextStyle(color: AppColors.grayStage),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 4),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

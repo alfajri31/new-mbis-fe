@@ -9,7 +9,8 @@ const Object _keep = Object();
 /// State layar BUMN — cerminan 1:1 dari field `setState` di layar lama.
 ///
 /// [future] menampung daftar pohon BUMN (dulu `_future`, dikonsumsi FutureBuilder).
-/// [kpi] = KPI global (dulu `_kpi`). [query] = kata kunci pencarian ter-debounce
+/// [kpi] = KPI layar BUMN dari server; ter-scope kecuali `total` yang tetap ukuran
+/// ekosistem master (dulu `_kpi`). [query] = kata kunci pencarian ter-debounce
 /// (dulu `_query`). [expanded] = set id node yang terbuka (dulu `_expanded`).
 /// [selectedId]/[selectedNode] = node terpilih yang menyetir kartu KPI (dulu
 /// `_selectedId`/`_selectedNode`). [includeDescendants] = lingkup kartu node
@@ -19,6 +20,12 @@ class BumnState {
   final PartnerKpi? kpi;
   final String query;
   final Set<String> expanded;
+
+  /// Node yang DILIPAT manual saat mode pencarian. Kebalikan dari [expanded]:
+  /// di mode pencarian semua cabang terbuka secara bawaan, jadi yang perlu diingat
+  /// justru yang ditutup pengguna. Set terpisah supaya status buka/tutup mode biasa
+  /// tidak bocor ke mode pencarian (dan sebaliknya).
+  final Set<String> searchCollapsed;
   final String? selectedId;
   final BumnTreeCustomer? selectedNode;
   final bool includeDescendants;
@@ -28,6 +35,7 @@ class BumnState {
     this.kpi,
     this.query = '',
     this.expanded = const <String>{},
+    this.searchCollapsed = const <String>{},
     this.selectedId,
     this.selectedNode,
     this.includeDescendants = true,
@@ -38,6 +46,7 @@ class BumnState {
     Object? kpi = _keep,
     String? query,
     Set<String>? expanded,
+    Set<String>? searchCollapsed,
     Object? selectedId = _keep,
     Object? selectedNode = _keep,
     bool? includeDescendants,
@@ -49,6 +58,7 @@ class BumnState {
       kpi: kpi == _keep ? this.kpi : kpi as PartnerKpi?,
       query: query ?? this.query,
       expanded: expanded ?? this.expanded,
+      searchCollapsed: searchCollapsed ?? this.searchCollapsed,
       selectedId: selectedId == _keep ? this.selectedId : selectedId as String?,
       selectedNode: selectedNode == _keep
           ? this.selectedNode
@@ -72,7 +82,7 @@ class BumnNotifier extends Notifier<BumnState> {
   BumnRepository get _repo => ref.read(bumnRepoProvider);
 
   /// Dipanggil sekali per mount dari layar (dulu blok `if (_future == null)` di
-  /// `didChangeDependencies`). Mulai muat pohon BUMN + KPI global.
+  /// `didChangeDependencies`). Mulai muat pohon BUMN + KPI-nya.
   void start() {
     final future = _repo.getBumnCustomerTree();
     state = state.copyWith(future: future);
@@ -87,6 +97,7 @@ class BumnNotifier extends Notifier<BumnState> {
       selectedId: null,
       selectedNode: null,
       expanded: <String>{},
+      searchCollapsed: <String>{},
     );
     _loadKpi();
     await future;
@@ -113,6 +124,15 @@ class BumnNotifier extends Notifier<BumnState> {
   void clearSelection() =>
       state = state.copyWith(selectedId: null, selectedNode: null);
 
+  /// Tutup/buka satu cabang di mode pencarian (bawaannya terbuka).
+  void toggleSearchCollapse(String id) {
+    final next = Set<String>.from(state.searchCollapsed);
+    if (!next.remove(id)) {
+      next.add(id);
+    }
+    state = state.copyWith(searchCollapsed: next);
+  }
+
   void toggleExpand(String id) {
     final next = Set<String>.from(state.expanded);
     if (next.contains(id)) {
@@ -127,10 +147,16 @@ class BumnNotifier extends Notifier<BumnState> {
   /// ber-scope node → seleksi dilepas saat query tak kosong.
   void setQuery(String value) {
     final q = value.trim();
+    // Kata kunci berubah -> hasil pencariannya lain, jadi lipatan lama tidak lagi
+    // bermakna; tanpa reset ini sebuah cabang bisa tampak "tertutup" tanpa sebab.
     if (q.isNotEmpty) {
-      state = state.copyWith(query: q, selectedId: null, selectedNode: null);
+      state = state.copyWith(
+          query: q,
+          selectedId: null,
+          selectedNode: null,
+          searchCollapsed: <String>{});
     } else {
-      state = state.copyWith(query: q);
+      state = state.copyWith(query: q, searchCollapsed: <String>{});
     }
   }
 

@@ -4,24 +4,42 @@ import '../network/api_client.dart';
 class VisitModel {
   final String id;
   final String type;
+
+  /// Id customer pemilik kunjungan — alamat rute `/customer/<id>` yang dituju pin
+  /// di Peta Kunjungan. Nullable: kunjungan yang pipeline-nya sudah tak lengkap
+  /// tidak membawanya, dan di kasus itu tautannya disembunyikan alih-alih
+  /// mengarahkan ke id kosong.
+  final String? customerId;
   final String? customerName;
   final String? activityDate;
   final String? notes;
   final String? nextFollowupDate;
+
+  /// Rencana tindak lanjut, dibaca dari jadwal follow-up yang dibuat kunjungan
+  /// ini. Null bila kunjungan tak berjadwal — di kasus itu rencananya sudah
+  /// dilipat ke dalam [notes] oleh backend saat dicatat.
+  final String? actionPlan;
   final String? gpsLatitude;
   final String? gpsLongitude;
   final String? photoUrl; // relative path served by /api/files/**
 
+  /// True hanya bila kunjungan ini dicatat oleh pengguna yang sedang login.
+  /// Server tetap memaksa aturan yang sama saat PUT — ini hanya penentu tombol.
+  final bool canEdit;
+
   VisitModel({
     required this.id,
     required this.type,
+    this.customerId,
     this.customerName,
     this.activityDate,
     this.notes,
     this.nextFollowupDate,
+    this.actionPlan,
     this.gpsLatitude,
     this.gpsLongitude,
     this.photoUrl,
+    this.canEdit = false,
   });
 
   bool get hasGps => gpsLatitude != null && gpsLongitude != null;
@@ -34,13 +52,16 @@ class VisitModel {
     return VisitModel(
       id: json['id'] ?? '',
       type: json['type'] ?? '',
+      customerId: json['customerId'],
       customerName: json['customerName'],
       activityDate: json['activityDate'],
       notes: json['notes'],
       nextFollowupDate: json['nextFollowupDate'],
+      actionPlan: json['actionPlan'],
       gpsLatitude: json['gpsLatitude'],
       gpsLongitude: json['gpsLongitude'],
       photoUrl: json['photoUrl'],
+      canEdit: json['canEdit'] == true,
     );
   }
 }
@@ -124,5 +145,40 @@ class VisitRepository {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
     throw Exception('Failed to save activity (${response.statusCode})');
+  }
+
+  /// Perbaiki catatan kunjungan yang sudah tersimpan. Hanya RM yang mencatatnya
+  /// (server menolak 403 kalau bukan), dan hanya tiga field ini — tag lokasi &
+  /// foto tetap terkunci karena keduanya bukti, bukan catatan.
+  ///
+  /// Ketiganya dikirim apa adanya: kosong = dikosongkan, bukan "jangan diubah".
+  /// [nextFollowupDate] memakai konvensi yang sama dengan [createVisit]: waktu
+  /// lokal polos `2026-08-20T14:30:00.000`, tanpa `Z` dan tanpa offset.
+  Future<VisitModel> updateVisit({
+    required String visitId,
+    String? notes,
+    String? nextFollowupDate,
+    String? actionPlan,
+  }) async {
+    final response = await apiClient.put('/api/visits/$visitId', body: {
+      'notes': notes ?? '',
+      'nextFollowupDate': nextFollowupDate,
+      'actionPlan': actionPlan ?? '',
+    });
+    if (response.statusCode == 200) {
+      return VisitModel.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    // Pesan server diteruskan apa adanya: penolakan yang mungkin muncul di sini
+    // ("jadwal follow-up sudah selesai…") menjelaskan sesuatu yang tidak bisa
+    // ditebak klien, jadi menggantinya dengan teks generik justru menyesatkan.
+    throw Exception(_errorMessage(response.body) ?? 'Gagal menyimpan perubahan aktivitas');
+  }
+
+  String? _errorMessage(String body) {
+    try {
+      final m = jsonDecode(body);
+      if (m is Map && m['message'] is String) return m['message'] as String;
+    } catch (_) {}
+    return null;
   }
 }
