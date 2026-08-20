@@ -73,6 +73,14 @@ abstract final class Roles {
   /// pipeline, tetapi bukan mencatat pekerjaan lapangan yang bukan miliknya.
   static const pipelineFieldWorkers = {admin, rm, kup};
 
+  /// Boleh membuka hub "Kelola" beserta seluruh konsol di bawahnya.
+  ///
+  /// Dipakai DUA tempat: penampilan tab di MainScreen, dan gerbang rute di
+  /// router. Dulu hanya tabnya yang digerbangi, sehingga RM masih bisa membuka
+  /// `/kelola/export-data` dengan mengetik URL-nya: halamannya tergambar utuh
+  /// padahal setiap tombolnya berujung 403 tanpa pesan apa pun.
+  static const kelolaHubRoles = {admin, bm, ro, kup, ...curatorDivisions};
+
   /// True bila [roles] memuat salah satu dari [allowed].
   static bool hasAny(List<String>? roles, Set<String> allowed) =>
       roles != null && roles.any(allowed.contains);

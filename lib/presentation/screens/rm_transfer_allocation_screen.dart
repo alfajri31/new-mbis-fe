@@ -69,7 +69,8 @@ class _RmTransferAllocationScreenState extends ConsumerState<RmTransferAllocatio
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Alokasi Portofolio', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Alokasi Portofolio', showBack: true, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: FutureBuilder<TransferAllocationView>(
           future: _future,

@@ -7,6 +7,7 @@ import '../../utils/format.dart';
 import '../../utils/responsive.dart';
 import '../../src/app.dart';
 import '../../src/network/api_client.dart';
+import '../../src/dashboard/dashboard_periode.dart';
 import '../../src/dashboard/dashboard_repository.dart';
 import '../../src/announcement/announcement_repository.dart';
 import '../../src/announcement/announcement_banner.dart';
@@ -54,6 +55,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   List<Announcement> get _announcements => _ds.announcements;
   DashboardDrilldown? get _drilldown => _ds.drilldown;
   DashboardCategories? get _categories => _ds.categories;
+  DashboardPeriode get _periode => _ds.selectedPeriode;
+  AngkaPeriode? get _angkaPeriode => _ds.angkaPeriode;
   String? get _selectedCategory => _ds.selectedCategory;
   int? get _selectedYear => _ds.selectedYear;
   DashboardCategoryStat? get _selectedCat => _ds.selectedCat;
@@ -111,6 +114,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   Future<void> _fetch({bool silent = false}) => _notifier.fetch(silent: silent);
   void _onCategoryChanged(String v) => _notifier.onCategoryChanged(v);
   void _onYearChanged(int? v) => _notifier.onYearChanged(v);
+  void _onPeriodeChanged(DashboardPeriode v) => _notifier.onPeriodeChanged(v);
 
   @override
   Widget build(BuildContext context) {
@@ -190,9 +194,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Pemilih periode (C2): pilih tahun; semua metrik dashboard
-                    // mengikuti tahun terpilih.
-                    _buildPeriodPicker(),
+                    // Satu tombol filter untuk tahun DAN potongan periode. Dulu dua
+                    // kendali terpisah (dropdown tahun + deretan chip) yang memakan dua
+                    // baris penuh di atas layar, padahal keduanya menjawab satu
+                    // pertanyaan yang sama: "angka ini untuk kapan".
+                    _buildFilterPeriode(),
                     const SizedBox(height: AppSpacing.md),
                     // Realisasi vs Target YTD is the headline metric, so it leads
                     // the dashboard (replacing the old Customer/Pipeline/Jadwal strip;
@@ -203,9 +209,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       categories: _categories,
                       selectedCategory: _selectedCategory,
                       onCategoryChanged: _onCategoryChanged,
+                      periode: _periode,
+                      angka: _angkaPeriode,
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     _buildKinerjaGrid(),
+                    // Sumber bisnis menyusul grid: menjawab "premi ini datang dari
+                    // kanal mana", jadi tempatnya sesudah angka totalnya terlihat.
+                    if (_ds.realisasiPerSumber.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.xl),
+                      _buildSumberBisnisSection(),
+                    ],
                     // Anyone seeing more than their own data gets the oversight
                     // section: supervisors (KUP/BM/RO) by office subtree, and ADMIN
                     // nationwide. Gated on data scope (scopeLevel != OWNER) rather
@@ -235,13 +249,198 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  /// Pemilih tahun periode (C2). Memilih tahun memicu fetch ulang; semua metrik
-  /// dashboard mengikuti tahun terpilih. Default = tahun berjalan.
-  Widget _buildPeriodPicker() {
-    final currentYear = DateTime.now().year;
-    final selected = _selectedYear ?? currentYear;
-    final years = <int>[for (int y = currentYear; y >= currentYear - 4; y--) y];
-    if (!years.contains(selected)) years.insert(0, selected);
+  /// Warna kanal sumber bisnis — MELEKAT PADA KANAL, bukan pada peringkatnya.
+  ///
+  /// Empat warna, bukan lima: lima warna kategorikal tidak lolos pemeriksaan
+  /// keterbedaan buta warna pada SEMUA pasangan, empat lolos. Kanal sisanya
+  /// dilipat jadi "Lainnya" ketimbang mengarang warna kelima yang tak terbaca.
+  ///
+  /// Divalidasi (bukan dikira-kira) atas latar putih untuk pita lightness, ambang
+  /// chroma, keterbedaan protan/deutan/tritan, dan keterbedaan mata normal —
+  /// termasuk mode semua-pasangan, karena segmen bernilai nol menghilang sehingga
+  /// dua kanal yang tadinya berjauhan bisa menjadi bersebelahan.
+  ///
+  /// Oranye di bawah 3:1 terhadap latar; itu ditebus legenda berlabel di bawah bar,
+  /// jadi identitas tidak pernah bergantung pada warna saja.
+  static const Map<String, Color> _warnaSumber = {
+    'DIRECT': Color(0xFF2E6FBF),
+    'AGENT': Color(0xFFF2843A),
+    'BROKER': Color(0xFF8B5CF6),
+    'LAINNYA': Color(0xFF0FA3B1),
+  };
+
+  /// Realisasi per sumber bisnis (CR-03): Direct / Agen / Broker / Lainnya.
+  ///
+  /// Dihitung dari pipeline WON, dan itu memang satu-satunya basis yang mungkin:
+  /// rekap resmi pusat disimpan per (RM x tahun x bulan x kategori) tanpa dimensi
+  /// sumber bisnis sama sekali. Basisnya ditulis di layar supaya angka di sini tidak
+  /// dikira salah ketika berbeda dari kartu Realisasi di atas — yang memakai rekap
+  /// resmi begitu pusat mengunggahnya.
+  Widget _buildSumberBisnisSection() {
+    final baris = _ds.realisasiPerSumber;
+    if (baris.isEmpty) return const SizedBox.shrink();
+    final total = _ds.totalRealisasiSumber;
+    final cat = _selectedCat;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle('Realisasi per Sumber Bisnis'),
+        const SizedBox(height: AppSpacing.sm),
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceWhite,
+            borderRadius: AppRadius.radiusLg,
+            border: Border.all(color: AppColors.border),
+            boxShadow: const [AppShadows.level1],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${cat != null ? '${cat.label} · ' : ''}Periode ${_periode.label}'
+                      ' · dari pipeline WON',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    AppFormat.currencyShort(total),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _barProporsi(baris, total),
+              const SizedBox(height: 14),
+              for (final b in baris) ...[
+                _legendaSumber(b.kunci, b.label, b.realisasi, total),
+                const SizedBox(height: 8),
+              ],
+              // Penjelasan hanya muncul saat memang bisa membingungkan: begitu ada
+              // bulan yang memakai rekap resmi, angka di atas tidak akan cocok dengan
+              // kartu Realisasi, dan pembaca berhak tahu sebabnya tanpa bertanya.
+              if (cat?.pakaiResmi ?? false) ...[
+                const SizedBox(height: 2),
+                const Text(
+                  'Rekap resmi pusat tidak memuat sumber bisnis, jadi bagian ini '
+                  'dihitung dari pipeline WON — totalnya bisa berbeda dari kartu '
+                  'Realisasi di atas.',
+                  style: TextStyle(fontSize: 10, color: AppColors.grayStage),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Satu bar 100% berisi porsi tiap kanal.
+  ///
+  /// Segmen dirender dalam urutan tetap, dipisah celah 2px berwarna latar supaya dua
+  /// warna tidak pernah bersentuhan langsung, dan ujung luarnya membulat 4px.
+  Widget _barProporsi(
+      List<({String kunci, String label, double realisasi})> baris, double total) {
+    if (total <= 0) {
+      return Container(
+        height: 12,
+        decoration: BoxDecoration(
+          color: AppColors.grayBg,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        alignment: Alignment.center,
+        child: const Text(
+          'Belum ada realisasi pada periode ini',
+          style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
+        ),
+      );
+    }
+    final terisi = baris.where((b) => b.realisasi > 0).toList();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        height: 12,
+        child: Row(
+          children: [
+            for (int i = 0; i < terisi.length; i++) ...[
+              if (i > 0) const SizedBox(width: 2),
+              Expanded(
+                // Pembagi dibulatkan ke seperseribu supaya kanal yang nilainya sangat
+                // kecil tetap mendapat lebar yang terlihat, bukan hilang jadi nol.
+                flex: (terisi[i].realisasi / total * 1000).round().clamp(1, 1000),
+                child: Container(color: _warnaSumber[terisi[i].kunci]),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Satu baris legenda: titik warna, nama kanal, nilai, dan porsinya.
+  ///
+  /// Nilai & persen ditulis dengan warna teks biasa, bukan warna kanalnya — warna
+  /// hanya dipakai pada titik penanda, supaya angkanya tetap terbaca nyaman.
+  Widget _legendaSumber(String kunci, String label, double nilai, double total) {
+    final porsi = total > 0 ? nilai / total : 0.0;
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: _warnaSumber[kunci],
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        Text(
+          AppFormat.currencyShort(nilai),
+          style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(
+            '${(porsi * 100).round()}%',
+            textAlign: TextAlign.end,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Ringkasan filter aktif + tombol pembukanya. Tahun dan potongan periode
+  /// disatukan dalam satu kendali karena keduanya menjawab pertanyaan yang sama.
+  Widget _buildFilterPeriode() {
+    final tahun = _selectedYear ?? DateTime.now().year;
     return Row(
       children: [
         const Icon(Icons.calendar_month_outlined,
@@ -253,34 +452,165 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSecondary)),
         const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceWhite,
-            borderRadius: AppRadius.radiusMd,
-            border: Border.all(color: AppColors.border),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: selected,
-              isDense: true,
-              borderRadius: BorderRadius.circular(8),
-              icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryNavy),
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryNavy),
-              items: [
-                for (final y in years)
-                  DropdownMenuItem<int>(value: y, child: Text('$y')),
+        InkWell(
+          borderRadius: AppRadius.radiusMd,
+          onTap: _bukaSheetPeriode,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceWhite,
+              borderRadius: AppRadius.radiusMd,
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$tahun \u00b7 ${_periode.label}',
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primaryNavy),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.tune, size: 16, color: AppColors.primaryNavy),
               ],
-              onChanged: (y) {
-                if (y != null) _onYearChanged(y);
-              },
             ),
           ),
         ),
       ],
+    );
+  }
+
+  /// Lembar pemilih: tahun di atas, potongan periode di bawah.
+  ///
+  /// Pilihan langsung diterapkan tanpa tombol "Terapkan", dan lembarnya sengaja
+  /// TIDAK ditutup — mengganti tahun lalu triwulan adalah satu niat yang sama, dan
+  /// menutup lembar di tengahnya memaksa pengguna membukanya lagi.
+  void _bukaSheetPeriode() {
+    final tahunIni = DateTime.now().year;
+    final tahunList = <int>[for (int y = tahunIni; y >= tahunIni - 4; y--) y];
+    final terpilih = _selectedYear ?? tahunIni;
+    if (!tahunList.contains(terpilih)) tahunList.insert(0, terpilih);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            // Batas bulan dibaca ulang tiap rebuild: mengganti tahun mengubah
+            // triwulan mana yang sudah tiba.
+            final maxMonth = _categories?.currentMonth ?? DateTime.now().month;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Periode',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Tahun',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final y in tahunList)
+                        _pilihanFilter(
+                          label: '$y',
+                          terpilih: (_selectedYear ?? tahunIni) == y,
+                          onTap: () {
+                            _onYearChanged(y);
+                            setSheetState(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  const Text('Potongan',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final per in DashboardPeriode.values)
+                        _pilihanFilter(
+                          label: per.label,
+                          terpilih: _periode == per,
+                          // Periode yang belum tiba tetap bisa dipilih (targetnya
+                          // berguna dilihat) tapi diredupkan supaya jelas belum berisi.
+                          redup: per.months(maxMonth).isEmpty,
+                          onTap: () {
+                            _onPeriodeChanged(per);
+                            setSheetState(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Selesai'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Satu pilihan dalam lembar filter — dipakai baris tahun maupun baris potongan,
+  /// supaya keduanya tidak bisa lepas rupa.
+  Widget _pilihanFilter({
+    required String label,
+    required bool terpilih,
+    required VoidCallback onTap,
+    bool redup = false,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(100),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: terpilih ? AppColors.primaryNavy : AppColors.navyBg,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: terpilih ? FontWeight.w700 : FontWeight.w500,
+            color: terpilih
+                ? Colors.white
+                : (redup ? AppColors.grayStage : AppColors.primaryNavy),
+          ),
+        ),
+      ),
     );
   }
 
@@ -289,7 +619,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   Widget _buildKinerjaGrid() {
     final s = _summary;
     final cat =
-        _selectedCat; // Target/Realisasi YTD ikut kategori filter bila tersedia
+        _selectedCat; // Target/Realisasi ikut kategori filter bila tersedia
+    // Angka periode terpilih (CR-02). null = data kategori belum termuat, di situ
+    // kartu jatuh ke angka ringkasan seperti sebelumnya.
+    final angka = _angkaPeriode;
     const monthsId = [
       'Jan',
       'Feb',
@@ -304,25 +637,49 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       'Nov',
       'Des',
     ];
-    final visitMonthLabel = 'Visit ${monthsId[DateTime.now().month - 1]}';
+    // Kunjungan ikut kategori terpilih (CR-09). Yang dipercaya adalah kategori
+    // yang DIPANTULKAN server, bukan pilihan di layar: kategori yang tak dikenal
+    // server diperlakukan sebagai "tanpa penyaringan", dan memakai pilihan layar
+    // di situ akan memberi label kategori pada angka yang sebenarnya semua produk.
+    final drilldownCategory = _drilldown?.category;
+    final visitFiltered = drilldownCategory != null;
+    // Akhiran label untuk kartu yang funnel/potensinya ikut kategori. Sumbernya
+    // kategori yang DIPANTULKAN summary — dengan alasan yang sama seperti di atas:
+    // kalau server mengabaikan kategorinya, kartunya tidak boleh mengaku tersaring.
+    final summaryCategory = s?.category;
+    final catSuffix =
+        summaryCategory != null ? ' · ${cat?.label ?? summaryCategory}' : '';
+    final visitMonthLabel = visitFiltered
+        ? 'Visit ${monthsId[DateTime.now().month - 1]} · ${cat?.label ?? drilldownCategory}'
+        : 'Visit ${monthsId[DateTime.now().month - 1]}';
     final visitMonthValue = _drilldown != null && _drilldown!.monthly.isNotEmpty
-        ? '${_drilldown!.monthly.last.visits}'
+        ? (visitFiltered
+            ? '${_drilldown!.monthly.last.visitsCategory}'
+            : '${_drilldown!.monthly.last.visits}')
         : (s != null ? '${s.visitCountYtd}' : '–');
     final List<Map<String, dynamic>> gridItems = [
+      // SATU kartu target, bukan dua. Sempat ada "Target Setahun" terpisah, tapi itu
+      // membuat grid jadi sembilan kartu dan memaksa pembaca memilih sendiri mana yang
+      // relevan. Yang dipakai sehari-hari adalah target periode berjalan; angka setahun
+      // tetap tersedia — muncul di rincian saat kartunya ditekan.
       {
         'key': 'target',
-        'label': 'Target Setahun',
-        'value': cat != null
-            ? AppFormat.currencyShort(cat.targetFullYear)
-            : (s != null ? AppFormat.currencyShort(s.premiTarget) : '–'),
+        'label': angka != null ? 'Target ${_periode.label}' : 'Target Setahun',
+        'value': angka != null
+            ? (angka.belumTiba ? '–' : AppFormat.currencyShort(angka.target))
+            : (cat != null
+                ? AppFormat.currencyShort(cat.targetFullYear)
+                : (s != null ? AppFormat.currencyShort(s.premiTarget) : '–')),
         'icon': Icons.track_changes_outlined,
         'color': AppColors.primaryNavy,
       },
       {
         'key': 'realisasi',
-        'label': 'Realisasi YTD',
-        'value': cat != null
-            ? AppFormat.currencyShort(cat.realisasiYtd)
+        // Label ikut periode terpilih: menyebut "YTD" sementara chip menunjuk
+        // Triwulan II akan membuat angka yang benar terbaca sebagai angka yang salah.
+        'label': angka != null ? 'Realisasi ${_periode.label}' : 'Realisasi YTD',
+        'value': angka != null
+            ? (angka.belumTiba ? '–' : AppFormat.currencyShort(angka.realisasi))
             : (s != null ? AppFormat.currencyShort(s.totalRealization) : '–'),
         'icon': Icons.trending_up,
         'color': AppColors.successGreen,
@@ -339,7 +696,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       },
       {
         'key': 'pipelineAktif',
-        'label': 'Pipeline Aktif',
+        'label': 'Pipeline Aktif$catSuffix',
         'value': '$_activePipelines',
         'suffix': ' pipeline',
         'icon': Icons.account_tree_outlined,
@@ -348,14 +705,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       },
       {
         'key': 'nilaiPipeline',
-        'label': 'Nilai Pipeline',
+        'label': 'Nilai Pipeline$catSuffix',
         'value': s != null ? AppFormat.currencyShort(s.totalPotential) : '–',
         'icon': Icons.show_chart,
         'color': AppColors.purpleAccent,
       },
       {
         'key': 'successRate',
-        'label': 'Success Rate',
+        'label': 'Success Rate$catSuffix',
         'value': '$_successRate',
         'suffix': '%',
         'icon': Icons.percent,
@@ -437,6 +794,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   /// Opens a bottom sheet drill-down for a tapped stat card.
+  /// Tutup lembar drill-down lalu buka detail pipeline. Dipakai daftar Pipeline
+  /// Aktif maupun Success Rate — keduanya berakhir di layar yang sama.
+  void _bukaPipeline(BuildContext sheetCtx, String pipelineId) {
+    Navigator.of(sheetCtx).pop();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PipelineDetailScreen(pipelineId: pipelineId),
+      ),
+    );
+  }
+
   void _openDrilldown(String key, String title) {
     final d = _drilldown;
     showModalBottomSheet(
@@ -462,6 +830,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           switch (key) {
             case 'target':
             case 'realisasi':
+              // Cadangan saja: kartu target/realisasi sebenarnya memakai
+              // _openCategoryMonthly (12 bulan + total setahun). Cabang ini hanya
+              // terpakai bila data kategori gagal dimuat.
               body = _monthTable(
                 d,
                 const ['Bulan', 'Target', 'Realisasi'],
@@ -473,11 +844,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               );
               break;
             case 'visit':
-              body = _monthTable(d, const [
-                'Bulan',
-                'KUR',
-                'All',
-              ], (m) => [m.label, '${m.visitsKur}', '${m.visits}']);
+              // Dengan kategori terpilih (CR-09), kolom rinciannya jadi kategori
+              // ITU — bukan KUR yang dulu dipatok mati. Tanpa kategori, tabelnya
+              // tetap Bulan | KUR | All persis seperti sebelumnya.
+              final visitCat = d.category;
+              body = visitCat == null
+                  ? _monthTable(d, const [
+                      'Bulan',
+                      'KUR',
+                      'All',
+                    ], (m) => [m.label, '${m.visitsKur}', '${m.visits}'])
+                  : _monthTable(d, [
+                      'Bulan',
+                      _selectedCat?.label ?? visitCat,
+                      'All',
+                    ], (m) => [m.label, '${m.visitsCategory}', '${m.visits}']);
               break;
             case 'nilaiPipeline':
               body = _monthTable(d, const [
@@ -486,19 +867,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               ], (m) => [m.label, AppFormat.currencyShort(m.pipelineValue)]);
               break;
             case 'pipelineAktif':
-              body = _cobTable(d);
+              // CR-07: angka pipeline harus bisa ditekan sampai ke daftar rinciannya,
+              // lalu dibuka satu per satu. Tabel COB dipertahankan sebagai ringkasan
+              // di atas daftarnya — dua pertanyaan berbeda ("sebarannya bagaimana"
+              // dan "pipeline mana saja"), dan yang lama sudah dipakai orang.
+              body = d.activeItems.isEmpty
+                  ? _cobTable(d)
+                  : _PipelineListView(
+                      items: d.activeItems,
+                      headerText:
+                          '${d.activeItems.length} pipeline aktif (P3/P2/P1)',
+                      filters: const [
+                        (label: 'Semua', value: 'ALL'),
+                        (label: 'P3', value: 'P3'),
+                        (label: 'P2', value: 'P2'),
+                        (label: 'P1', value: 'P1'),
+                      ],
+                      onOpenPipeline: (id) => _bukaPipeline(sheetCtx, id),
+                    );
               break;
             case 'successRate':
-              body = _SuccessDetailView(
-                drilldown: d,
-                onOpenPipeline: (id) {
-                  Navigator.of(sheetCtx).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PipelineDetailScreen(pipelineId: id),
-                    ),
-                  );
-                },
+              body = _PipelineListView(
+                items: d.successItems,
+                headerText:
+                    'WON ${d.won}, Decline ${d.decline} dari total ${d.total} pipeline',
+                filters: const [
+                  (label: 'Semua', value: 'ALL'),
+                  (label: 'Won', value: 'WON'),
+                  (label: 'Decline', value: 'DECLINE'),
+                ],
+                onOpenPipeline: (id) => _bukaPipeline(sheetCtx, id),
               );
               break;
             default:
@@ -821,8 +1219,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   void _openCategoryMonthly() {
     final cat = _selectedCat;
     if (cat == null) return;
+    // DUA BELAS bulan penuh, Januari s/d Desember — bukan sampai bulan berjalan.
+    // Kartunya sudah menjawab "sudah sampai mana"; yang dicari orang saat menekannya
+    // justru gambaran setahun, termasuk target bulan yang belum dijalani. Bulan
+    // mendatang diredupkan supaya tetap terbaca sebagai "belum", bukan "gagal".
     final maxMonth = _categories?.currentMonth ?? 12;
-    final months = cat.months.where((m) => m.month <= maxMonth).toList();
+    final months = cat.months;
     // Pembedahan sumber angka (rekap resmi vs pipeline WON) hanya untuk RM —
     // dialah pemilik angkanya dan satu-satunya yang bisa menindaklanjuti kalau
     // rekap pusat tak cocok dengan pipeline-nya. Bagi atasan & admin angkanya
@@ -830,6 +1232,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     // dan hanya menambah keramaian. Dibaca sekali di sini, bukan di dalam
     // builder, supaya tiap baris bulan tidak menelusuri context berulang kali.
     final tampilkanSumber = _isRm;
+    // Total setahun dihitung dari 12 bulan yang sama dengan yang ditampilkan,
+    // bukan dari targetYtd — supaya angka penutup tidak pernah bisa berbeda dari
+    // penjumlahan baris di atasnya.
+    final totalRealisasi = months.fold<double>(0, (a, m) => a + m.realisasi);
+    final pctSetahun = cat.targetFullYear > 0
+        ? (totalRealisasi / cat.targetFullYear * 100).round()
+        : (totalRealisasi > 0 ? 100 : 0);
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surfaceWhite,
@@ -887,6 +1296,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                           final pct = m.target > 0
                               ? (m.realisasi / m.target * 100).round()
                               : (m.realisasi > 0 ? 100 : 0);
+                          // Bulan yang belum dijalani: angkanya sah (targetnya sudah
+                          // ditetapkan) tapi realisasinya nol karena memang belum
+                          // waktunya — diredupkan agar tidak terbaca sebagai capaian buruk.
+                          final belumJalan = m.month > maxMonth;
+                          final warnaUtama = belumJalan
+                              ? AppColors.grayStage
+                              : AppColors.textPrimary;
+                          final warnaKedua = belumJalan
+                              ? AppColors.grayStage
+                              : AppColors.textSecondary;
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             child: Row(
@@ -895,10 +1314,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                   width: 40,
                                   child: Text(
                                     m.label,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
+                                      color: warnaUtama,
                                     ),
                                   ),
                                 ),
@@ -913,9 +1332,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                           Flexible(
                                             child: Text(
                                               'Realisasi ${AppFormat.currencyShort(m.realisasi)}',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 12,
-                                                color: AppColors.textPrimary,
+                                                color: warnaUtama,
                                               ),
                                             ),
                                           ),
@@ -928,9 +1347,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                       ),
                                       Text(
                                         'Target ${AppFormat.currencyShort(m.target)}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: AppColors.textSecondary,
+                                          color: warnaKedua,
                                         ),
                                       ),
                                       // Angka WON hanya disebut saat berbeda:
@@ -951,10 +1370,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                 ),
                                 Text(
                                   '$pct%',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryNavy,
+                                    color: belumJalan
+                                        ? AppColors.grayStage
+                                        : AppColors.primaryNavy,
                                   ),
                                 ),
                               ],
@@ -962,6 +1383,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                           );
                         },
                       ),
+              ),
+              // Total setahun: angka inilah yang dulu tampil sebagai kartu
+              // "Target Setahun" tersendiri. Tempatnya di sini, sebagai penutup
+              // rincian, bukan sebagai kartu kesembilan di grid.
+              const Divider(height: 1, color: AppColors.border),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 48,
+                      child: Text(
+                        'Setahun',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Realisasi ${AppFormat.currencyShort(totalRealisasi)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Target ${AppFormat.currencyShort(cat.targetFullYear)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '$pctSetahun%',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryNavy,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1125,22 +1599,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
 /// Success-rate drill-down: WON/Decline summary + a searchable, filterable list of
 /// ALL closed deals (national admins can have hundreds — search beats scrolling).
-class _SuccessDetailView extends StatefulWidget {
-  final DashboardDrilldown drilldown;
+/// Daftar pipeline yang bisa dicari, disaring per stage, dan dibuka satu per satu.
+///
+/// Dipakai DUA drill-down: Success Rate (WON/Decline) dan Pipeline Aktif (P3/P2/P1,
+/// CR-07). Digeneralisasi dari versi khusus Success Rate — menyalinnya untuk daftar
+/// kedua berarti dua tempat yang harus diingat setiap kali perilaku daftar berubah.
+///
+/// Isinya sudah dibatasi cakupan oleh server; di sini hanya pencarian & penyaringan
+/// tampilan, bukan penyaringan hak akses.
+class _PipelineListView extends StatefulWidget {
+  final List<DashboardSuccessItem> items;
+
+  /// Ringkasan di kepala daftar (mis. "WON 4, Decline 1 dari total 9 pipeline").
+  final String headerText;
+
+  /// Pilihan penyaring stage. Nilai 'ALL' berarti tanpa saringan.
+  final List<({String label, String value})> filters;
   final void Function(String pipelineId) onOpenPipeline;
-  const _SuccessDetailView({
-    required this.drilldown,
+
+  const _PipelineListView({
+    required this.items,
+    required this.headerText,
+    required this.filters,
     required this.onOpenPipeline,
   });
 
   @override
-  State<_SuccessDetailView> createState() => _SuccessDetailViewState();
+  State<_PipelineListView> createState() => _PipelineListViewState();
 }
 
-class _SuccessDetailViewState extends State<_SuccessDetailView> {
+class _PipelineListViewState extends State<_PipelineListView> {
   final _searchCtrl = TextEditingController();
   String _query = '';
-  String _stage = 'ALL'; // ALL | WON | DECLINE
+  String _stage = 'ALL';
 
   @override
   void dispose() {
@@ -1148,11 +1639,24 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
     super.dispose();
   }
 
+  /// Warna & teks lencana per stage. WON/Decline memakai hijau/merah seperti
+  /// sebelumnya; stage aktif (P3/P2/P1) memakai navy karena hasilnya belum ada —
+  /// mewarnainya hijau/merah menyiratkan menang/kalah yang belum terjadi.
+  ({String label, Color fg, Color bg}) _badge(String stage) {
+    switch (stage) {
+      case 'WON':
+        return (label: 'Won', fg: AppColors.successGreen, bg: AppColors.greenLight);
+      case 'DECLINE':
+        return (label: 'Decline', fg: AppColors.errorRed, bg: AppColors.redLight);
+      default:
+        return (label: stage, fg: AppColors.primaryNavy, bg: AppColors.navyBg);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final d = widget.drilldown;
     final q = _query.trim().toLowerCase();
-    final items = d.successItems.where((it) {
+    final items = widget.items.where((it) {
       if (_stage != 'ALL' && it.stage != _stage) return false;
       if (q.isNotEmpty && !it.customerName.toLowerCase().contains(q)) {
         return false;
@@ -1173,7 +1677,7 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
               borderRadius: AppRadius.radiusMd,
             ),
             child: Text(
-              'WON ${d.won}, Decline ${d.decline} dari total ${d.total} pipeline',
+              widget.headerText,
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1187,7 +1691,7 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
             style: AppInput.fieldText,
             onChanged: (v) => setState(() => _query = v),
             decoration: InputDecoration(
-              hintText: 'Cari nama customer…',
+              hintText: 'Cari nama customer...',
               prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
               border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
@@ -1196,11 +1700,10 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
           const SizedBox(height: 8),
           Row(
             children: [
-              _chip('Semua', 'ALL'),
-              const SizedBox(width: 8),
-              _chip('Won', 'WON'),
-              const SizedBox(width: 8),
-              _chip('Decline', 'DECLINE'),
+              for (final f in widget.filters) ...[
+                _chip(f.label, f.value),
+                const SizedBox(width: 8),
+              ],
               const Spacer(),
               Text(
                 '${items.length}',
@@ -1226,7 +1729,7 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
                         const Divider(height: 1, color: AppColors.border),
                     itemBuilder: (_, i) {
                       final it = items[i];
-                      final won = it.stage == 'WON';
+                      final b = _badge(it.stage);
                       return InkWell(
                         onTap: () => widget.onOpenPipeline(it.id),
                         child: Padding(
@@ -1239,19 +1742,15 @@ class _SuccessDetailViewState extends State<_SuccessDetailView> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: won
-                                      ? AppColors.greenLight
-                                      : AppColors.redLight,
+                                  color: b.bg,
                                   borderRadius: BorderRadius.circular(100),
                                 ),
                                 child: Text(
-                                  won ? 'Won' : 'Decline',
+                                  b.label,
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
-                                    color: won
-                                        ? AppColors.successGreen
-                                        : AppColors.errorRed,
+                                    color: b.fg,
                                   ),
                                 ),
                               ),

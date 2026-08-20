@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
@@ -27,6 +28,18 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// tab screens that live inside the bottom navigation.
   final bool showBack;
 
+  /// Lebar maksimum kolom konten body layar ini — dipakai untuk menyejajarkan judul
+  /// dengan tepi kiri isinya.
+  ///
+  /// Biarkan null bila body memakai cap responsif [Responsive.contentMaxWidthFor]
+  /// (Dashboard, Customer, BUMN, Broker, …). Isi eksplisit bila body memakai cap lain:
+  /// `MaxWidthBody.defaultMaxWidth` untuk konsol admin, angka sendiri untuk form
+  /// ber-cap khusus, atau `double.infinity` bila body-nya full-bleed.
+  ///
+  /// Nilai yang salah TIDAK terlihat di ponsel — hanya di layar lebar, sebagai judul
+  /// yang melayang jauh dari isinya.
+  final double? contentMaxWidth;
+
   const GlassAppBar({
     super.key,
     required this.title,
@@ -34,6 +47,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.leading,
     this.bottom,
     this.showBack = false,
+    this.contentMaxWidth,
   });
 
   @override
@@ -42,11 +56,31 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Judul + actions di-cap + center ke lebar konten agar SEJAJAR dengan body
-    // (yang juga di-cap). Latar glass tetap full-bleed lewat flexibleSpace.
-    final bool wide = Responsive.isWide(context);
+    // Judul + actions disejajarkan dengan kolom konten body. Latar glass tetap
+    // full-bleed lewat flexibleSpace.
+    //
+    // Perhitungannya memakai lebar LAYAR, bukan lebar slot title milik AppBar: slot itu
+    // dimulai SETELAH leading, jadi menengahkan blok di dalamnya menggeser judul ke kanan
+    // sebesar separuh lebar tombol back (terukur 28 px). Dan cap-nya kini datang dari
+    // pemanggil, karena versi lama selalu memakai cap responsif 1200/1440/1800 padahal
+    // konsol admin memakai MaxWidthBody 800 dan sebagian layar full-bleed — di layar
+    // 1920 judulnya meleset 240–292 px dari isinya.
+    final double screenWidth = Responsive.widthOf(context);
+    final double cap = contentMaxWidth ??
+        (Responsive.isWide(context)
+            ? Responsive.contentMaxWidthFor(context)
+            : screenWidth);
+    final double contentWidth = math.min(cap, screenWidth);
+    // Tepi kiri teks pertama di body: sisa ruang di luar cap dibagi dua + padding body.
+    final double contentInset = (screenWidth - contentWidth) / 2 + AppSpacing.lg;
+    final bool hasLeading = showBack || leading != null;
+    // Judul tidak boleh menempel ke tombol back. Jarak minimal AppSpacing.lg ini pula yang
+    // menjaga tampilan ponsel tetap sama persis dengan AppBar bawaan Material.
+    final double titleInset = hasLeading
+        ? math.max(contentInset - kToolbarHeight, AppSpacing.lg)
+        : contentInset;
     final Widget titleRow = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      padding: EdgeInsets.only(left: titleInset, right: contentInset),
       child: Row(
         children: [
           Expanded(
@@ -81,18 +115,8 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: false,
       titleSpacing: 0,
       // Title slot memuat title + actions sekaligus (actions dikosongkan di bawah)
-      // supaya keduanya ikut satu ConstrainedBox yang ter-center.
-      title: SizedBox(
-        width: double.infinity,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: wide ? Responsive.contentMaxWidthFor(context) : double.infinity,
-            ),
-            child: titleRow,
-          ),
-        ),
-      ),
+      // supaya keduanya memakai perhitungan inset yang sama.
+      title: titleRow,
       actions: const [],
       bottom: bottom,
       flexibleSpace: ClipRect(

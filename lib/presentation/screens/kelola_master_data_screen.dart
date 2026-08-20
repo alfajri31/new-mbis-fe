@@ -236,7 +236,8 @@ class _KelolaMasterDataScreenState extends ConsumerState<KelolaMasterDataScreen>
 
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
-      appBar: const GlassAppBar(title: 'Kelola Master Data', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Kelola Master Data', showBack: true, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: _repo == null
             ? const SizedBox.shrink()
@@ -414,7 +415,8 @@ class _SectionPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
-      appBar: GlassAppBar(title: section.title, showBack: true),
+      appBar: GlassAppBar(
+          title: section.title, showBack: true, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: Column(
           children: [

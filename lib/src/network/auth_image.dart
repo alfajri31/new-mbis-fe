@@ -32,16 +32,44 @@ class _AuthImageState extends State<AuthImage> {
   bool _loading = true;
   bool _failed = false;
 
+  /// Penanda permintaan termuda. Ketukan cepat berpindah-pindah gambar bisa
+  /// membuat respons LAMA tiba belakangan; tanpa penanda ini, gambar yang tampil
+  /// ditentukan oleh jaringan mana yang kebetulan lebih lambat.
+  int _requestId = 0;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  /// Muat ulang saat [AuthImage.path] berganti.
+  ///
+  /// Tanpa ini gambar TIDAK pernah berubah selama widget-nya dipakai ulang di
+  /// posisi yang sama — Flutter mempertahankan State-nya, dan State ini hanya
+  /// memuat sekali di [initState]. Gejalanya: menekan pin/kartu lain sementara
+  /// preview-nya masih memperlihatkan gambar yang tadi.
+  @override
+  void didUpdateWidget(covariant AuthImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path ||
+        !identical(oldWidget.apiClient, widget.apiClient)) {
+      setState(() {
+        _bytes = null;
+        _failed = false;
+        _loading = true;
+      });
+      _load();
+    }
+  }
+
   Future<void> _load() async {
+    final requestId = ++_requestId;
     try {
       final res = await widget.apiClient.get(widget.path);
-      if (!mounted) return;
+      // Sudah ada permintaan yang lebih baru → hasil ini milik gambar yang sudah
+      // tidak diminta lagi; membuangnya, bukan menampilkannya.
+      if (!mounted || requestId != _requestId) return;
       if (res.statusCode == 200) {
         setState(() {
           _bytes = res.bodyBytes;
@@ -54,7 +82,7 @@ class _AuthImageState extends State<AuthImage> {
         });
       }
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestId != _requestId) return;
       setState(() {
         _failed = true;
         _loading = false;

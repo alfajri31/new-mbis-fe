@@ -736,8 +736,16 @@ class AgentRepository {
 
   // ── Back-office workflow (RM / BM / ADMIN) ────────────────────────────────
 
-  /// Agents visible to the caller (RM: own links; supervisor: office subtree; admin: all).
-  Future<List<AgentModel>> getAgents() => _agentList('/api/agents');
+  /// Agen yang terlihat oleh pemanggil (supervisor: subtree kantor + kanwil di
+  /// atasnya; admin: seluruhnya).
+  ///
+  /// [officeScope] hanya berpengaruh bagi RM: bila true ia mendapat DIREKTORI nama
+  /// agen AKTIF di kantornya (subtree + kanwil) — hanya id/nama/tipe/status/kantor,
+  /// TANPA data pribadi — untuk dropdown sumber pipeline. Tanpa flag ini seorang RM
+  /// mendapat pengajuan yang ia ajukan sendiri; itulah isi layar "Pengajuan Agen /
+  /// TPM", karena mengurus agen yang sudah terdaftar bukan lagi urusan RM.
+  Future<List<AgentModel>> getAgents({bool officeScope = false}) =>
+      _agentList('/api/agents${officeScope ? '?scope=office' : ''}');
 
   /// Agents in the BM's office waiting for approval.
   Future<List<AgentModel>> getPending() => _agentList('/api/agents/pending');

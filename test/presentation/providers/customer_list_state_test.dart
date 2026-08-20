@@ -74,6 +74,60 @@ void main() {
       expect(s2.branchId, isNull);
     });
 
+    /// CR-08. Urutan sengaja BUKAN field nullable ber-sentinel `_keep` seperti
+    /// filter: selalu ada satu urutan yang berlaku, jadi "tanpa urutan" bukan
+    /// keadaan yang bisa dipilih dan tidak ada yang perlu dibersihkan.
+    test('urutan bawaan: nama menaik (perilaku sebelum CR-08)', () {
+      const s = CustomerListState();
+      expect(s.sortBy, 'name');
+      expect(s.sortDir, 'asc');
+    });
+
+    test('urutan diubah independen dari filter', () {
+      final s = const CustomerListState()
+          .copyWith(entityFilter: 'BUMN', hvcFilter: true)
+          .copyWith(sortBy: 'createdAt', sortDir: 'desc');
+      expect(s.sortBy, 'createdAt');
+      expect(s.sortDir, 'desc');
+      // Mengurutkan bukan menyaring: filter yang aktif tidak boleh ikut hilang.
+      expect(s.entityFilter, 'BUMN');
+      expect(s.hvcFilter, true);
+    });
+
+    test('urutan DIPERTAHANKAN saat transisi lain (mis. pindah halaman)', () {
+      final s = const CustomerListState()
+          .copyWith(sortBy: 'createdAt', sortDir: 'desc');
+      final s2 = s.copyWith(page: 3, initialLoading: true);
+      expect(s2.sortBy, 'createdAt');
+      expect(s2.sortDir, 'desc');
+    });
+
+    /// Cerminan `CustomerListNotifier.resetAllFilters`, yang sengaja TIDAK
+    /// menyebut sortBy/sortDir: tombol "Reset" di sheet menghitung dan menyebut
+    /// FILTER, jadi diam-diam mengubah urutan di situ membuat labelnya berbohong.
+    test('reset filter tidak ikut mengembalikan urutan', () {
+      final s = const CustomerListState().copyWith(
+        entityFilter: 'BUMN',
+        hvcFilter: true,
+        stageFilter: 'P3',
+        sortBy: 'createdAt',
+        sortDir: 'desc',
+      );
+      final s2 = s.copyWith(
+        entityFilter: null,
+        hvcFilter: false,
+        stageFilter: null,
+        regionId: null,
+        branchId: null,
+        rmId: null,
+        rmName: null,
+      );
+      expect(s2.entityFilter, isNull);
+      expect(s2.stageFilter, isNull);
+      expect(s2.sortBy, 'createdAt');
+      expect(s2.sortDir, 'desc');
+    });
+
     test('non-null fields updated independently', () {
       final s = const CustomerListState().copyWith(
         searchTerm: 'abc',
@@ -283,7 +337,11 @@ void main() {
       expect(out.realisasiMtd, 0);
     });
 
-    test('hitungan visit tetap dari angka dasar (visit tidak per-COB)', () {
+    // CR-09 membuat `customer-summary?cob=X` menyaring kunjungan per COB, TAPI
+    // hanya di sana: jalur cadangan ini dirakit dari `/api/dashboard/categories`,
+    // yang tidak membawa angka kunjungan sama sekali. Angka dasar dipakai apa
+    // adanya — mengarang angka per-COB di klien akan bertabrakan dengan server.
+    test('jalur cadangan: visit tetap angka dasar (tak ada sumber per-COB)', () {
       final out = applyCobToFallback(
         base,
         cats([stat('KUR', targetFullYear: 900, realisasiYtd: 300)]),

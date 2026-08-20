@@ -59,7 +59,8 @@ class PolicyView extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: GlassAppBar(title: appBarTitle, showBack: showBack),
+      appBar: GlassAppBar(
+          title: appBarTitle, showBack: showBack, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: ListView(
           padding: EdgeInsets.fromLTRB(AppSpacing.lg, topInset + AppSpacing.sm,

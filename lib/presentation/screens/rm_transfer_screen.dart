@@ -64,7 +64,8 @@ class _RmTransferScreenState extends ConsumerState<RmTransferScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Pemindahan Cabang RM', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Pemindahan Cabang RM', showBack: true, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       floatingActionButton: _isAdmin
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.primaryNavy,

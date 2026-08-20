@@ -168,7 +168,13 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     final roles = MbisApp.of(context)?.session?.user.roles;
     final canEditPipeline = Roles.hasAny(roles, Roles.pipelineWriters);
     final canFieldWork = Roles.hasAny(roles, Roles.pipelineFieldWorkers);
-    final isReadOnly = lifecycleLocked || !canFieldWork;
+    // Gerbang KETIGA, dan ini soal OBJEK bukan peran: server menjawab apakah
+    // pipeline INI boleh diubah pemanggil (`canEdit`). Perlu terpisah karena cakupan
+    // BACA bisa lebih luas daripada cakupan TULIS — RM yang berkantor di Kanwil
+    // melihat pipeline seluruh cabang tetapi hanya boleh mengubah miliknya sendiri
+    // (CR-18). Tanpa ini ia disodori tombol "Tambah Aktivitas/Visit", mengisi seluruh
+    // formulir kunjungan lengkap dengan foto dan GPS, lalu baru ditolak 403 di ujung.
+    final isReadOnly = lifecycleLocked || !canFieldWork || !pipeline.canEdit;
 
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
@@ -191,7 +197,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           // Sengaja memakai lifecycleLocked + canEditPipeline, bukan isReadOnly:
           // BM/RO boleh mengoreksi data pipeline di kantornya walau tak boleh
           // mengerjakan pekerjaan lapangannya.
-          if (!isAgent && !lifecycleLocked && canEditPipeline)
+          if (!isAgent && !lifecycleLocked && canEditPipeline && pipeline.canEdit)
             IconButton(
               icon: const Icon(Icons.edit_outlined, color: Colors.white),
               tooltip: 'Edit Pipeline',
@@ -238,7 +244,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                               flex: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: _primarySections(pipeline, isAgent: isAgent, canWrite: canFieldWork),
+                                children: _primarySections(pipeline, isAgent: isAgent, canWrite: canFieldWork && pipeline.canEdit),
                               ),
                             ),
                             const SizedBox(width: AppSpacing.lg),
@@ -261,7 +267,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ..._primarySections(pipeline, isAgent: isAgent, canWrite: canFieldWork),
+                            ..._primarySections(pipeline, isAgent: isAgent, canWrite: canFieldWork && pipeline.canEdit),
                             const SizedBox(height: 16),
                             ..._sidebarSections(
                               pipeline,
@@ -465,6 +471,14 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     required bool isWon,
     required bool isDeclined,
   }) {
+    // Jadwal yang tertinggal berstatus OPEN pada pipeline WON/DECLINE/hand-over masih
+    // perlu dirapikan — ditandai selesai atau dibatalkan — justru KARENA pipeline-nya
+    // sudah ditutup. Karena itu gerbang menu jadwal memakai HAK TULIS saja, bukan
+    // isReadOnly yang ikut terkunci oleh siklus hidup. Dilaporkan 2026-08-20: pada
+    // pipeline WON seluruh jadwalnya kehilangan titik tiga, sehingga jadwal telat tidak
+    // bisa ditutup sama sekali. Gerbang peran & izin objek tetap dihormati, jadi
+    // penonton read-only tidak disodori tombol yang ujungnya 403.
+    final canManageSchedules = !isAgent && canFieldWork && pipeline.canEdit;
     return [
       // BUTTONS — RM only; hidden when WON/Declined (read-only).
       if (!isAgent && !isReadOnly) ...[
@@ -685,9 +699,10 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                 .take(3)
                 .map((s) => PipelineScheduleCard(
                       schedule: s,
-                      editable: !isAgent && !isReadOnly,
+                      editable: canManageSchedules,
                       onEdit: _editSchedule,
                       onCancel: _cancelSchedule,
+                      onComplete: _completeSchedule,
                     ))
                 .toList());
       }),
@@ -941,6 +956,42 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
 
   /// Soft-delete a schedule: mark it CANCELLED. It then drops out of the
   /// "Jadwal Mendatang" list (which only shows OPEN) but the record is kept.
+  /// Tutup jadwal yang sudah dikerjakan. Dipakai juga untuk merapikan jadwal telat
+  /// yang tertinggal OPEN — termasuk pada pipeline yang siklus hidupnya sudah ditutup.
+  Future<void> _completeSchedule(PipelineScheduleModel s) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Tandai jadwal selesai?'),
+        content: Text(
+          'Jadwal "${s.title.isEmpty ? 'kunjungan' : s.title}" akan ditandai selesai dan '
+          'hilang dari daftar jadwal mendatang. Lanjutkan?',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Kembali')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Tandai selesai',
+                style: TextStyle(color: AppColors.successGreen, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _pipelineRepo.setScheduleStatus(s.id, 'DONE');
+      if (!mounted) return;
+      _fetchData(silent: true);
+      messenger.showSnackBar(const SnackBar(content: Text('Jadwal ditandai selesai')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
+
   Future<void> _cancelSchedule(PipelineScheduleModel s) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1008,7 +1059,8 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           cancelReason: result.cancelReason,
           policyNumber: result.policyNumber,
           policyStart: result.policyStart,
-          policyEnd: result.policyEnd);
+          policyEnd: result.policyEnd,
+          policyIssuedDate: result.policyIssuedDate);
       if (!mounted) return;
       _fetchData(silent: true);
       messenger.showSnackBar(const SnackBar(content: Text('Status pipeline diperbarui')));
@@ -1207,8 +1259,17 @@ class _StatusResult {
   /// masa berlaku sama-sama berasal dari sistem penerbitan polis di luar aplikasi.
   final String? policyStart;
   final String? policyEnd;
+  /// Tanggal terbit polis (ISO yyyy-MM-dd) — penentu bulan pengakuan realisasi.
+  /// Opsional dan berdiri sendiri dari [policyNumber]: bila null, server memakai
+  /// tanggal Won.
+  final String? policyIssuedDate;
   _StatusResult(this.subStage,
-      {this.realisasiIdr, this.cancelReason, this.policyNumber, this.policyStart, this.policyEnd});
+      {this.realisasiIdr,
+      this.cancelReason,
+      this.policyNumber,
+      this.policyStart,
+      this.policyEnd,
+      this.policyIssuedDate});
 }
 
 class _StatusSheet extends StatefulWidget {
@@ -1227,6 +1288,10 @@ class _StatusSheetState extends State<_StatusSheet> {
   late final TextEditingController _policyCtrl;
   DateTime? _policyStart;
   DateTime? _policyEnd;
+  /// Tanggal terbit polis — penentu bulan pengakuan realisasi. Opsional: bila
+  /// dikosongkan server memakai tanggal Won. Sengaja terpisah dari [_policyStart],
+  /// yang menandai awal masa berlaku dan bisa jatuh di bulan yang berbeda.
+  DateTime? _policyIssuedDate;
   bool _showErrors = false;
 
   @override
@@ -1238,6 +1303,9 @@ class _StatusSheetState extends State<_StatusSheet> {
           : '',
     );
     _policyCtrl = TextEditingController(text: widget.pipeline.policyNumber ?? '');
+    // Prefill supaya membuka sheet ini lagi untuk mengoreksi hal lain tidak
+    // diam-diam menghapus tanggal terbit yang sudah tercatat.
+    _policyIssuedDate = DateTime.tryParse(widget.pipeline.policyIssuedDate ?? '');
   }
 
   @override
@@ -1283,6 +1351,14 @@ class _StatusSheetState extends State<_StatusSheet> {
       setState(() => _showErrors = true);
       return;
     }
+    // Tanggal Terbit Polis WAJIB saat WON (CR-04). Inilah bulan pengakuan
+    // realisasi; tanpa isian ini pipeline bisa jadi WON tanpa bulan yang
+    // menentukan angka dashboard, dan itu melubangi seluruh gunanya. Nilai
+    // cadangan berupa tanggal WON di server sengaja hanya untuk data lama.
+    if (isWon && _policyIssuedDate == null) {
+      setState(() => _showErrors = true);
+      return;
+    }
     // Konfirmasi kalau nilai realisasi WON berbeda dari nilai premi awal
     // (estimasi saat pipeline dibuat). Mencegah salah ketik nilai realisasi.
     if (isWon && realisasi != null) {
@@ -1298,7 +1374,12 @@ class _StatusSheetState extends State<_StatusSheet> {
         cancelReason: reason,
         policyNumber: policyNumber,
         policyStart: policyNumber == null ? null : _isoDate(_policyStart!),
-        policyEnd: policyNumber == null ? null : _isoDate(_policyEnd!)));
+        policyEnd: policyNumber == null ? null : _isoDate(_policyEnd!),
+        // Tidak diikat pada ada/tidaknya No. Polis: bulan pengakuan realisasi
+        // tetap bisa dicatat walau nomor polisnya belum keluar.
+        policyIssuedDate: !isWon || _policyIssuedDate == null
+            ? null
+            : _isoDate(_policyIssuedDate!)));
   }
 
   static String _isoDate(DateTime d) =>
@@ -1480,7 +1561,19 @@ class _StatusSheetState extends State<_StatusSheet> {
               },
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
-                prefixText: 'Rp ',
+                // prefixIcon, BUKAN prefixText: Flutter hanya merender prefixText
+                // saat field fokus atau sudah berisi, sehingga "Rp" seolah muncul
+                // tiba-tiba begitu orang mulai mengetik. Satuan uang adalah bagian
+                // tetap dari kolomnya, jadi harus terlihat sejak awal.
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.only(left: 12, right: 6),
+                  child: Text(
+                    'Rp',
+                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                ),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 0, minHeight: 0),
                 hintText: 'mis. 500.000.000',
                 hintStyle: const TextStyle(fontSize: 13, color: AppColors.grayStage),
                 isDense: true,
@@ -1520,6 +1613,19 @@ class _StatusSheetState extends State<_StatusSheet> {
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Text('Periode polis wajib diisi bila No. Polis diisi',
+                    style: TextStyle(fontSize: 12, color: AppColors.errorRed)),
+              ),
+            const SizedBox(height: 12),
+            const Text('Tanggal Terbit Polis *',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            const SizedBox(height: 6),
+            _policyDateField('Tanggal terbit', _policyIssuedDate,
+                (d) => setState(() => _policyIssuedDate = d)),
+            if (_showErrors && _policyIssuedDate == null)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                    'Tanggal Terbit Polis wajib diisi. Inilah bulan realisasi diakui.',
                     style: TextStyle(fontSize: 12, color: AppColors.errorRed)),
               ),
           ],

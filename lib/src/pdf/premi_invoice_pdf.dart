@@ -34,6 +34,13 @@ class PremiInvoiceData {
   final bool minPremiApplied;
   final num premi;
 
+  /// Biaya admin nominal di luar premi (CR-21); 0 = dokumen tampil seperti
+  /// sebelumnya, tanpa baris biaya admin.
+  final num biayaAdmin;
+
+  /// Yang ditagihkan: [premi] + [biayaAdmin].
+  num get totalTagihan => premi + biayaAdmin;
+
   const PremiInvoiceData({
     required this.invoiceNo,
     required this.date,
@@ -55,6 +62,7 @@ class PremiInvoiceData {
     required this.diskonPercent,
     required this.minPremiApplied,
     required this.premi,
+    this.biayaAdmin = 0,
   });
 }
 
@@ -332,6 +340,13 @@ pw.Widget _totals(PremiInvoiceData d) {
               ),
             if (d.minPremiApplied)
               _totalRow('Penyesuaian minimum estimasi premi', _rp(d.premi)),
+            // CR-21: biaya admin ditambahkan SETELAH premi final (termasuk setelah
+            // penyesuaian minimum), jadi dokumen memperlihatkan preminya sendiri
+            // dulu baru biayanya — bukan satu angka gabungan yang tak bisa diurai.
+            if (d.biayaAdmin > 0) ...[
+              _totalRow('Estimasi Premi', _rp(d.premi)),
+              _totalRow('Biaya Admin', _rp(d.biayaAdmin)),
+            ],
             pw.Container(
               margin: const pw.EdgeInsets.only(top: 4),
               padding: const pw.EdgeInsets.symmetric(
@@ -347,7 +362,9 @@ pw.Widget _totals(PremiInvoiceData d) {
                 children: [
                   pw.Expanded(
                     child: pw.Text(
-                      'TOTAL ESTIMASI PREMI',
+                      d.biayaAdmin > 0
+                          ? 'TOTAL ESTIMASI PREMI + BIAYA ADMIN'
+                          : 'TOTAL ESTIMASI PREMI',
                       style: pw.TextStyle(
                         fontSize: 11,
                         fontWeight: pw.FontWeight.bold,
@@ -361,7 +378,7 @@ pw.Widget _totals(PremiInvoiceData d) {
                       fit: pw.BoxFit.scaleDown,
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(
-                        _rp(d.premi),
+                        _rp(d.totalTagihan),
                         style: pw.TextStyle(
                           fontSize: 13,
                           fontWeight: pw.FontWeight.bold,

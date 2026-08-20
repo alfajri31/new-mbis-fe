@@ -23,6 +23,12 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
   // UI-ephemeral (tetap di widget): filter pencarian client-side.
   String _query = '';
 
+  /// Kotak pencarian butuh controller sendiri. Tanpa ini isinya hilang dari
+  /// layar setiap daftar dimuat ulang (mis. sesudah menyimpan perubahan akun),
+  /// sementara [_query] tetap memegang kata kunci lama — kotaknya terlihat
+  /// kosong tetapi daftarnya masih tersaring, dan pemakai mengira barisnya hilang.
+  final TextEditingController _searchCtrl = TextEditingController();
+
   // State bisnis/async dikelola KelolaAkunNotifier. Getter berikut memproksinya
   // agar seluruh kode build/widget di bawah tetap memakai nama lama tanpa diubah.
   KelolaAkunState get _ks => ref.read(kelolaAkunProvider);
@@ -47,6 +53,12 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
       if (!mounted) return;
       _notifier.start();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _fetch() => _notifier.fetch();
@@ -145,6 +157,7 @@ class _KelolaAkunScreenState extends ConsumerState<KelolaAkunScreen> {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: TextField(
+        controller: _searchCtrl,
         onChanged: (v) => setState(() => _query = v),
         style: AppInput.fieldText,
         decoration: InputDecoration(

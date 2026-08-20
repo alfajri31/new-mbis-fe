@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/input_formatters.dart';
+import '../../utils/kur_product.dart';
+import '../../utils/pipeline_nilai_wajib.dart';
 import '../widgets/field_label.dart';
 import '../widgets/missing_fields_notice.dart';
 import '../widgets/search_picker_sheet.dart';
@@ -116,6 +118,10 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
   // ── Produk (COB -> LOB -> ToC) ──
   String? _cob;
   String? _lob;
+
+  /// Produk KUR: TSI & rate premi boleh 0 dulu lalu diedit kemudian (CR-05, umpan
+  /// balik piloting Makassar). Aturannya cermin `TargetCategoryClassifier` di backend.
+  bool get _isKur => isKurProduct(tocCode: _tocCode, cobName: _cob);
   String? _tocCode;
   String? _tocName;
 
@@ -667,7 +673,9 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                         children: [
                           Expanded(
                             child: _buildTextField(
-                              label: 'TSI/Plafond (Original) *',
+                              label: _isKur
+                                  ? 'TSI/Plafond (Original)'
+                                  : 'TSI/Plafond (Original) *',
                               hint: '0',
                               controller: _tsiController,
                               keyboardType: TextInputType.number,
@@ -678,7 +686,16 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                                   RegExp(r'[^0-9]'),
                                   '',
                                 );
-                                if (d.isEmpty || int.parse(d) <= 0) {
+                                // KUR (CR-05): nilainya sering belum keluar saat RM
+                                // mencatat pipeline, jadi 0 diterima dan diedit nanti.
+                                // Tetap harus ada isinya supaya 0 itu pilihan sadar,
+                                // bukan kolom yang terlewat.
+                                if (d.isEmpty) {
+                                  return _isKur
+                                      ? 'Isi 0 dulu bila nilainya belum keluar'
+                                      : 'TSI/Plafond wajib diisi';
+                                }
+                                if (!_isKur && int.parse(d) <= 0) {
                                   return 'TSI/Plafond wajib diisi';
                                 }
                                 return null;
@@ -702,7 +719,9 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                         children: [
                           Expanded(
                             child: _buildTextField(
-                              label: 'Rate Premi (%) *',
+                              label: _isKur
+                                  ? 'Rate Premi (%)'
+                                  : 'Rate Premi (%) *',
                               hint: '0.00',
                               controller: _rateController,
                               keyboardType:
@@ -713,7 +732,13 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                               onChanged: (_) {},
                               validator: (val) {
                                 final r = double.tryParse((val ?? '').trim());
-                                if (r == null || r <= 0) {
+                                if (r == null) {
+                                  return _isKur
+                                      ? 'Isi 0 dulu bila ratenya belum keluar'
+                                      : 'Rate premi wajib diisi';
+                                }
+                                // KUR (CR-05): 0 diterima, diedit setelah ratenya keluar.
+                                if (!_isKur && r <= 0) {
                                   return 'Rate premi wajib diisi';
                                 }
                                 if (r > 100) return 'Rate premi maks 100%';
@@ -732,6 +757,19 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
                           ),
                         ],
                       ),
+                      // Keterangan hanya muncul untuk KUR, supaya kelonggaran ini
+                      // tidak terbaca sebagai izin mengosongkan nilai di produk lain.
+                      if (_isKur) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Untuk KUR, TSI dan rate premi boleh diisi 0 dulu bila '
+                          'nilainya belum keluar, lalu diedit setelah tersedia.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1838,10 +1876,16 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
     if (_currency != 'IDR' && double.tryParse(_kursController.text) == null) {
       missing.add('Kurs (ke IDR)');
     }
-    if (_tsiOriginal <= 0) missing.add('TSI/Plafond (Original)');
-    if (_ratePremi <= 0) {
+    // Aturannya satu, dipakai bersama validator tiap isian (lihat
+    // pipeline_nilai_wajib.dart). Dulu pemeriksaan di sini memakai `<= 0` tanpa
+    // pengecualian KUR sehingga _handleSubmit berhenti lebih dulu dan validator
+    // yang sudah benar tidak pernah sempat dipakai.
+    if (tsiBelumLengkap(teks: _tsiController.text, isKur: _isKur)) {
+      missing.add('TSI/Plafond (Original)');
+    }
+    if (rateBelumLengkap(teks: _rateController.text, isKur: _isKur)) {
       missing.add('Rate Premi (%)');
-    } else if (_ratePremi > 100) {
+    } else if ((double.tryParse(_rateController.text.trim()) ?? 0) > 100) {
       missing.add('Rate Premi maksimal 100%');
     }
 

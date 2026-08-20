@@ -89,7 +89,9 @@ class BrokerRepository {
     return list.map((j) => _toView(j as Map<String, dynamic>)).toList();
   }
 
-  /// Global broker KPIs: total (150), with-pipeline, ever-won, realisasi premi, stages.
+  /// KPI broker. `total` tetap ukuran master list (150) — angka global — sedangkan
+  /// with-pipeline, ever-won, realisasi premi, dan rincian tahap MENGIKUTI cakupan
+  /// pemanggil sejak BUG-01; sebelumnya semuanya nasional untuk semua peran.
   Future<PartnerKpi> getBrokerKpi() async {
     final response = await apiClient.get('/api/brokers/kpi');
     if (response.statusCode != 200) {

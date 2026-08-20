@@ -60,6 +60,7 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
   String? get _regionId => _rmp.regionId;
   String? get _branchId => _rmp.branchId;
   bool get _connectOnly => _rmp.connectOnly;
+  String? get _pipelineFilter => _rmp.pipelineFilter;
   bool get _initialLoading => _rmp.initialLoading;
   bool get _loadingMore => _rmp.loadingMore;
   String? get _error => _rmp.error;
@@ -406,29 +407,72 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
     // All cards track the active region/branch/search filter (server aggregates).
     final loading = _initialLoading;
     String v(int n) => loading ? '–' : '$n';
+    // Rincian kartu (CR-06): menekan kartu MENYARING daftar RM di bawahnya, bukan
+    // membuka daftar terpisah — rosternya ber-halaman, jadi daftar terpisah hanya
+    // akan memuat sebagian sambil terbaca seperti daftar penuh. Menekan kartu yang
+    // sedang aktif mematikan saringannya kembali.
+    void tap(String? filter) => _notifier.onPipelineFilterChanged(filter);
     // Row 1 — RM summary: total, how many have no pipeline yet, active pipelines, realisasi.
     final summary = <Widget>[
-      _statCard(label: 'Total RM', value: v(_total), color: AppColors.primaryNavy),
+      _statCard(
+          label: 'Total RM',
+          value: v(_total),
+          color: AppColors.primaryNavy,
+          // Kartu ini melepas saringan, jadi ia jalan pulang dari kartu mana pun.
+          onTap: () => tap(null),
+          selected: _pipelineFilter == null),
       _statCard(
           label: 'RM Tanpa Pipeline',
           value: v(_rmsWithoutPipeline),
-          color: AppColors.errorRed),
+          color: AppColors.errorRed,
+          onTap: () => tap('NONE'),
+          selected: _pipelineFilter == 'NONE'),
       _statCard(
           label: 'Pipeline Aktif',
           value: v(_filteredActivePipelines),
-          color: AppColors.secondaryOrange),
+          color: AppColors.secondaryOrange,
+          onTap: () => tap('ACTIVE'),
+          selected: _pipelineFilter == 'ACTIVE'),
       _statCard(
           label: 'Realisasi YTD',
           value: loading ? '–' : AppFormat.currencyShort(_filteredRealisasi),
-          color: AppColors.successGreen),
+          color: AppColors.successGreen,
+          // Realisasi datang dari pipeline WON, jadi rinciannya = RM yang punya WON.
+          onTap: () => tap('WON'),
+          selected: _pipelineFilter == 'WON'),
     ];
     // Row 2 — pipeline stage breakdown across all matching RMs.
     final stages = <Widget>[
-      _statCard(label: 'Pipeline P3', value: v(_p3), color: AppColors.grayStage),
-      _statCard(label: 'Pipeline P2', value: v(_p2), color: AppColors.secondaryOrange),
-      _statCard(label: 'Pipeline P1', value: v(_p1), color: AppColors.primaryNavy),
-      _statCard(label: 'Pipeline Won', value: v(_won), color: AppColors.successGreen),
-      _statCard(label: 'Pipeline Declined', value: v(_decline), color: AppColors.errorRed),
+      _statCard(
+          label: 'Pipeline P3',
+          value: v(_p3),
+          color: AppColors.grayStage,
+          onTap: () => tap('P3'),
+          selected: _pipelineFilter == 'P3'),
+      _statCard(
+          label: 'Pipeline P2',
+          value: v(_p2),
+          color: AppColors.secondaryOrange,
+          onTap: () => tap('P2'),
+          selected: _pipelineFilter == 'P2'),
+      _statCard(
+          label: 'Pipeline P1',
+          value: v(_p1),
+          color: AppColors.primaryNavy,
+          onTap: () => tap('P1'),
+          selected: _pipelineFilter == 'P1'),
+      _statCard(
+          label: 'Pipeline Won',
+          value: v(_won),
+          color: AppColors.successGreen,
+          onTap: () => tap('WON'),
+          selected: _pipelineFilter == 'WON'),
+      _statCard(
+          label: 'Pipeline Declined',
+          value: v(_decline),
+          color: AppColors.errorRed,
+          onTap: () => tap('DECLINE'),
+          selected: _pipelineFilter == 'DECLINE'),
     ];
     return Column(
       children: [
@@ -460,14 +504,23 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
     );
   }
 
-  Widget _statCard({required String label, required String value, required Color color}) {
-    return Container(
+  Widget _statCard({
+    required String label,
+    required String value,
+    required Color color,
+    VoidCallback? onTap,
+    bool selected = false,
+  }) {
+    final card = Container(
       // Match the BUMN/Broker KPI tiles: light-gray fill, bordered, no shadow.
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgScreen,
+        color: selected ? AppColors.navyBg : AppColors.bgScreen,
         borderRadius: AppRadius.radiusMd,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: selected ? AppColors.primaryNavy : AppColors.border,
+          width: selected ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -489,6 +542,15 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.radiusMd,
+        child: card,
       ),
     );
   }

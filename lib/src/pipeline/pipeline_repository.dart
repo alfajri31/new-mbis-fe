@@ -196,7 +196,21 @@ class PipelineDetailModel {
   final int? tenderCurrentSeq;
   final String? tenderRole; // LEADER | MEMBER
   final String? policyNumber;
+  /// Tanggal terbit polis (ISO yyyy-MM-dd) — penentu bulan pengakuan realisasi,
+  /// berbeda dari awal masa berlaku polis. Null bila belum diisi.
+  final String? policyIssuedDate;
   final double? shareAskrindo;
+  /// Pemanggil boleh MENGUBAH pipeline ini — dijawab server memakai gerbang yang
+  /// sama dengan yang menegakkannya, bukan ditebak ulang di sini.
+  ///
+  /// Perlu ada karena cakupan BACA bisa lebih luas daripada cakupan TULIS: RM yang
+  /// berkantor di Kanwil melihat pipeline seluruh cabang tetapi hanya boleh mengubah
+  /// miliknya sendiri (CR-18).
+  ///
+  /// Default `true` bila server belum mengirimnya, supaya klien lama/baru yang
+  /// bertemu server versi berbeda tidak mendadak kehilangan seluruh tombolnya —
+  /// server tetap menolak lewat 403 kalau memang tidak berhak.
+  final bool canEdit;
   final List<PipelineScheduleModel> schedules;
   final List<PipelinePartyModel> parties;
   final List<PipelineTenderModel> tenderProcesses;
@@ -233,7 +247,9 @@ class PipelineDetailModel {
     this.tenderCurrentSeq,
     this.tenderRole,
     this.policyNumber,
+    this.policyIssuedDate,
     this.shareAskrindo,
+    this.canEdit = true,
     required this.schedules,
     this.parties = const [],
     this.tenderProcesses = const [],
@@ -251,6 +267,7 @@ class PipelineDetailModel {
       projectName: json['projectName'],
       tenderName: json['tenderName'],
       statusKerjaSama: json['statusKerjaSama'],
+      canEdit: json['canEdit'] != false,
       isTender: json['isTender'] == true,
       cobName: json['cobName'],
       lobName: json['lobName'],
@@ -272,6 +289,7 @@ class PipelineDetailModel {
       tenderCurrentSeq: json['tenderCurrentSeq'],
       tenderRole: json['tenderRole'],
       policyNumber: json['policyNumber'],
+      policyIssuedDate: json['policyIssuedDate'],
       shareAskrindo: json['shareAskrindo'] != null ? (json['shareAskrindo'] as num).toDouble() : null,
       schedules: (json['schedules'] as List<dynamic>?)
               ?.map((s) => PipelineScheduleModel.fromJson(s))
@@ -340,8 +358,12 @@ class PipelineRepository {
     final response = await apiClient.get('/api/pipelines/$id');
     if (response.statusCode == 200) {
       return PipelineDetailModel.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 403 || response.statusCode == 404) {
+      // Lihat catatan yang sama pada CustomerRepository.getCustomerDetail:
+      // penolakan hak akses harus terbaca sebagai penolakan, bukan kerusakan.
+      throw Exception('Pipeline ini di luar cakupan Anda.');
     } else {
-      throw Exception('Failed to load pipeline detail');
+      throw Exception('Gagal memuat detail pipeline. Coba lagi beberapa saat.');
     }
   }
 
@@ -411,14 +433,17 @@ class PipelineRepository {
 
   /// Move the pipeline to a sub-stage. [realisasiIdr] is required when the
   /// resulting bucket is WON, [cancelReason] when it is DECLINE (backend
-  /// enforces both too). [policyNumber] is the optional No. Polis captured on WON.
+  /// enforces both too). [policyNumber] is the optional No. Polis captured on WON,
+  /// and [policyIssuedDate] the optional tanggal terbit polis that decides which
+  /// month the realisasi is recognised in (server falls back to the WON date).
   Future<void> updateStatus(String id,
       {required String subStage,
       double? realisasiIdr,
       String? cancelReason,
       String? policyNumber,
       String? policyStart,
-      String? policyEnd}) async {
+      String? policyEnd,
+      String? policyIssuedDate}) async {
     final body = <String, dynamic>{'subStage': subStage};
     if (realisasiIdr != null) body['realisasiIdr'] = realisasiIdr;
     if (cancelReason != null) body['cancelReason'] = cancelReason;
@@ -427,6 +452,9 @@ class PipelineRepository {
     // baris polis, dasar pencatatan premi dan pelepasan komisi agen.
     if (policyStart != null) body['policyStart'] = policyStart;
     if (policyEnd != null) body['policyEnd'] = policyEnd;
+    // Tanggal terbit polis berdiri sendiri: menentukan bulan pengakuan realisasi,
+    // dan boleh diisi walau nomor polisnya belum keluar.
+    if (policyIssuedDate != null) body['policyIssuedDate'] = policyIssuedDate;
     final response = await apiClient.put('/api/pipelines/$id/status', body: body);
     if (response.statusCode != 200) {
       throw Exception(_errorMessage(response.body) ?? 'Gagal mengubah status');

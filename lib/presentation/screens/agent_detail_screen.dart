@@ -301,6 +301,19 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
   /// 4 dokumen wajib pasca-lisensi (diunggah saat WAITING_RM_DOCS).
   static const _postLicenseDocs = <String>['PAKTA_INTEGRITAS', 'PKS', 'SMAP', 'MEMO_2'];
 
+  /// Status di mana pengajuan masih ditangani RM. Cermin `RM_MANAGEABLE` di
+  /// `AgentService`: begitu CIF terbit dan agennya ACTIVE, server menolak setiap
+  /// perubahan dari RM — tombolnya pun harus ikut hilang, bukan menawarkan aksi
+  /// yang pasti berbuah 403.
+  static const _rmOnboardingStatus = <String>{
+    'DRAFT', 'WAITING_APPROVAL', 'REJECTED',
+    'WAITING_LICENSE', 'WAITING_RM_DOCS', 'WAITING_CIF',
+  };
+
+  /// True bila pemanggil adalah RM yang masih mengurus pengajuan ini.
+  bool _rmMasihMengurus(AgentModel a) =>
+      _roles.contains('RM') && _rmOnboardingStatus.contains(a.status);
+
   /// Slot dokumen pasca-lisensi yang relevan untuk [a].
   ///
   /// Memo dibuang untuk agen yang masuk lewat jalur langsung — server pun sudah
@@ -417,8 +430,9 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
                 _miniBtn('Tolak', AppColors.errorRed, () => _rejectDoc(a, d)),
             ]),
           ),
-        // Pengunggah (RM atau kantor pusat): unggah ulang dokumen yang ditolak.
-        if ((isRm || isAgentHq) && d.isRejected)
+        // Pengunggah (RM yang masih mengurus pengajuan, atau kantor pusat kapan pun):
+        // unggah ulang dokumen yang ditolak.
+        if (((isRm && _rmMasihMengurus(a)) || isAgentHq) && d.isRejected)
           Padding(
             padding: const EdgeInsets.only(left: 26, top: 6),
             child: _miniBtn('Unggah Ulang', AppColors.primaryNavy, () => _pickAndUpload(a, d.docType)),
@@ -529,8 +543,12 @@ class _AgentDetailScreenState extends ConsumerState<AgentDetailScreen> {
     // bukan sejak DRAFT — di tahap awal nomor PKS-nya belum ada wujudnya. Tetap
     // tersedia setelahnya karena rate komisi mengikuti PKS dan berubah tiap PKS
     // diperbarui.
+    //
+    // Bagi RM tombol ini juga BERHENTI begitu agennya terdaftar: memperbarui PKS
+    // agen berjalan — dan bersamanya rate komisi — adalah pekerjaan pengelola agen
+    // kantor pusat. Server menolak RM di sana (`requireAgentWriteAccess`).
     const pksTooEarly = {'DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'WAITING_LICENSE'};
-    if ((isRm || isAgentHq) && !pksTooEarly.contains(a.status)) {
+    if ((_rmMasihMengurus(a) || isAgentHq) && !pksTooEarly.contains(a.status)) {
       buttons.add(_btn('Atur PKS', Icons.assignment_outlined, AppColors.primaryNavy, () => _pksFlow(a), outlined: true));
     }
     if (isRm && (a.status == 'DRAFT' || a.status == 'WAITING_APPROVAL' || a.status == 'REJECTED')) {

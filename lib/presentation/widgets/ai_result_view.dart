@@ -23,10 +23,19 @@ class AiResultView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var sections = result.sections
-        .where((s) => !_isRingkasan(s.heading) && (s.heading.isNotEmpty || s.items.isNotEmpty))
-        .toList();
     final recos = result.recommendations.where((r) => r.produk.trim().isNotEmpty).toList();
+    var sections = result.sections
+        // Section tanpa satu pun item yang tersisa setelah dibersihkan hanya menghasilkan kartu
+        // kosong berisi "—" (dan tanpa badge angka). Model kerap menulis heading lalu menaruh
+        // isinya di tempat lain, jadi headingnya menggantung sendirian.
+        .where((s) => s.items.any((t) => _clean(t).isNotEmpty))
+        .where((s) => !_isRingkasan(s.heading))
+        // Prompt sudah meminta model menaruh produk HANYA di 'recommendations', tetapi itu
+        // permintaan tanpa penegakan: model tetap sering menulis ulang daftarnya sebagai section,
+        // lalu kartu "Rekomendasi Produk" di bawah menampilkannya untuk KEDUA kalinya. Disaring
+        // di sisi render supaya hasil LAMA yang tersimpan ikut tertolong tanpa dijalankan ulang.
+        .where((s) => !(recos.isNotEmpty && _isProductHeading(s.heading)))
+        .toList();
 
     // Safety net: never render a blank screen. If filtering (e.g. dropping a stray "Ringkasan")
     // removed everything and there is nothing else to show, fall back to the raw sections that
@@ -87,6 +96,14 @@ class AiResultView extends StatelessWidget {
   /// Defensive: hide a stray "Ringkasan" heading (we now ask the model not to emit one,
   /// but older saved results may still have it).
   static bool _isRingkasan(String heading) => _clean(heading).toLowerCase() == 'ringkasan';
+
+  /// True bila heading ini adalah daftar rekomendasi produk yang ditulis ulang oleh model
+  /// (mis. "Rekomendasi Produk Askrindo", "Produk yang Direkomendasikan"). KEDUA kata wajib ada
+  /// supaya bagian yang sah seperti "Langkah Rekomendasi" atau "Produk Existing" tetap tampil.
+  static bool _isProductHeading(String heading) {
+    final h = _clean(heading).toLowerCase();
+    return h.contains('rekomendasi') && h.contains('produk');
+  }
 
   /// Strips leftover markdown decoration the model sometimes emits inside item text:
   /// leading `#`, list bullets, `*`/`**` emphasis, stray backticks, and Gemini's inline
@@ -282,7 +299,14 @@ class _ProductRecoCardState extends State<_ProductRecoCard> {
           firstChild: const SizedBox(width: double.infinity),
           secondChild: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 11),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Align melebar memenuhi kartu lalu menempelkan isinya ke tepi kiri. Tanpa ini
+            // AnimatedCrossFade menyusut selebar isinya, dan Column pembungkus di atas (yang
+            // crossAxisAlignment bawaannya center) menaruhnya di TENGAH kartu — sehingga tepi
+            // kiri alasan & tombol bergeser mengikuti panjang teks dan antar-produk tidak
+            // sejajar. Pola yang sama sudah dipakai _AiSectionCard di bawah.
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (alasan.isNotEmpty)
                 Text(alasan,
                     style: const TextStyle(fontSize: 12.5, height: 1.5, color: AppColors.textSecondary)),
@@ -312,8 +336,9 @@ class _ProductRecoCardState extends State<_ProductRecoCard> {
                     const Icon(Icons.chevron_right, size: 16, color: AppColors.primaryNavy),
                   ]),
                 ),
-              ),
-            ]),
+                ),
+              ]),
+            ),
           ),
           crossFadeState: _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           duration: const Duration(milliseconds: 180),

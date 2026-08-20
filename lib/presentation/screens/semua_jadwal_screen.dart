@@ -391,8 +391,23 @@ class _SemuaJadwalScreenState extends ConsumerState<SemuaJadwalScreen>
               onSelected: (v) {
                 if (v == 'edit') _editSchedule(item);
                 if (v == 'cancel') _cancelSchedule(item);
+                if (v == 'done') _completeSchedule(item);
               },
               itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'done',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        size: 18,
+                        color: AppColors.successGreen,
+                      ),
+                      SizedBox(width: 10),
+                      Text('Tandai selesai'),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'edit',
                   child: Row(
@@ -467,6 +482,55 @@ class _SemuaJadwalScreenState extends ConsumerState<SemuaJadwalScreen>
         const SnackBar(content: Text('Jadwal diperbarui')),
       );
       _fetch();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  /// Tutup jadwal yang sudah dikerjakan (DONE). Sama seperti pembatalan, jadwalnya
+  /// keluar dari daftar ini (yang hanya menampilkan rencana OPEN) tetapi catatannya
+  /// tetap tersimpan — bedanya ini menandai "sudah dilakukan", bukan "tidak jadi".
+  Future<void> _completeSchedule(DashboardSchedule item) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Tandai jadwal selesai?'),
+        content: Text(
+          'Jadwal "${item.title ?? 'kunjungan'}"${item.customerName != null ? ' untuk ${item.customerName}' : ''} '
+          'akan ditandai selesai dan hilang dari daftar. Lanjutkan?',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Kembali'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Tandai selesai',
+              style: TextStyle(
+                color: AppColors.successGreen,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _pipelineRepo.setScheduleStatus(item.id, 'DONE');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Jadwal ditandai selesai')),
+      );
+      _fetch(silent: true);
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(

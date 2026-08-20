@@ -5,6 +5,12 @@ class DashboardSummary {
   final String scopeLevel; // OWNER | KUP | BRANCH | REGIONAL | NATIONAL
   final int rmCount;
 
+  /// Kategori yang BENAR-BENAR dipakai server menyaring funnel pipeline, potensi
+  /// premi, dan won/decline; null = tidak tersaring. Label kartu harus mengikuti
+  /// ini, bukan pilihan di layar — kategori tak dikenal diabaikan server, dan
+  /// memberi label kategori pada angka semua produk lebih buruk daripada tanpa label.
+  final String? category;
+
   final int totalCustomers;
   final int totalPipelines;
   final int pipelinesP3;
@@ -41,6 +47,7 @@ class DashboardSummary {
 
   DashboardSummary({
     required this.scopeLevel,
+    this.category,
     required this.rmCount,
     required this.totalCustomers,
     required this.totalPipelines,
@@ -74,6 +81,7 @@ class DashboardSummary {
   factory DashboardSummary.fromJson(Map<String, dynamic> json) {
     return DashboardSummary(
       scopeLevel: json['scopeLevel'] ?? 'OWNER',
+      category: json['category'] as String?,
       rmCount: json['rmCount'] ?? 0,
       totalCustomers: json['totalCustomers'] ?? 0,
       totalPipelines: json['totalPipelines'] ?? 0,
@@ -379,6 +387,12 @@ class VisitLocation {
   final String visitId;
   final String? rmName;
   final String? officeName;
+
+  /// Id customer yang dikunjungi — alamat rute `/customer/<id>` yang dituju pin
+  /// di Peta Kunjungan (CR-10). Server SUDAH mengirimkannya sejak awal
+  /// (`VisitLocationResponse.customerId`); model ini yang dulu membuangnya, dan
+  /// itulah sebabnya pin hanya bisa memperbesar peta, tak bisa menautkan.
+  final String? customerId;
   final String? customerName;
   final String? customerAddress;
   final double latitude;
@@ -386,31 +400,60 @@ class VisitLocation {
   final String? activityDate;
   final String? visitType;
 
+  /// Foto bukti kunjungan (path `/api/files/**`), null bila tak ada. Ikut sejak
+  /// layar GPS Tracking dilebur ke Peta Kunjungan — itu satu-satunya isi popup
+  /// layar lama yang tak punya padanan di sini.
+  final String? photoUrl;
+
   VisitLocation({
     required this.visitId,
     this.rmName,
     this.officeName,
+    this.customerId,
     this.customerName,
     this.customerAddress,
     required this.latitude,
     required this.longitude,
     this.activityDate,
     this.visitType,
+    this.photoUrl,
   });
+
+  bool get hasPhoto => photoUrl != null && photoUrl!.isNotEmpty;
 
   factory VisitLocation.fromJson(Map<String, dynamic> json) {
     return VisitLocation(
       visitId: json['visitId'] ?? '',
       rmName: json['rmName'],
       officeName: json['officeName'],
+      customerId: json['customerId'],
       customerName: json['customerName'],
       customerAddress: json['customerAddress'],
       latitude: (json['latitude'] ?? 0).toDouble(),
       longitude: (json['longitude'] ?? 0).toDouble(),
       activityDate: json['activityDate'],
       visitType: json['visitType'],
+      photoUrl: json['photoUrl'],
     );
   }
+}
+
+/// Hitungan kunjungan pendamping Peta Kunjungan.
+///
+/// Peta hanya memuat kunjungan yang punya koordinat, jadi tanpa angka ini layar
+/// tak bisa membedakan "belum pernah berkunjung" dari "sudah, tapi tak satu pun
+/// menyimpan koordinat" — dua keadaan yang sama-sama tampil sebagai peta kosong.
+class VisitTrackingSummary {
+  final int totalVisits;
+  final int thisMonth;
+
+  const VisitTrackingSummary({this.totalVisits = 0, this.thisMonth = 0});
+
+  factory VisitTrackingSummary.fromJson(Map<String, dynamic> json) =>
+      VisitTrackingSummary(
+        totalVisits: json['totalVisits'] ?? 0,
+        thisMonth: json['thisMonth'] ?? 0,
+      );
 }
 
 /// A region/branch the caller may filter their scoped views by.
@@ -443,15 +486,20 @@ class DashboardMonthRow {
   final double realisasi;
   final int visits;
   final int visitsKur;
+
+  /// Kunjungan bulan ini pada kategori yang sedang dipilih (CR-09); 0 bila tak
+  /// ada kategori terpilih — di situ layar memang memakai [visits].
+  final int visitsCategory;
   final double pipelineValue;
-  DashboardMonthRow(
-      this.label, this.target, this.realisasi, this.visits, this.visitsKur, this.pipelineValue);
+  DashboardMonthRow(this.label, this.target, this.realisasi, this.visits,
+      this.visitsKur, this.visitsCategory, this.pipelineValue);
   factory DashboardMonthRow.fromJson(Map<String, dynamic> j) => DashboardMonthRow(
         j['label'] ?? '',
         (j['target'] ?? 0).toDouble(),
         (j['realisasi'] ?? 0).toDouble(),
         (j['visits'] ?? 0) as int,
         (j['visitsKur'] ?? 0) as int,
+        (j['visitsCategory'] ?? 0) as int,
         (j['pipelineValue'] ?? 0).toDouble(),
       );
 }
@@ -480,7 +528,19 @@ class DashboardDrilldown {
   final int decline;
   final int total;
   final List<DashboardSuccessItem> successItems;
-  DashboardDrilldown(this.monthly, this.byCob, this.won, this.decline, this.total, this.successItems);
+
+  /// Pipeline AKTIF (P3/P2/P1) sebagai daftar — pasangan rinci dari [byCob], yang
+  /// hanya memberi hitungan per COB. Kosong bila server belum mengirimkannya.
+  final List<DashboardSuccessItem> activeItems;
+
+  /// Kategori yang dipakai server menyaring `visitsCategory`, dipantulkan apa
+  /// adanya (CR-09). Null = tidak tersaring — layar HARUS memakai ini, bukan
+  /// kategori pilihannya sendiri, supaya angka tak pernah diberi label kategori
+  /// yang sebenarnya tidak dipakai server (mis. kategori tak dikenal).
+  final String? category;
+
+  DashboardDrilldown(this.monthly, this.byCob, this.won, this.decline, this.total,
+      this.successItems, this.activeItems, this.category);
   factory DashboardDrilldown.fromJson(Map<String, dynamic> j) {
     final sr = j['successRate'] as Map<String, dynamic>? ?? {};
     return DashboardDrilldown(
@@ -490,8 +550,82 @@ class DashboardDrilldown {
       (sr['decline'] ?? 0) as int,
       (sr['total'] ?? 0) as int,
       (sr['items'] as List<dynamic>? ?? []).map((e) => DashboardSuccessItem.fromJson(e)).toList(),
+      // Server lama tidak mengirim field ini: daftar kosong, dan drill-down Pipeline
+      // Aktif jatuh kembali ke tabel COB seperti sebelumnya.
+      (j['activeItems'] as List<dynamic>? ?? [])
+          .map((e) => DashboardSuccessItem.fromJson(e))
+          .toList(),
+      j['category'] as String?,
     );
   }
+}
+
+/// Realisasi per SUMBER BISNIS (endpoint /api/dashboard/sumber-bisnis, CR-03).
+///
+/// HANYA realisasi. Target di M-BIS disimpan per (RM x tahun x bulan x kategori) dan
+/// tidak punya dimensi sumber bisnis sama sekali, jadi target per kanal tidak bisa
+/// ditampilkan tanpa sumber data baru — memecahnya sendiri hanya akan mengarang angka.
+///
+/// Angkanya realisasi mentah, sehingga penjumlahan seluruh sumber persis sama dengan
+/// realisasi total dan bisa dicek dengan mata.
+class DashboardSumberBisnis {
+  final int year;
+  final int currentMonth;
+  final double realisasiYtd;
+  final List<DashboardSumberRow> sumber;
+
+  DashboardSumberBisnis({
+    required this.year,
+    required this.currentMonth,
+    required this.realisasiYtd,
+    required this.sumber,
+  });
+
+  factory DashboardSumberBisnis.fromJson(Map<String, dynamic> json) => DashboardSumberBisnis(
+        year: json['year'] ?? 0,
+        currentMonth: json['currentMonth'] ?? 12,
+        realisasiYtd: (json['realisasiYtd'] ?? 0).toDouble(),
+        sumber: (json['sumber'] as List<dynamic>?)
+                ?.map((e) => DashboardSumberRow.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+      );
+}
+
+class DashboardSumberRow {
+  final String sourceType; // DIRECT | AGENT | BROKER | TPM | BANCASSURANCE
+  final String label;
+  final double realisasiYtd;
+
+  /// 12 bulan, indeks 0 = Januari.
+  final List<double> months;
+
+  DashboardSumberRow({
+    required this.sourceType,
+    required this.label,
+    required this.realisasiYtd,
+    required this.months,
+  });
+
+  /// Realisasi kanal ini untuk sekumpulan bulan (1..12) — dipakai filter periode CR-02.
+  double realisasiUntuk(List<int> bulan) {
+    double t = 0;
+    for (final m in bulan) {
+      if (m >= 1 && m <= months.length) t += months[m - 1];
+    }
+    return t;
+  }
+
+  factory DashboardSumberRow.fromJson(Map<String, dynamic> json) => DashboardSumberRow(
+        sourceType: json['sourceType'] ?? '',
+        label: json['label'] ?? '',
+        realisasiYtd: (json['realisasiYtd'] ?? 0).toDouble(),
+        months: (json['months'] as List<dynamic>?)
+                ?.map((e) => (e ?? 0).toDouble())
+                .cast<double>()
+                .toList() ??
+            const [],
+      );
 }
 
 /// Filter 11 target di dashboard (endpoint /api/dashboard/categories). Satu payload
@@ -674,6 +808,19 @@ class DashboardRepository {
 
   /// 11 target (target + realisasi + rincian bulan) untuk scope pemanggil.
   /// [year] opsional: bila diisi, angka mengikuti tahun tsb (C2).
+  Future<DashboardSumberBisnis> getSumberBisnis({int? year, String? category}) async {
+    final q = StringBuffer(_yearQuery(year));
+    if (category != null && category.isNotEmpty) {
+      q.write(q.isEmpty ? '?' : '&');
+      q.write('category=$category');
+    }
+    final response = await apiClient.get('/api/dashboard/sumber-bisnis$q');
+    if (response.statusCode == 200) {
+      return DashboardSumberBisnis.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to load dashboard sumber bisnis');
+  }
+
   Future<DashboardCategories> getCategories({int? year}) async {
     final response = await apiClient.get('/api/dashboard/categories${_yearQuery(year)}');
     if (response.statusCode == 200) {
@@ -693,16 +840,37 @@ class DashboardRepository {
     throw Exception('Failed to load RM categories');
   }
 
-  Future<DashboardDrilldown> getDrilldown({int? year}) async {
-    final response = await apiClient.get('/api/dashboard/drilldown${_yearQuery(year)}');
+  /// Data drill-down kartu dashboard. [category] = kategori target terpilih
+  /// (CR-09): diisi → tiap baris bulan ikut membawa `visitsCategory`, yaitu
+  /// kunjungan pada produk kategori itu; kosong → angka kunjungan tetap mencakup
+  /// semua produk seperti sebelumnya.
+  Future<DashboardDrilldown> getDrilldown({int? year, String? category}) async {
+    final yearQuery = _yearQuery(year);
+    final path = StringBuffer('/api/dashboard/drilldown')..write(yearQuery);
+    if (category != null && category.isNotEmpty) {
+      path
+        ..write(yearQuery.isEmpty ? '?' : '&')
+        ..write('cob=${Uri.encodeQueryComponent(category)}');
+    }
+    final response = await apiClient.get(path.toString());
     if (response.statusCode == 200) {
       return DashboardDrilldown.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to load dashboard drilldown');
   }
 
-  Future<DashboardSummary> getSummary({int? year}) async {
-    final response = await apiClient.get('/api/dashboard/summary${_yearQuery(year)}');
+  /// Angka headline dashboard. [category] = kategori target terpilih: funnel
+  /// pipeline, potensi premi, dan won/decline (dasar Success Rate) ikut kategori
+  /// itu. Jumlah customer & jadwal sengaja TIDAK ikut — nasabah bukan produk.
+  Future<DashboardSummary> getSummary({int? year, String? category}) async {
+    final yearQuery = _yearQuery(year);
+    final path = StringBuffer('/api/dashboard/summary')..write(yearQuery);
+    if (category != null && category.isNotEmpty) {
+      path
+        ..write(yearQuery.isEmpty ? '?' : '&')
+        ..write('cob=${Uri.encodeQueryComponent(category)}');
+    }
+    final response = await apiClient.get(path.toString());
     if (response.statusCode == 200) {
       return DashboardSummary.fromJson(jsonDecode(response.body));
     } else {
@@ -744,8 +912,31 @@ class DashboardRepository {
     }
   }
 
+  /// Hitungan kunjungan se-cakupan (seluruhnya + bulan berjalan), mengikuti
+  /// [officeId] yang sama dengan [getVisitLocations].
+  ///
+  /// Terpisah dari daftar lokasi dengan sengaja: daftar hanya memuat kunjungan
+  /// yang bisa diplot, sedangkan angka ini menghitung yang tanpa koordinat juga —
+  /// itulah yang membuat peta kosong bisa dijelaskan alih-alih terlihat rusak.
+  Future<VisitTrackingSummary> getVisitTrackingSummary({String? officeId}) async {
+    final path = officeId != null && officeId.isNotEmpty
+        ? '/api/dashboard/visit-locations/summary?officeId=$officeId'
+        : '/api/dashboard/visit-locations/summary';
+    final response = await apiClient.get(path);
+    if (response.statusCode == 200) {
+      return VisitTrackingSummary.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    throw Exception('Failed to load visit summary');
+  }
+
   /// One page of the scope-aware RM-performance list. [search] matches name/NIP;
   /// [regionId]/[branchId] narrow to one office subtree.
+  ///
+  /// [pipelineFilter] menyaring roster lewat pipeline milik RM-nya — dipakai
+  /// rincian kartu KPI layar RM (CR-06). Nilai sah: `NONE` (belum punya pipeline),
+  /// `ACTIVE` (P3/P2/P1), atau satu tahap `P3|P2|P1|WON|DECLINE`. Server MENOLAK
+  /// nilai lain dengan 400, jadi jangan mengirim teks bebas dari layar.
   Future<RmPerformancePage> getRmPerformance({
     int page = 0,
     int size = 20,
@@ -753,6 +944,7 @@ class DashboardRepository {
     String? regionId,
     String? branchId,
     bool connectOnly = false,
+    String? pipelineFilter,
   }) async {
     final params = <String, String>{
       'page': '$page',
@@ -761,6 +953,8 @@ class DashboardRepository {
       if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
       if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
       if (connectOnly) 'connectOnly': 'true',
+      if (pipelineFilter != null && pipelineFilter.isNotEmpty)
+        'pipelineFilter': pipelineFilter,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')

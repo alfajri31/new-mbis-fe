@@ -12,6 +12,7 @@ import '../../src/auth/roles.dart';
 import '../../src/region/region_repository.dart';
 import '../../src/common/file_opener.dart';
 import '../../core/providers/repository_providers.dart';
+import '../../utils/bank_komisi.dart';
 import '../providers/ajukan_agen_provider.dart';
 import '../widgets/back_app_bar.dart';
 import '../widgets/missing_fields_notice.dart';
@@ -1129,23 +1130,49 @@ class _AjukanAgenScreenState extends ConsumerState<AjukanAgenScreen> {
 
   Widget _label(String text) => fieldLabel(text);
 
+  /// Bank pencairan komisi — dipilih dari daftar, bukan diketik.
+  ///
+  /// Sebelumnya field bebas, sehingga satu bank yang sama masuk dengan berbagai
+  /// ejaan ("BCA", "Bank BCA", "bca") dan menyulitkan pencocokan saat komisi
+  /// dibayarkan.
+  ///
+  /// Posisi menunya tidak diatur manual: `DropdownButtonFormField` menempatkan
+  /// daftarnya agar muat di layar — membuka ke ATAS sendiri ketika field-nya berada
+  /// di bagian bawah, seperti bagian Rekening Bank di sini. [menuMaxHeight] menahan
+  /// agar daftar 13 bank tidak menutupi hampir seluruh layar ponsel.
   Widget _bankField() {
     final isRequired = _req('BANK_NAME', false);
+    final opsi = opsiBankKomisi(_bank);
     return Column(
       key: _anchorKey('BANK_NAME'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label(isRequired ? 'Nama Bank *' : 'Nama Bank'),
         const SizedBox(height: 6),
-        TextFormField(
-          initialValue: _bank,
-          onChanged: (val) => _bank = val,
-          textCapitalization: TextCapitalization.words,
+        DropdownButtonFormField<String>(
+          // Alasan sama dengan _officeDropdown: nilai di luar daftar opsi membuat
+          // DropdownButtonFormField melempar assertion, bukan sekadar tampil kosong.
+          initialValue: opsi.contains(_bank) ? _bank : null,
+          style: AppInput.fieldText,
+          isExpanded: true,
+          menuMaxHeight: 320,
+          hint: const Text('Pilih bank pencairan komisi',
+              style: TextStyle(color: AppColors.grayStage, fontSize: 14)),
+          items: opsi
+              .map((b) => DropdownMenuItem<String>(
+                    value: b,
+                    child: Text(b,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14, color: AppColors.textPrimary)),
+                  ))
+              .toList(),
+          onChanged: (val) => setState(() => _bank = val ?? ''),
           validator: isRequired
-              ? (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null
+              ? (v) => (v == null || v.trim().isEmpty) ? 'Wajib dipilih' : null
               : null,
-          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-          decoration: _decoration('Nama bank pencairan komisi'),
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.grayStage),
+          decoration: _decoration(null),
         ),
       ],
     );

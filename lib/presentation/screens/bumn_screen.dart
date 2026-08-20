@@ -10,6 +10,7 @@ import '../../src/common/partner_kpi.dart';
 import '../../utils/responsive.dart';
 import '../providers/bumn_provider.dart';
 import '../widgets/glass_app_bar.dart';
+import '../widgets/kpi_drilldown_sheet.dart';
 import '../widgets/state_views.dart';
 import 'bumn_tree_screen.dart';
 import 'tender_report_screen.dart';
@@ -47,12 +48,14 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
   BumnNotifier get _notifier => ref.read(bumnProvider.notifier);
 
   Future<List<BumnTreeCustomer>>? get _future => _bs.future;
-  // global BUMN KPIs (total 515, with-pipeline, won, premi, stages)
+  // KPI layar BUMN dari server: `total` = ekosistem master (±515), sisanya
+  // (with-pipeline, won, premi, stages) mengikuti cakupan pemanggil.
   PartnerKpi? get _kpi => _bs.kpi;
   String get _query => _bs.query;
   // Manual expand/collapse (decoupled from row tap) + the selected node whose
-  // subtree stats drive the KPI cards. Null selection → global KPIs.
+  // subtree stats drive the KPI cards. Null selection → KPI keseluruhan.
   Set<String> get _expanded => _bs.expanded;
+  Set<String> get _searchCollapsed => _bs.searchCollapsed;
   String? get _selectedId => _bs.selectedId;
   BumnTreeCustomer? get _selectedNode => _bs.selectedNode;
   // Selected-node card scope: true = node + descendants, false = this node only.
@@ -95,26 +98,9 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
   void _clearSelection() => _notifier.clearSelection();
   void _toggleExpand(String id) => _notifier.toggleExpand(id);
 
-  /// Search rows: keep every node whose name matches OR that has a matching
-  /// descendant, so matches appear under their ancestors (induk → anak → cucu).
-  /// Matched branches are shown fully expanded.
   List<({BumnTreeCustomer node, int depth})> _searchRows(
-      List<BumnTreeCustomer> roots, String query) {
-    final q = query.toLowerCase();
-    bool keep(BumnTreeCustomer n) =>
-        n.name.toLowerCase().contains(q) || n.children.any(keep);
-    final out = <({BumnTreeCustomer node, int depth})>[];
-    void walk(List<BumnTreeCustomer> nodes, int depth) {
-      for (final n in nodes) {
-        if (!keep(n)) continue;
-        out.add((node: n, depth: depth));
-        walk(n.children, depth + 1);
-      }
-    }
-
-    walk(roots, 0);
-    return out;
-  }
+      List<BumnTreeCustomer> roots, String query) =>
+      bumnSearchRows(roots, query, _searchCollapsed);
 
   Color _avatarColor(String id) => _avatarColors[id.hashCode.abs() % _avatarColors.length];
 
@@ -204,7 +190,7 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
               // KPI header is sticky (outside the scroll view); only the tree scrolls.
               child: Column(
                 children: [
-                  _buildHeader(topInset),
+                  _buildHeader(topInset, roots),
                   Expanded(
                     child: RefreshIndicator(
                       color: AppColors.primaryNavy,
@@ -233,13 +219,18 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
                                 itemCount: rows.length,
                                 itemBuilder: (context, i) {
                                   final row = rows[i];
+                                  final id = row.node.id;
+                                  // Mode pencarian: terbuka KECUALI ditutup manual.
+                                  // Chevron-nya tetap tombol sungguhan di kedua mode —
+                                  // dulu di mode pencarian ia hanya Icon mati yang
+                                  // bentuknya sama persis, jadi terbaca sebagai rusak.
                                   return _treeRow(row.node, row.depth,
                                       expanded: searching
-                                          ? true
-                                          : _expanded.contains(row.node.id),
+                                          ? !_searchCollapsed.contains(id)
+                                          : _expanded.contains(id),
                                       onToggle: searching
-                                          ? null
-                                          : () => _toggleExpand(row.node.id));
+                                          ? () => _notifier.toggleSearchCollapse(id)
+                                          : () => _toggleExpand(id));
                                 },
                               ),
                             ),
@@ -256,28 +247,63 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
     );
   }
 
-  Widget _buildHeader(double topInset) {
-    // Cards follow the selected node (its own or its subtree); global when none.
+  Widget _buildHeader(double topInset, List<BumnTreeCustomer> roots) {
+    // Cards follow the selected node (its own or its subtree); tanpa pilihan
+    // dipakai KPI keseluruhan dari server.
     final k = _selectedNode == null
         ? _kpi
         : (_includeDescendants ? _selectedNode!.subtree : _selectedNode!.own);
     String n(int? v) => v?.toString() ?? '–';
-    // Row 1 — the BUMN universe (global): total in the 515-node master ecosystem,
-    // how many already have a pipeline / have ever WON, and total realisasi premi.
+    // Rincian kartu (CR-06) memakai simpul yang SAMA dengan yang menyusun angkanya:
+    // tanpa pilihan = seluruh pohon, dengan pilihan = simpul itu saja atau berikut
+    // keturunannya, mengikuti sakelar "Node ini / + Turunan".
+    final scopeNodes = _drilldownNodes(roots);
+    // Baris 1 — "Total BUMN" adalah ukuran ekosistem master (±515) dan memang tetap
+    // angka global; tiga sisanya (ber-Pipeline, Pernah Won, Realisasi Premi) sudah
+    // ter-scope di server, jadi bagi RM angkanya bicara tentang miliknya sendiri.
     final summary = <Widget>[
-      _kpiTile('Total BUMN', n(k?.total), AppColors.primaryNavy),
-      _kpiTile('BUMN ber-Pipeline', n(k?.withPipeline), AppColors.secondaryOrange),
-      _kpiTile('BUMN Pernah Won', n(k?.everWon), AppColors.successGreen),
+      // Ekosistem master tidak ikut termuat layar ini (pohonnya sudah dipangkas ke
+      // cabang yang punya customer), jadi kartu ini membuka layar Ekosistem BUMN
+      // yang memang menyajikan ±515 simpul itu — bukan daftar separuh yang menyamar.
+      _kpiTile('Total BUMN', n(k?.total), AppColors.primaryNavy,
+          onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BumnTreeScreen()),
+              )),
+      _kpiTile('BUMN ber-Pipeline', n(k?.withPipeline), AppColors.secondaryOrange,
+          onTap: () => _openNodeListSheet(
+                'BUMN ber-Pipeline',
+                scopeNodes.where((x) => x.links.isNotEmpty).toList(),
+                'Belum ada BUMN dengan pipeline di cakupan Anda.',
+              )),
+      _kpiTile('BUMN Pernah Won', n(k?.everWon), AppColors.successGreen,
+          onTap: () => _openNodeListSheet(
+                'BUMN Pernah Won',
+                scopeNodes
+                    .where((x) => x.links.any((l) => l.stage == 'WON'))
+                    .toList(),
+                'Belum ada BUMN dengan pipeline WON di cakupan Anda.',
+              )),
       _kpiTile('Realisasi Premi', k?.totalRealisasiPremiShort ?? '–',
-          AppColors.primaryNavy),
+          AppColors.primaryNavy,
+          onTap: () => _openPipelineListSheet(
+                'Realisasi Premi',
+                scopeNodes,
+                (l) => l.stage == 'WON',
+                'Belum ada pipeline WON di cakupan Anda.',
+              )),
     ];
     // Row 2 — pipeline stage breakdown across all BUMN-linked pipelines.
     final stages = <Widget>[
-      _kpiTile('Pipeline P3', n(k?.p3), AppColors.grayStage),
-      _kpiTile('Pipeline P2', n(k?.p2), AppColors.secondaryOrange),
-      _kpiTile('Pipeline P1', n(k?.p1), AppColors.primaryNavy),
-      _kpiTile('Pipeline Won', n(k?.won), AppColors.successGreen),
-      _kpiTile('Pipeline Declined', n(k?.decline), AppColors.errorRed),
+      _kpiTile('Pipeline P3', n(k?.p3), AppColors.grayStage,
+          onTap: () => _openStageSheet(scopeNodes, 'P3')),
+      _kpiTile('Pipeline P2', n(k?.p2), AppColors.secondaryOrange,
+          onTap: () => _openStageSheet(scopeNodes, 'P2')),
+      _kpiTile('Pipeline P1', n(k?.p1), AppColors.primaryNavy,
+          onTap: () => _openStageSheet(scopeNodes, 'P1')),
+      _kpiTile('Pipeline Won', n(k?.won), AppColors.successGreen,
+          onTap: () => _openStageSheet(scopeNodes, 'WON')),
+      _kpiTile('Pipeline Declined', n(k?.decline), AppColors.errorRed,
+          onTap: () => _openStageSheet(scopeNodes, 'DECLINE')),
     ];
 
     return Container(
@@ -422,8 +448,9 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
     );
   }
 
-  Widget _kpiTile(String label, String value, Color color) {
-    return SizedBox(
+  Widget _kpiTile(String label, String value, Color color,
+      {VoidCallback? onTap}) {
+    final tile = SizedBox(
       width: 128,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
@@ -456,6 +483,95 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
           ],
         ),
       ),
+    );
+    if (onTap == null) return tile;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.radiusMd,
+        child: tile,
+      ),
+    );
+  }
+
+  // ── CR-06: kartu KPI dibuka jadi daftar (bottom banner) ─────────────────
+
+  /// Simpul yang menyusun angka kartu saat ini — cerminan persis pilihan node +
+  /// sakelar "+ Turunan" yang dipakai [_buildHeader].
+  List<BumnTreeCustomer> _drilldownNodes(List<BumnTreeCustomer> roots) {
+    final selected = _selectedNode;
+    if (selected == null) return _flattenNodes(roots);
+    return _includeDescendants ? _flattenNodes([selected]) : [selected];
+  }
+
+  List<BumnTreeCustomer> _flattenNodes(List<BumnTreeCustomer> nodes) {
+    final out = <BumnTreeCustomer>[];
+    void walk(BumnTreeCustomer n) {
+      out.add(n);
+      for (final c in n.children) {
+        walk(c);
+      }
+    }
+
+    for (final n in nodes) {
+      walk(n);
+    }
+    return out;
+  }
+
+  /// Daftar simpul BUMN → detail simpulnya.
+  void _openNodeListSheet(
+      String title, List<BumnTreeCustomer> nodes, String empty) {
+    showKpiDrilldownSheet(
+      context,
+      title: title,
+      subtitle: 'Tekan satu baris untuk membuka detail BUMN-nya',
+      emptyMessage: empty,
+      rows: [
+        for (final n in nodes)
+          KpiDrilldownRow(
+            title: n.name,
+            subtitle: '${n.level ?? 'BUMN'} · ${n.links.length} pipeline',
+            onTap: () => _openNodeSheet(n),
+          ),
+      ],
+    );
+  }
+
+  /// Daftar pipeline → pipeline itu di dalam konteks customer-nya.
+  ///
+  /// Judul baris SELALU nama customer: daftar pipeline tanpa nama customer tidak
+  /// menjawab pertanyaan siapa pun. Nama simpul BUMN dan tahapnya jadi keterangan.
+  void _openPipelineListSheet(String title, List<BumnTreeCustomer> nodes,
+      bool Function(BumnLink) where, String empty) {
+    final rows = <KpiDrilldownRow>[];
+    for (final n in nodes) {
+      for (final l in n.links.where(where)) {
+        rows.add(KpiDrilldownRow(
+          title: l.customer.name,
+          subtitle: '${n.name} · ${l.stage}',
+          trailing: l.premiShort,
+          onTap: () =>
+              context.go('/customer/${l.customer.id}/pipeline/${l.pipelineId}'),
+        ));
+      }
+    }
+    showKpiDrilldownSheet(
+      context,
+      title: title,
+      subtitle: 'Tekan satu baris untuk membuka pipeline-nya',
+      emptyMessage: empty,
+      rows: rows,
+    );
+  }
+
+  void _openStageSheet(List<BumnTreeCustomer> nodes, String stage) {
+    _openPipelineListSheet(
+      'Pipeline $stage',
+      nodes,
+      (l) => l.stage == stage,
+      'Belum ada pipeline BUMN pada tahap $stage di cakupan Anda.',
     );
   }
 
@@ -518,7 +634,8 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
 
   /// One tree row: chevron (expand, if any children) · dot · name (tap = select,
   /// updates the KPI cards) · pipeline badge (own pipelines). [onToggle] null →
-  /// chevron is a static indicator (search mode shows branches pre-expanded).
+  /// chevron is a static indicator; layar ini selalu mengirimnya, termasuk saat
+  /// mencari, supaya tidak ada panah yang tampak bisa dipencet tapi diam saja.
   Widget _treeRow(BumnTreeCustomer n, int depth,
       {required bool expanded, VoidCallback? onToggle}) {
     final selected = _selectedId == n.id;
@@ -840,4 +957,39 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
       ),
     );
   }
+}
+
+
+/// Baris hasil pencarian pohon BUMN — fungsi murni supaya bisa diuji tanpa
+/// merender layar.
+///
+/// Sebuah node ditampilkan bila namanya cocok ATAU ada keturunannya yang cocok
+/// (leluhur dipertahankan sebagai jalur induk → anak → cucu). Begitu sebuah node
+/// COCOK, SELURUH keturunannya ikut ditampilkan walau namanya sendiri tidak
+/// mengandung kata kunci.
+///
+/// Dulu tidak begitu: anak disaring dengan kata kunci yang sama, jadi mencari nama
+/// sebuah Induk memunculkan Induk itu SENDIRIAN — lengkap dengan chevron yang
+/// terlihat "terbuka" padahal tidak ada apa pun di bawahnya. Persis itu yang
+/// dilaporkan setelah membuat Induk baru beserta Anak barunya (2026-08-20).
+///
+/// [collapsed] berisi node yang ditutup manual; keturunannya tidak diturunkan.
+List<({BumnTreeCustomer node, int depth})> bumnSearchRows(
+    List<BumnTreeCustomer> roots, String query, Set<String> collapsed) {
+  final q = query.toLowerCase();
+  bool matches(BumnTreeCustomer n) => n.name.toLowerCase().contains(q);
+  bool keep(BumnTreeCustomer n) => matches(n) || n.children.any(keep);
+  final out = <({BumnTreeCustomer node, int depth})>[];
+  // underMatch: sudah berada DI DALAM cabang yang cocok, jadi semua isinya relevan.
+  void walk(List<BumnTreeCustomer> nodes, int depth, bool underMatch) {
+    for (final n in nodes) {
+      if (!underMatch && !keep(n)) continue;
+      out.add((node: n, depth: depth));
+      if (collapsed.contains(n.id)) continue;
+      walk(n.children, depth + 1, underMatch || matches(n));
+    }
+  }
+
+  walk(roots, 0, false);
+  return out;
 }

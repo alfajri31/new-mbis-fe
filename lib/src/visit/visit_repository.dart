@@ -4,6 +4,12 @@ import '../network/api_client.dart';
 class VisitModel {
   final String id;
   final String type;
+
+  /// Id customer pemilik kunjungan — alamat rute `/customer/<id>` yang dituju pin
+  /// di Peta Kunjungan. Nullable: kunjungan yang pipeline-nya sudah tak lengkap
+  /// tidak membawanya, dan di kasus itu tautannya disembunyikan alih-alih
+  /// mengarahkan ke id kosong.
+  final String? customerId;
   final String? customerName;
   final String? activityDate;
   final String? notes;
@@ -24,6 +30,7 @@ class VisitModel {
   VisitModel({
     required this.id,
     required this.type,
+    this.customerId,
     this.customerName,
     this.activityDate,
     this.notes,
@@ -45,6 +52,7 @@ class VisitModel {
     return VisitModel(
       id: json['id'] ?? '',
       type: json['type'] ?? '',
+      customerId: json['customerId'],
       customerName: json['customerName'],
       activityDate: json['activityDate'],
       notes: json['notes'],

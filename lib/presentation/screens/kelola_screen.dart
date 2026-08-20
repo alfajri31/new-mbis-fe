@@ -148,7 +148,7 @@ class KelolaScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Kelola'),
+      appBar: const GlassAppBar(title: 'Kelola', contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: ListView(
         padding: EdgeInsets.fromLTRB(

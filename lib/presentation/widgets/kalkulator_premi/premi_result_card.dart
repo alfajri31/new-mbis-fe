@@ -19,7 +19,9 @@ class PremiResultCard extends StatelessWidget {
     required this.tsiIdr,
     required this.minPremiApplied,
     required this.premi,
-  });
+    this.biayaAdmin = 0,
+    num? totalTagihan,
+  }) : totalTagihan = totalTagihan ?? premi + biayaAdmin;
 
   final PremiCategory category;
   final double? rate;
@@ -29,6 +31,13 @@ class PremiResultCard extends StatelessWidget {
   final num tsiIdr;
   final bool minPremiApplied;
   final num premi;
+
+  /// Biaya admin nominal di luar premi (CR-21). 0 = kartu tampil persis seperti
+  /// sebelum CR-21, tanpa baris tambahan.
+  final num biayaAdmin;
+
+  /// Yang ditagihkan: [premi] + [biayaAdmin].
+  final num totalTagihan;
 
   @override
   Widget build(BuildContext context) {
@@ -76,22 +85,29 @@ class PremiResultCard extends StatelessWidget {
           if (showDiscount) _infoRow('Diskon', '${diskon.toStringAsFixed(0)}%'),
           if (minPremiApplied)
             _infoRow('Minimum estimasi premi', AppFormat.rupiah(kBondMinPremi)),
+          // Rincian CR-21: premi dan biaya admin disebut terpisah supaya terlihat
+          // dari mana angka totalnya datang. Tanpa biaya admin, kartu ini tampil
+          // persis seperti sebelumnya — satu baris "Estimasi Premi" saja.
+          if (biayaAdmin > 0) ...[
+            _infoRow('Estimasi Premi', AppFormat.rupiah(premi)),
+            _infoRow('Biaya Admin', AppFormat.rupiah(biayaAdmin)),
+          ],
           const Divider(height: 1, thickness: 1, color: AppColors.border),
           Container(
             padding: const EdgeInsets.all(16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Estimasi Premi',
-                  style: TextStyle(
+                Text(
+                  biayaAdmin > 0 ? 'Total' : 'Estimasi Premi',
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primaryNavy,
                   ),
                 ),
                 Text(
-                  AppFormat.rupiah(premi),
+                  AppFormat.rupiah(totalTagihan),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

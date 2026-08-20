@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../src/nav.dart';
 import '../../utils/format.dart';
+import '../../utils/schedule_status.dart';
 import '../../src/app.dart';
 import '../../src/network/api_client.dart';
 import '../../src/pipeline/pipeline_repository.dart';
 import '../../src/pipeline/pipeline_timeline.dart';
 import '../../src/visit/visit_repository.dart';
 import '../providers/pipeline_activity_provider.dart';
+import '../widgets/max_width_body.dart';
 import '../widgets/state_views.dart';
 import '../widgets/timeline_entry_card.dart';
 // Deferred: the visit-detail sheet renders a mini-map (flutter_map), so it's
@@ -120,7 +122,14 @@ class _PipelineActivityScreenState
             ? const SkeletonList(itemCount: 6)
             : _error != null
             ? ErrorStateView(message: _error!, onRetry: _fetch)
-            : TabBarView(children: [_buildJadwalTab(), _buildRiwayatTab()]),
+            // Tanpa batas lebar, di layar 1920 badge terdampar di ujung kiri dan
+            // tanggal di ujung kanan dengan ~1.700 px kosong di antaranya. Dibatasi
+            // ke kolom yang sama dengan konsol admin supaya kartunya terbaca.
+            : MaxWidthBody(
+                child: TabBarView(
+                  children: [_buildJadwalTab(), _buildRiwayatTab()],
+                ),
+              ),
       ),
     );
   }
@@ -182,6 +191,11 @@ class _PipelineActivityScreenState
 
   Widget _scheduleCard(PipelineScheduleModel s) {
     final isDone = s.status.toUpperCase() == 'DONE';
+    // Badge dari helper bersama, sama seperti kartu di detail pipeline. Sebelumnya
+    // layar ini menulis status MENTAH ("Open"), sehingga satu jadwal yang sama terbaca
+    // "Terlambat" di detail pipeline tetapi "Open" di sini — dua sebutan berbeda untuk
+    // baris yang persis sama.
+    final badge = pipelineScheduleBadge(status: s.status, isoDate: s.date);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -199,18 +213,23 @@ class _PipelineActivityScreenState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: isDone ? AppColors.greenLight : AppColors.navyBg,
+                  color: badge.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(100),
                 ),
-                child: Text(
-                  isDone ? 'Selesai' : 'Open',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isDone
-                        ? AppColors.successGreen
-                        : AppColors.primaryNavy,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(badge.icon, size: 12, color: badge.color),
+                    const SizedBox(width: 4),
+                    Text(
+                      badge.label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: badge.color,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Spacer(),
@@ -244,44 +263,49 @@ class _PipelineActivityScreenState
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            s.title,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.textPrimary,
-              height: 1.3,
-            ),
-          ),
-          if (!isDone) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: () => _markDone(s),
-                icon: const Icon(
-                  Icons.check,
-                  size: 16,
-                  color: AppColors.successGreen,
-                ),
-                label: const Text(
-                  'Tandai selesai',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.successGreen,
-                    fontWeight: FontWeight.bold,
+          // Agenda + aksinya satu baris. Sebelumnya tombol berdiri di barisnya
+          // sendiri rata kanan, jadi ia menggantung jauh dari teks yang dirujuknya.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
                   ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.successGreen),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  minimumSize: Size.zero,
                 ),
               ),
-            ),
-          ],
+              if (!isDone) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _markDone(s),
+                  icon: const Icon(
+                    Icons.check,
+                    size: 16,
+                    color: AppColors.successGreen,
+                  ),
+                  label: const Text(
+                    'Tandai selesai',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.successGreen,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.successGreen),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    minimumSize: Size.zero,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

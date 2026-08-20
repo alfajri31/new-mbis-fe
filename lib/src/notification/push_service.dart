@@ -183,6 +183,7 @@ class PushService {
       'REFERRAL',
       'PIPELINE_WON',
       'PIPELINE_STAGNANT',
+      'POLICY_RENEWAL',
       'SCHEDULE_ASSIGNED',
     };
     if (pipelineTypes.contains(type) && pipelineId != null && pipelineId.isNotEmpty) {

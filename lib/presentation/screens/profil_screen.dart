@@ -5,11 +5,11 @@ import '../../theme/app_theme.dart';
 import '../../src/app.dart';
 import '../../src/config/app_version.dart';
 import '../providers/profil_provider.dart';
-// Ajukan Agen is a one-shot form, so it stays an imperative push (a half-filled
-// form has nothing worth restoring on refresh). The management consoles below
-// are routed instead — see /profil/* sub-routes in router.dart.
+// Semua layar yang terbuka dari sini dirutekan — lihat sub-rute /profil/* di
+// router.dart — supaya refresh di web tidak melemparkan pengguna kembali ke
+// Profil. Termasuk "Ajukan Agen / TPM", yang kini membuka daftar pengajuan RM
+// (/profil/pengajuan-agen), bukan langsung formulirnya.
 import '../../src/auth/roles.dart';
-import 'ajukan_agen_screen.dart';
 import 'ganti_email_screen.dart';
 import 'ganti_password_screen.dart';
 
@@ -116,10 +116,11 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
               const SizedBox(height: AppSpacing.lg),
               if (!isAdmin) ...[
                 _buildAjukanAgenButton(context),
-                _buildManajemenAgenButton(context),
                 _buildReferralButton(context),
                 _buildKelolaPengumumanButton(context),
-                _buildExportMyVisitsButton(context),
+                // "Ekspor Kunjungan Saya" dihapus (CR-13): "Ekspor Data" di bawah
+                // sudah mencakupnya. `/api/export/visits` ter-scope di server, dan
+                // RM tanpa filter mendapat persis kunjungannya sendiri.
                 _buildExportDataButton(context),
                 const SizedBox(height: AppSpacing.lg),
               ],
@@ -351,6 +352,14 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
     );
   }
 
+  /// "Ajukan Agen / TPM" — SATU-SATUNYA pintu RM ke urusan agen.
+  ///
+  /// Dulu ia membuka formulir pendaftaran, dan pintu kedua ("Manajemen Agen")
+  /// membawa RM ke konsol pengelolaan agen sekantornya. Pintu kedua itu dihapus:
+  /// tugas RM berhenti begitu agennya terdaftar, dan agen yang sudah berjalan
+  /// diurus pengelola agen kantor pusat. Karena melengkapi dokumen tahap-2 masih
+  /// pekerjaan RM, tombol ini kini membuka DAFTAR pengajuannya sendiri —
+  /// formulirnya ada di "Ajukan Baru" pada daftar itu.
   Widget _buildAjukanAgenButton(BuildContext context) {
     // Supervisors (KUP/BM/RO/DPJ) can't propose agents/TPM — hide the action.
     final roles = MbisApp.of(context)?.session?.user.roles;
@@ -360,9 +369,7 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
       width: double.infinity,
       height: 52,
       child: OutlinedButton.icon(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AjukanAgenScreen()),
-        ),
+        onPressed: () => context.go('/profil/pengajuan-agen'),
         icon: const Icon(Icons.person_add_alt_1,
             size: 18, color: AppColors.primaryNavy),
         label: const Text('Ajukan Agen / TPM',
@@ -374,63 +381,6 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
           backgroundColor: AppColors.navyBg,
           side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
           shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-        ),
-      ),
-    );
-  }
-
-  /// "Manajemen Agen" — worklist onboarding agen, KHUSUS RM di sini.
-  ///
-  /// Peran lain (ADMIN/BM/RO/KUP) sudah punya kartu yang sama di hub "Kelola",
-  /// jadi tidak diduplikasi di Profil — semua konsol terpusat di Kelola. RM
-  /// tetap di sini karena RM tidak punya tab Kelola.
-  Widget _buildManajemenAgenButton(BuildContext context) {
-    const allowed = {'RM'};
-    final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
-    if (!roles.any(allowed.contains)) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.md),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton.icon(
-          onPressed: () => context.go('/profil/manajemen-agen'),
-          icon: const Icon(Icons.manage_accounts_outlined, size: 18, color: AppColors.primaryNavy),
-          label: const Text('Manajemen Agen',
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryNavy)),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: AppColors.navyBg,
-            side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// "Ekspor Kunjungan Saya" — RM exports only their own visit data (item 11,
-  /// after-piloting feedback). Supervisors/admin already have the full export
-  /// console via Kelola, so this is RM-only.
-  Widget _buildExportMyVisitsButton(BuildContext context) {
-    final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
-    if (!roles.contains('RM')) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.md),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton.icon(
-          onPressed: () => context.go('/profil/export-visit-saya'),
-          icon: const Icon(Icons.file_download_outlined, size: 18, color: AppColors.primaryNavy),
-          label: const Text('Ekspor Kunjungan Saya',
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryNavy)),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: AppColors.navyBg,
-            side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
-          ),
         ),
       ),
     );

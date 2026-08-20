@@ -20,6 +20,12 @@ class RmPerformanceState {
   final String searchTerm;
   final bool connectOnly;
 
+  /// Saringan pipeline dari rincian kartu KPI (CR-06): `NONE` | `ACTIVE` |
+  /// `P3` | `P2` | `P1` | `WON` | `DECLINE`; null = tanpa saringan. Nilainya
+  /// dikirim apa adanya ke server, yang menolak nilai di luar daftar itu — jadi
+  /// hanya kartu yang boleh mengisinya, bukan masukan bebas.
+  final String? pipelineFilter;
+
   final List<RmStat> items;
   final int nextPage;
   final bool last;
@@ -47,6 +53,7 @@ class RmPerformanceState {
     this.branchId,
     this.searchTerm = '',
     this.connectOnly = false,
+    this.pipelineFilter,
     this.items = const [],
     this.nextPage = 0,
     this.last = false,
@@ -70,6 +77,7 @@ class RmPerformanceState {
     Object? branchId = _keep,
     String? searchTerm,
     bool? connectOnly,
+    Object? pipelineFilter = _keep,
     List<RmStat>? items,
     int? nextPage,
     bool? last,
@@ -92,6 +100,9 @@ class RmPerformanceState {
       branchId: branchId == _keep ? this.branchId : branchId as String?,
       searchTerm: searchTerm ?? this.searchTerm,
       connectOnly: connectOnly ?? this.connectOnly,
+      pipelineFilter: pipelineFilter == _keep
+          ? this.pipelineFilter
+          : pipelineFilter as String?,
       items: items ?? this.items,
       nextPage: nextPage ?? this.nextPage,
       last: last ?? this.last,
@@ -184,6 +195,7 @@ class RmPerformanceNotifier extends Notifier<RmPerformanceState> {
         regionId: state.regionId,
         branchId: state.branchId,
         connectOnly: state.connectOnly,
+        pipelineFilter: state.pipelineFilter,
       );
       state = state.copyWith(
         items: [...state.items, ...res.content],
@@ -239,6 +251,19 @@ class RmPerformanceNotifier extends Notifier<RmPerformanceState> {
 
   void onConnectOnlyChanged(bool value) {
     state = state.copyWith(connectOnly: value);
+    resetAndLoad();
+  }
+
+  /// Rincian kartu KPI (CR-06): kartu memasang saringan pipeline pada roster.
+  ///
+  /// Menekan kartu yang saringannya sedang aktif MEMATIKANNYA — perilaku yang
+  /// sama dengan chip tahap di layar Customer, jadi jalan keluarnya selalu ada
+  /// tanpa harus mencari tombol lain. Kartu "Total RM" memanggilnya dengan null,
+  /// yang berarti melepas saringan apa pun.
+  void onPipelineFilterChanged(String? filter) {
+    final next = state.pipelineFilter == filter ? null : filter;
+    if (next == state.pipelineFilter) return;
+    state = state.copyWith(pipelineFilter: next);
     resetAndLoad();
   }
 }

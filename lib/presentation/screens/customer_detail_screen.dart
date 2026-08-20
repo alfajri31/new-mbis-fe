@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../providers/customer_detail_provider.dart';
+import '../providers/assistant_provider.dart' show canUseAssistant;
 import '../../theme/app_theme.dart';
 import '../../src/nav.dart';
 import '../../src/customer/customer_repository.dart';
@@ -469,9 +470,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
     // Ketua KUP ikut: ia RM yang merangkap ketua unit, jadi punya portofolio
     // sendiri. Atasan lain (BM/RO) tetap hanya mengawasi.
-    final canCreatePipeline = roles.contains('RM') ||
-        roles.contains('AGENT') ||
-        roles.contains('KUP');
+    // Gerbang peran DAN gerbang objek. Yang kedua datang dari server: sejak CR-18
+    // RM yang berkantor di Kanwil melihat customer se-Kanwil tetapi hanya boleh
+    // menambah pipeline pada customernya sendiri — tanpa ini ia disodori tombol yang
+    // pasti berujung 403 setelah seluruh formulir pipeline terisi.
+    final canCreatePipeline = (roles.contains('RM') ||
+            roles.contains('AGENT') ||
+            roles.contains('KUP')) &&
+        customer.canAddPipeline;
     final aiRoles = MbisApp.of(context)?.session?.user.roles ?? const [];
     return Column(
       children: [
@@ -482,7 +488,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           npwpDisplay: _formatNpwpDisplay(customer.npwp),
         ),
         CustomerAiCard(
-          canRun: aiRoles.contains('RM'),
+          canRun: canUseAssistant(aiRoles),
           results: _aiResults,
           onRun: _openAssistant,
           onResultTap: _showSavedResult,

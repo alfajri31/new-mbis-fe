@@ -45,7 +45,8 @@ class PrivasiAkunScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Privasi & Akun', showBack: true),
+      appBar: const GlassAppBar(
+          title: 'Privasi & Akun', showBack: true, contentMaxWidth: MaxWidthBody.defaultMaxWidth),
       body: MaxWidthBody(
         child: ListView(
           padding: EdgeInsets.fromLTRB(

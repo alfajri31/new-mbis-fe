@@ -57,6 +57,13 @@ class PipelineInfoCard extends StatelessWidget {
             _buildInfoRow('Peran Tender', pipeline.tenderRole == 'LEADER' ? 'Leader' : 'Member'),
           if (pipeline.policyNumber != null && pipeline.policyNumber!.isNotEmpty)
             _buildInfoRow('No. Polis', pipeline.policyNumber!),
+          // Tanggal terbit polis menentukan bulan realisasi diakui (CR-04), jadi
+          // harus bisa diperiksa ulang RM setelah disimpan. Sebelumnya nilainya
+          // tersimpan tetapi tidak pernah ditampilkan di layar mana pun.
+          if (pipeline.policyIssuedDate != null &&
+              pipeline.policyIssuedDate!.isNotEmpty)
+            _buildInfoRow(
+                'Tanggal Terbit Polis', AppFormat.dateOnly(pipeline.policyIssuedDate)),
           if (pipeline.shareAskrindo != null)
             _buildInfoRow('Share Askrindo', '${pipeline.shareAskrindo!.toStringAsFixed(2)}%'),
           _buildInfoRow('TSI/Plafond Nilai Jaminan', AppFormat.rupiah(pipeline.tsiIdr)),
