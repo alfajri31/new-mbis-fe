@@ -16,15 +16,20 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-# Nama versi naik ke 1.0.1 (keputusan user, 2026-08-07) — update pertama sesudah
-# rilis perdana 1.0.0. versionCode 7: kode tertinggi yang sudah terpakai di Play
-# adalah 6 (diverifikasi di Play Console → Pengujian internal), jadi 7 masih bebas.
-# Kode 7 sempat DIBANGUN 4 Agustus tapi tidak pernah diunggah.
+# Nama versi TETAP 1.0.1 (keputusan user, 2026-08-07 & ditegaskan lagi 2026-08-10)
+# — update pertama sesudah rilis perdana 1.0.0. Isi build ini sama dengan yang
+# disiapkan 7 Agustus, jadi nama versinya tidak ikut naik.
+#
+# versionCode 8: kode 7 ternyata SUDAH diunggah ke Play (dikonfirmasi user
+# 2026-08-10; catatan lama di sini yang menulis "dibangun tapi tidak pernah
+# diunggah" keliru). Kode terpakai berlaku SELAMANYA — tidak bisa dipakai ulang
+# bahkan untuk bundle yang tidak pernah terbit — jadi 8 adalah angka bebas
+# berikutnya. Pengguna tidak pernah melihat versionCode, hanya nama versi.
 #
 # versionCode WAJIB naik tiap unggahan dan tidak pernah bisa dipakai ulang.
 # Bagian sebelum `+` dijaga test/src/config/app_version_drift_test.dart supaya
 # tetap sama dengan versiAplikasi di lib/src/config/app_version.dart.
-version: 1.0.1+7
+version: 1.0.1+8
 
 environment:
   # ^3.12.0 (not 3.12.2) so the Docker build can use the cirruslabs flutter:3.44.0
