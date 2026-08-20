@@ -2,14 +2,20 @@
 ///
 /// The actual numeric rates ("Rate Produk") used to be hardcoded here, sourced
 /// from the internal "Rate Produk" sheet. That data is internal-company
-/// confidential and was taken down after piloting feedback — the rate is now
-/// entered manually by the user in the calculator, per product/category. This
-/// file only keeps the non-confidential catalog structure (product names, LOB
-/// grouping, risk-tier criteria/labels, tenor & jaminan buckets) needed to
-/// label the selection and the resulting invoice.
+/// confidential and was taken down after piloting feedback. This file only keeps
+/// the non-confidential catalog structure (product names, LOB grouping,
+/// risk-tier criteria/labels, tenor & jaminan buckets) needed to label the
+/// selection and the resulting invoice — no rate number ever returns here.
 ///
-/// The calculator applies `premi = TSI × rate/100 × (1 − diskon)` using the
-/// user-entered rate.
+/// Rate-nya sendiri kini datang dari BACKEND (MTR-2): admin mengisinya per slot
+/// lewat kalkulator, tersimpan di tabel `premi_rates`, dan pengguna kalkulator
+/// menerimanya sebagai angka awal yang boleh ditimpa untuk satu perhitungan
+/// (timpaannya tidak disimpan). Slot yang belum diisi admin berperilaku persis
+/// seperti sebelumnya: isian kosong, user mengetik sendiri. Kunci slot dibentuk
+/// di bagian bawah berkas ini.
+///
+/// The calculator applies `premi = TSI × rate/100 × (1 − diskon)` using whatever
+/// rate is in the field — default dari admin maupun ketikan user.
 library;
 
 /// The four top-level buckets a user picks first.
@@ -52,6 +58,16 @@ class RiskModel {
     if (checkedCount >= 2) return 'High Risk';
     if (checkedCount == 0 && hasNormalTier) return 'Normal';
     return 'Low Risk';
+  }
+
+  /// Kode tier untuk kunci slot rate default (MTR-2). Dipisah dari [tierLabel]
+  /// dengan sengaja: label boleh diperbaiki kapan saja demi tampilan, sedangkan
+  /// kode ini ikut membentuk kunci yang tersimpan di backend — mengubahnya
+  /// membuat rate yang sudah diisi admin jadi yatim.
+  String tierCode(int checkedCount) {
+    if (checkedCount >= 2) return 'HIGH';
+    if (checkedCount == 0 && hasNormalTier) return 'NORMAL';
+    return 'LOW';
   }
 }
 
@@ -187,3 +203,54 @@ String bondLob(PremiCategory category) => switch (category) {
       PremiCategory.customBond => 'Custom Bond',
       PremiCategory.asuransiUmum => kCobAsuransiUmum,
     };
+
+// ── Kunci slot rate default (MTR-2) ─────────────────────────────────────────
+//
+// Rate default yang diisi ADMIN disimpan backend per "slot", yaitu satu kombinasi
+// pilihan kalkulator yang punya satu angka rate. Kuncinya dibentuk DI SINI karena
+// katalognya ada di sini juga — backend hanya menyimpan pasangan kunci→rate dan
+// tidak tahu apa-apa soal isi katalog.
+//
+// Bentuk kunci (tiga bagian, dipisah '|', tanpa spasi tambahan):
+//
+//   UMUM|<nama produk>|<HIGH|LOW|NORMAL|->   Asuransi Umum
+//   SURETY|<jaminan>|<tenor>                 Surety Bond
+//   KBG|<jaminan>|<tenor>                    KBG
+//   CUSTOM|-|<tenor>                         Custom Bond
+//
+// Bagian yang tidak berlaku diisi '-' (bukan kosong) supaya jumlah bagiannya
+// selalu tiga — backend memagari bentuk itu, dan kunci berbagian kosong akan
+// ditolak sebagai "slotKey tidak dikenali".
+//
+// PERINGATAN: mengubah teks nama produk / label jaminan / label tenor di berkas ini
+// akan MENGUBAH KUNCI-nya, dan rate default yang sudah diisi admin untuk nama lama
+// jadi yatim (tidak lagi ketemu, tidak error). Kalau suatu saat nama produk direvisi,
+// rate-nya harus diisi ulang untuk nama baru.
+
+/// Kode kategori pada kunci slot. Sengaja dipisah dari [PremiCategoryLabel.label]:
+/// label boleh diperbaiki kapan saja demi tampilan, kode ini tidak boleh berubah.
+extension PremiCategorySlotCode on PremiCategory {
+  String get slotCode => switch (this) {
+        PremiCategory.asuransiUmum => 'UMUM',
+        PremiCategory.suretyBond => 'SURETY',
+        PremiCategory.kbg => 'KBG',
+        PremiCategory.customBond => 'CUSTOM',
+      };
+}
+
+/// Bagian kunci yang kosong. Bukan string kosong — lihat catatan di atas.
+const String kSlotNone = '-';
+
+/// Kunci slot untuk produk Asuransi Umum. [riskTier] hanya diisi untuk produk
+/// ber-[RiskModel] (CAR & MB Industry) — produk lain memakai [kSlotNone].
+String premiSlotKeyUmum(String productName, {String? riskTier}) =>
+    '${PremiCategory.asuransiUmum.slotCode}|$productName|${riskTier ?? kSlotNone}';
+
+/// Kunci slot untuk bond. Surety & KBG memakai jaminan × tenor; Custom Bond hanya
+/// tenor, jadi bagian jaminannya [kSlotNone].
+String premiSlotKeyBond(
+  PremiCategory category, {
+  String? jaminan,
+  required String tenor,
+}) =>
+    '${category.slotCode}|${jaminan ?? kSlotNone}|$tenor';
