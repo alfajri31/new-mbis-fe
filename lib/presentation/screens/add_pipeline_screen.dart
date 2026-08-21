@@ -218,8 +218,9 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
   /// tiap dropdown sudah menyaring nilainya terhadap daftar opsinya sendiri dan
   /// dibangun ulang begitu opsi itu tiba, jadi tak perlu menunggu data referensi.
   ///
-  /// TSI selalu dibaca sebagai rupiah: mata uang asal & kurs tidak disimpan
-  /// backend, jadi yang tersedia untuk diedit hanya nilai rupiah hasil konversi.
+  /// Valuta asal & kurs dipulihkan dari server (V64). Sebelum itu keduanya tidak
+  /// pernah disimpan, jadi pipeline lama tetap tampil sebagai rupiah hasil konversi
+  /// — di situ `currency` null dan IDR/1.0 memang satu-satunya isian yang jujur.
   void _prefillFromExisting() {
     final p = widget.existing;
     if (p == null) return;
@@ -235,14 +236,16 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
     _isTender = p.isTender;
     _namaTender = p.tenderName ?? '';
     _stage = p.stage.isEmpty ? 'P3' : p.stage;
-    _currency = 'IDR';
-    _kurs = 1.0;
-    _kursController.text = '1.0';
-    _tsiOriginal = p.tsiIdr;
-    if (p.tsiIdr > 0) {
+    _currency = p.currency ?? 'IDR';
+    _kurs = p.kurs ?? 1.0;
+    _kursController.text = _trimTrailingZeros(_kurs);
+    // TSI ditampilkan dalam valuta asalnya bila diketahui; kalau tidak, nilai
+    // rupiahnya (kurs 1.0 di atas menjaga _tsiIdr tetap sama saat disimpan ulang).
+    _tsiOriginal = p.tsiOriginal ?? p.tsiIdr;
+    if (_tsiOriginal > 0) {
       // Titik ribuan dipasang manual: inputFormatters hanya jalan saat pemakai
       // mengetik, tidak saat teks controller diisi dari kode.
-      _tsiController.text = _formatCurrency(p.tsiIdr, symbol: '').trim();
+      _tsiController.text = _formatCurrency(_tsiOriginal, symbol: '').trim();
     }
     if (p.ratePremi != null) {
       _ratePremi = p.ratePremi!;
@@ -1789,6 +1792,11 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
       'tocCode': _tocCode,
       'tocName': _tocName,
       'tsiIdr': _tsiIdr,
+      // Asal-usul _tsiIdr (V64): tanpa ketiganya, pipeline valas tersimpan
+      // tak terbedakan dari pipeline rupiah dan tidak bisa dilaporkan.
+      'currency': _currency,
+      'kurs': _kurs,
+      'tsiOriginal': _tsiOriginal,
       'ratePremi': _ratePremi,
       'closingEstimasi': _estimasiClosing?.toIso8601String(),
       'sourceType': _sumberBisnis.isEmpty ? 'DIRECT' : _sumberBisnis,
@@ -1975,6 +1983,11 @@ class _AddPipelineScreenState extends ConsumerState<AddPipelineScreen> {
       'tocName': _tocName,
       'stage': _stage,
       'tsiIdr': _tsiIdr,
+      // Asal-usul _tsiIdr (V64): tanpa ketiganya, pipeline valas tersimpan
+      // tak terbedakan dari pipeline rupiah dan tidak bisa dilaporkan.
+      'currency': _currency,
+      'kurs': _kurs,
+      'tsiOriginal': _tsiOriginal,
       'ratePremi': _ratePremi,
       'premi': _totalPremiIdr.toString(),
       'closingEstimasi': _estimasiClosing!.toIso8601String(),
