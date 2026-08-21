@@ -162,8 +162,9 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   /// rate default. Gerbang di klien ini hanya menghindarkan pintu yang pasti
   /// tertutup; yang menentukan tetap server (`/api/admin/premi-rates` → 403).
   bool get _isAdmin =>
-      (MbisApp.of(context)?.session?.user.roles ?? const <String>[])
-          .contains('ADMIN');
+      (MbisApp.of(context)?.session?.user.roles ?? const <String>[]).contains(
+        'ADMIN',
+      );
 
   /// Kunci slot rate untuk pilihan saat ini; null bila pilihan belum lengkap.
   /// Untuk CAR & MB Industry kuncinya ikut berubah saat kriteria risiko dicentang
@@ -273,7 +274,9 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   /// TSI: karakter non-angka dibuang, supaya "25.000" yang diketik user tidak
   /// diam-diam terbaca 25.
   num get _biayaAdmin =>
-      num.tryParse(_biayaAdminController.text.replaceAll(RegExp(r'[^\d]'), '')) ??
+      num.tryParse(
+        _biayaAdminController.text.replaceAll(RegExp(r'[^\d]'), ''),
+      ) ??
       0;
 
   /// Yang benar-benar ditagihkan ke nasabah: premi + biaya admin (CR-21).
@@ -287,8 +290,9 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   bool get _canExport => _rate != null && _tsiOriginal > 0 && !_belowMinRate;
 
   // Product breakdown for the invoice (COB → LOB → ToC seperti pipeline).
-  String get _breakdownCob =>
-      _category == PremiCategory.asuransiUmum ? kCobAsuransiUmum : kCobSuretyship;
+  String get _breakdownCob => _category == PremiCategory.asuransiUmum
+      ? kCobAsuransiUmum
+      : kCobSuretyship;
 
   String get _breakdownLob => _category == PremiCategory.asuransiUmum
       ? (_product?.lob ?? '-')
@@ -410,10 +414,12 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
   /// Pick a customer from this RM's list, then render & preview the proforma PDF.
   Future<void> _exportPdf() async {
     if (!_canExport) {
-      _snack(_belowMinRate
-          ? 'Rate di bawah batas bawah ${_rateText(_minRate!)}%. '
-              'Naikkan rate dulu sebelum ekspor.'
-          : 'Lengkapi produk & TSI dulu sebelum ekspor.');
+      _snack(
+        _belowMinRate
+            ? 'Rate di bawah batas bawah ${_rateText(_minRate!)}%. '
+                  'Naikkan rate dulu sebelum ekspor.'
+            : 'Lengkapi produk & TSI dulu sebelum ekspor.',
+      );
       return;
     }
     final session = MbisApp.of(context)?.session;
@@ -526,7 +532,9 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(kalkulatorPremiProvider); // rebuild saat flag loading kurs berubah
+    ref.watch(
+      kalkulatorPremiProvider,
+    ); // rebuild saat flag loading kurs berubah
     return Scaffold(
       backgroundColor: AppColors.bgScreen,
       appBar: const BackAppBar(title: 'Kalkulator Premi'),
@@ -565,8 +573,10 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
       child: ElevatedButton.icon(
         onPressed: _canExport ? _exportPdf : null,
         icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
-        label: const Text('Ekspor PDF (Proforma Invoice)',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        label: const Text(
+          'Ekspor PDF (Proforma Invoice)',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryNavy,
           foregroundColor: Colors.white,
@@ -1029,7 +1039,10 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
         decoration: InputDecoration(
           hintText: enabled ? '0.000' : 'Pilih produk dulu',
-          hintStyle: const TextStyle(color: AppColors.grayStage, fontSize: 12.5),
+          hintStyle: const TextStyle(
+            color: AppColors.grayStage,
+            fontSize: 12.5,
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         ),
@@ -1053,29 +1066,36 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
     // Pelanggaran batas bawah didahulukan: selama ini menyala, tidak ada yang lebih
     // penting untuk dibaca di sini.
     if (_belowMinRate) {
-      rows.add(_rateNote(
-        Icons.block_outlined,
-        AppColors.errorRed,
-        'Rate di bawah batas bawah ${_rateText(_minRate!)}%. Ekspor dokumen '
-            'dinonaktifkan sampai rate dinaikkan.',
-        trailing: TextButton(
-          onPressed: () => setState(
-              () => _rateController.text = _rateText(_minRate!)),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      rows.add(
+        _rateNote(
+          Icons.block_outlined,
+          AppColors.errorRed,
+          'Rate di bawah batas bawah ${_rateText(_minRate!)}%. Ekspor dokumen '
+          'dinonaktifkan sampai rate dinaikkan.',
+          trailing: TextButton(
+            onPressed: () =>
+                setState(() => _rateController.text = _rateText(_minRate!)),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Pakai batas bawah',
+              style: TextStyle(fontSize: 12),
+            ),
           ),
-          child: const Text('Pakai batas bawah', style: TextStyle(fontSize: 12)),
         ),
-      ));
+      );
     } else if (_minRate != null) {
-      rows.add(_rateNote(
-        Icons.south_east,
-        AppColors.grayStage,
-        'Batas bawah ${_rateText(_minRate!)}% — rate boleh dinaikkan, tidak boleh '
-            'diturunkan di bawah angka ini.',
-      ));
+      rows.add(
+        _rateNote(
+          Icons.south_east,
+          AppColors.grayStage,
+          'Batas bawah ${_rateText(_minRate!)}% — rate boleh dinaikkan, tidak boleh '
+          'diturunkan di bawah angka ini.',
+        ),
+      );
     }
 
     // Selama pelanggaran batas bawah menyala, keterangan asal-usul angka ditahan:
@@ -1083,73 +1103,95 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
     // mengaburkannya.
     if (!_belowMinRate) {
       if (def != null && _rateOverridden) {
-        rows.add(_rateNote(
-          Icons.edit_outlined,
-          AppColors.secondaryOrange,
-          'Diubah dari default ${_rateText(def.ratePercent)}% — berlaku untuk '
-              'perhitungan ini saja, tidak tersimpan.',
-          trailing: TextButton(
-            onPressed: () => setState(_applyDefaultRate),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        rows.add(
+          _rateNote(
+            Icons.edit_outlined,
+            AppColors.secondaryOrange,
+            'Default ${_rateText(def.ratePercent)}%',
+            trailing: TextButton(
+              onPressed: () => setState(_applyDefaultRate),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'Pakai default',
+                style: TextStyle(fontSize: 12),
+              ),
             ),
-            child: const Text('Pakai default', style: TextStyle(fontSize: 12)),
           ),
-        ));
+        );
       } else if (def != null) {
-        final oleh =
-            (def.updatedByName ?? '').isEmpty ? '' : ' oleh ${def.updatedByName}';
-        rows.add(_rateNote(
-          Icons.verified_outlined,
-          AppColors.successGreen,
-          'Rate default dari admin · diperbarui '
-              '${AppFormat.dateOnly(def.updatedAt)}$oleh.',
-        ));
+        final oleh = (def.updatedByName ?? '').isEmpty
+            ? ''
+            : ' oleh ${def.updatedByName}';
+        rows.add(
+          _rateNote(
+            Icons.verified_outlined,
+            AppColors.successGreen,
+            'Rate default dari admin · diperbarui '
+            '${AppFormat.dateOnly(def.updatedAt)}$oleh.',
+          ),
+        );
       } else if (_isAdmin) {
-        rows.add(_rateNote(
-          Icons.info_outline,
-          AppColors.grayStage,
-          'Belum ada rate default untuk pilihan ini.',
-        ));
+        rows.add(
+          _rateNote(
+            Icons.info_outline,
+            AppColors.grayStage,
+            'Belum ada rate default untuk pilihan ini.',
+          ),
+        );
       }
     }
 
     if (_isAdmin) {
-      rows.add(Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Wrap(
-          children: [
-            TextButton.icon(
-              onPressed: _editRateDefault,
-              icon: const Icon(Icons.tune, size: 16),
-              label: Text(
-                def == null
-                    ? 'Atur rate default & batas bawah'
-                    : 'Ubah rate default & batas bawah',
-                style: const TextStyle(fontSize: 12.5),
-              ),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primaryNavy),
-            ),
-            if (def != null)
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Wrap(
+            children: [
               TextButton.icon(
-                onPressed: _clearRateDefault,
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label:
-                    const Text('Hapus default', style: TextStyle(fontSize: 12.5)),
-                style: TextButton.styleFrom(foregroundColor: AppColors.errorRed),
+                onPressed: _editRateDefault,
+                icon: const Icon(Icons.tune, size: 16),
+                label: Text(
+                  def == null
+                      ? 'Atur rate default & batas bawah'
+                      : 'Ubah rate default & batas bawah',
+                  style: const TextStyle(fontSize: 12.5),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryNavy,
+                ),
               ),
-          ],
+              if (def != null)
+                TextButton.icon(
+                  onPressed: _clearRateDefault,
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text(
+                    'Hapus default',
+                    style: TextStyle(fontSize: 12.5),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.errorRed,
+                  ),
+                ),
+            ],
+          ),
         ),
-      ));
+      );
     }
 
     if (rows.isEmpty) return const [];
     return [const SizedBox(height: 8), ...rows];
   }
 
-  Widget _rateNote(IconData icon, Color color, String text, {Widget? trailing}) {
+  Widget _rateNote(
+    IconData icon,
+    Color color,
+    String text, {
+    Widget? trailing,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Row(
@@ -1160,8 +1202,10 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
           Expanded(
             child: Text(
               text,
-              style:
-                  const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
           ?trailing,
@@ -1202,9 +1246,13 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_slotLabel,
-                    style: const TextStyle(
-                        fontSize: 12.5, color: AppColors.textSecondary)),
+                Text(
+                  _slotLabel,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 14),
                 _dialogRateField(
                   controller: rateCtrl,
@@ -1219,17 +1267,23 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
                 ),
                 if (error != null) ...[
                   const SizedBox(height: 10),
-                  Text(error!,
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.errorRed)),
+                  Text(
+                    error!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.errorRed,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 12),
                 const Text(
                   'Rate default tampil sebagai angka awal untuk SEMUA pengguna '
                   'Kalkulator Premi. Batas bawah menolak rate yang lebih rendah, '
                   'di aplikasi maupun di server.',
-                  style:
-                      TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -1251,13 +1305,19 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
                     setDialogState(() => error = 'Batas bawah bukan angka.');
                     return;
                   }
-                  if (rate < 0 || rate > 100 || (min != null && (min < 0 || min > 100))) {
-                    setDialogState(() => error = 'Rate harus antara 0% dan 100%.');
+                  if (rate < 0 ||
+                      rate > 100 ||
+                      (min != null && (min < 0 || min > 100))) {
+                    setDialogState(
+                      () => error = 'Rate harus antara 0% dan 100%.',
+                    );
                     return;
                   }
                   if (min != null && rate < min) {
-                    setDialogState(() => error =
-                        'Rate default tidak boleh di bawah batas bawah.');
+                    setDialogState(
+                      () => error =
+                          'Rate default tidak boleh di bawah batas bawah.',
+                    );
                     return;
                   }
                   Navigator.pop(ctx, (rate: rate, min: min));
@@ -1278,13 +1338,16 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
       apiClient: ApiClient(session: MbisApp.of(context)?.session),
     );
     try {
-      await ref.read(kalkulatorPremiProvider.notifier).saveRateDefault(
+      await ref
+          .read(kalkulatorPremiProvider.notifier)
+          .saveRateDefault(
             repo,
             slotKey: slot,
             ratePercent: hasil.rate,
             minRatePercent: hasil.min,
-            productName:
-                _category == PremiCategory.asuransiUmum ? _product?.name : null,
+            productName: _category == PremiCategory.asuransiUmum
+                ? _product?.name
+                : null,
             riskTier: _product?.risk?.tierCode(_checkedCriteria.length),
             jaminan: _jaminanIdx == null ? null : kBondJaminan[_jaminanIdx!],
             tenor: _tenorIdx == null ? null : kBondTenors[_tenorIdx!],
@@ -1309,10 +1372,14 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
         const SizedBox(height: 4),
         TextField(
           controller: controller,
@@ -1321,8 +1388,10 @@ class _KalkulatorPremiScreenState extends ConsumerState<KalkulatorPremiScreen> {
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle:
-                const TextStyle(fontSize: 11.5, color: AppColors.grayStage),
+            hintStyle: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.grayStage,
+            ),
             isDense: true,
             border: const OutlineInputBorder(),
           ),
@@ -1526,9 +1595,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     // to the very top of the screen while searching.
     final mq = MediaQuery.of(context);
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: mq.viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
       child: SizedBox(
         height: (mq.size.height - mq.viewInsets.bottom) * 0.72,
         child: Column(
@@ -1640,7 +1707,9 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.72,
         child: Column(
@@ -1658,11 +1727,14 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
               padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Pilih Nasabah',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary)),
+                child: Text(
+                  'Pilih Nasabah',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ),
             ),
             Padding(
@@ -1698,18 +1770,17 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
                   if (snap.hasError || !snap.hasData) {
                     return ErrorStateView(
                       message: 'Gagal memuat nasabah',
-                      onRetry: () async =>
-                          setState(() {
-                            _future = widget.repo.getCustomers();
-                          }),
+                      onRetry: () async => setState(() {
+                        _future = widget.repo.getCustomers();
+                      }),
                     );
                   }
                   final q = _query.trim().toLowerCase();
                   final list = q.isEmpty
                       ? snap.data!
                       : snap.data!
-                          .where((c) => c.name.toLowerCase().contains(q))
-                          .toList();
+                            .where((c) => c.name.toLowerCase().contains(q))
+                            .toList();
                   if (list.isEmpty) {
                     return const EmptyStateView(
                       icon: Icons.person_search,
@@ -1721,18 +1792,29 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
                     padding: const EdgeInsets.only(bottom: 12),
                     itemCount: list.length,
                     separatorBuilder: (_, _) => const Divider(
-                        height: 1, thickness: 1, color: AppColors.border),
+                      height: 1,
+                      thickness: 1,
+                      color: AppColors.border,
+                    ),
                     itemBuilder: (context, i) {
                       final c = list[i];
                       return ListTile(
                         dense: true,
-                        title: Text(c.name,
-                            style: const TextStyle(
-                                fontSize: 13.5, color: AppColors.textPrimary)),
+                        title: Text(
+                          c.name,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
                         subtitle: c.entityCategory != null
-                            ? Text(c.entityCategory!,
+                            ? Text(
+                                c.entityCategory!,
                                 style: const TextStyle(
-                                    fontSize: 11, color: AppColors.textSecondary))
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              )
                             : null,
                         onTap: () => Navigator.of(context).pop(c),
                       );
