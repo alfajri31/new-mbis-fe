@@ -180,6 +180,13 @@ class PipelineDetailModel {
   final String? lobName;
   final String? tocCode;
   final double tsiIdr;
+  /// Valuta asal + kurs + TSI sebelum konversi (V64). Layar edit WAJIB memakainya:
+  /// tanpa itu pipeline USD yang dibuka lalu disimpan lagi tertimpa jadi IDR, karena
+  /// form mengirim currency/kurs apa pun yang sedang tampil. Null pada pipeline yang
+  /// dibuat sebelum V64 — artinya "tidak diketahui", bukan "IDR".
+  final String? currency;
+  final double? kurs;
+  final double? tsiOriginal;
   final double? ratePremi;
   final double? potensiPremi;
   final double? realisasiIdr;
@@ -231,6 +238,9 @@ class PipelineDetailModel {
     this.lobName,
     this.tocCode,
     required this.tsiIdr,
+    this.currency,
+    this.kurs,
+    this.tsiOriginal,
     this.ratePremi,
     this.potensiPremi,
     this.realisasiIdr,
@@ -273,6 +283,10 @@ class PipelineDetailModel {
       lobName: json['lobName'],
       tocCode: json['tocCode'],
       tsiIdr: (json['tsiIdr'] ?? 0).toDouble(),
+      currency: json['currency'],
+      kurs: json['kurs'] != null ? (json['kurs'] as num).toDouble() : null,
+      tsiOriginal:
+          json['tsiOriginal'] != null ? (json['tsiOriginal'] as num).toDouble() : null,
       ratePremi: json['ratePremi'] != null ? (json['ratePremi'] as num).toDouble() : null,
       potensiPremi: json['potensiPremi'] != null ? (json['potensiPremi'] as num).toDouble() : null,
       realisasiIdr: json['realisasiIdr'] != null ? (json['realisasiIdr'] as num).toDouble() : null,

@@ -26,10 +26,15 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # bahkan untuk bundle yang tidak pernah terbit — jadi 8 adalah angka bebas
 # berikutnya. Pengguna tidak pernah melihat versionCode, hanya nama versi.
 #
+# versionCode 9: kode 8 pun sudah terunggah ke Play sebagai 1.0.1 (10 Agustus
+# 2026, status "Tidak aktif"). Kode terpakai tidak bisa dipakai ulang meski
+# bundle-nya tidak pernah terbit, jadi 9 adalah angka bebas berikutnya. Nama
+# versi tetap 1.0.1 karena isi rilis ini masih update yang sama.
+#
 # versionCode WAJIB naik tiap unggahan dan tidak pernah bisa dipakai ulang.
 # Bagian sebelum `+` dijaga test/src/config/app_version_drift_test.dart supaya
 # tetap sama dengan versiAplikasi di lib/src/config/app_version.dart.
-version: 1.0.1+8
+version: 1.0.1+9
 
 environment:
   # ^3.12.0 (not 3.12.2) so the Docker build can use the cirruslabs flutter:3.44.0
