@@ -46,9 +46,17 @@ pipeline {
         HARBOR_PROJECT = "askrindo"
         DOCKER_AUTH_ID = "dockerhub-auth"
 
-        // Swarm service to update. Deployed standalone rather than under a stack, so there is no
-        // `<stack>_` prefix — if it is later moved into a stack this becomes `<stack>_fe-new-mbis`.
-        SWARM_SERVICE = "fe-new-mbis"
+        // Swarm service to update, per environment — the two hosts do NOT use the same name.
+        //
+        // Dev was created by us as a standalone service, hence the bare `fe-new-mbis` with no
+        // `<stack>_` prefix. Prod already runs this app under a name chosen before this pipeline
+        // existed, so it is supplied by the PROD_SWARM_SERVICE_MBIS global rather than guessed.
+        //
+        // Getting this right is what makes a prod deploy a zero-downtime image swap. Pointing at
+        // the WRONG name does not fail safely: the pre-flight would report "does not exist" and
+        // invite you to create a second service, which then fights the running one for the
+        // published port. Confirm with `docker service ls` on the host, never from memory.
+        DEV_SWARM_SERVICE = "fe-new-mbis"
 
         // Keep in sync with the Dockerfile's `ARG FLUTTER_VERSION`. cirruslabs lags patch releases:
         // the team's local SDK is 3.44.3 (Dart 3.12.2) but only 3.44.0 is published, which is why
@@ -127,6 +135,14 @@ pipeline {
                         env.BACKEND_PORT = "3023"
                         env.PUBLISH_PORT = "${env.PROD_PUBLISH_PORT}"
 
+                        // No default on purpose. A guessed prod service name is worse than a failed
+                        // build: it reads as "not deployed yet" and leads to creating a duplicate
+                        // service beside the one currently serving users.
+                        env.SWARM_SERVICE = env.PROD_SWARM_SERVICE_MBIS?.trim() ?: ''
+                        if (!env.SWARM_SERVICE) {
+                            error "Aborting build: PROD_SWARM_SERVICE_MBIS is unset. Run `docker service ls` on ${env.PROD_SSH_MBIS_HOST} and set the global to the name of the service already serving this app — do NOT create a second one."
+                        }
+
                         env.ENTRA_TENANT_ID = env.PROD_ENTRA_TENANT_ID ?: ''
                         env.ENTRA_CLIENT_ID = env.PROD_ENTRA_CLIENT_ID ?: ''
                     } else if (env.BRANCH_NAME == 'testing') {
@@ -149,6 +165,7 @@ pipeline {
                         env.BACKEND_HOST = "${env.REMOTE_HOST}"
                         env.BACKEND_PORT = "${env.DEV_BACKEND_PORT}"
                         env.PUBLISH_PORT = "${env.DEV_PUBLISH_PORT}"
+                        env.SWARM_SERVICE = env.DEV_SWARM_SERVICE_MBIS?.trim() ?: env.DEV_SWARM_SERVICE
 
                         env.ENTRA_TENANT_ID = env.DEV_ENTRA_TENANT_ID ?: ''
                         env.ENTRA_CLIENT_ID = env.DEV_ENTRA_CLIENT_ID ?: ''
@@ -347,7 +364,18 @@ pipeline {
                     if [ \$? -eq 0 ]; then
                         if ! docker service inspect ${SWARM_SERVICE} >/dev/null 2>&1; then
                             echo "ERROR: Swarm service ${SWARM_SERVICE} does not exist on this host."
-                            echo "It is created ONCE by hand: ports and networks are an ops decision, not this pipeline's job."
+                            echo ""
+                            echo "STOP AND CHECK FIRST: docker service ls"
+                            echo "If another service is ALREADY serving this app under a different name, do NOT create"
+                            echo "a second one — the new service would fight the running one for the published port and"
+                            echo "take the app down. Point the pipeline at the existing name instead:"
+                            echo "  branch main    -> Jenkins global PROD_SWARM_SERVICE_MBIS"
+                            echo "  branch testing -> Jenkins global DEV_SWARM_SERVICE_MBIS"
+                            echo "Deploying onto the existing service is also the zero-downtime path: Swarm rolls the"
+                            echo "image over in place, no port ever changes hands."
+                            echo ""
+                            echo "Only if nothing serves this app yet, create it. Ports and networks are an ops"
+                            echo "decision, not this pipeline's job:"
                             echo "No --network flag is needed. The /api/ proxy reaches the backend at"
                             echo "MBIS_BACKEND_HOST:MBIS_BACKEND_PORT, which is a published host port, so the default"
                             echo "network suffices. Add --network <overlay> only if the backend is itself a Swarm"
