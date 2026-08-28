@@ -57,7 +57,21 @@ ARG ENTRA_CLIENT_ID=
 #
 # Sengaja diletakkan SETELAH `flutter pub get`: nilainya berubah tiap ganti target, dan
 # ARG di atas COPY pubspec akan membatalkan cache dependensi setiap kali.
-ARG API_URL=
+#
+# Default `/v2` = topologi PROD (lihat penjelasan panjang di atas). Jenkinsfile menimpanya
+# per-branch: `main` mengirim URL prod absolut, `testing` mengirim NILAI KOSONG supaya
+# staging kembali ke same-origin dan blok /api/ di nginx.conf yang mem-proxy ke backend.
+ARG API_URL=/v2
+
+# Prefix path tempat bundle dilayani, HARUS diakhiri garis miring.
+# PROD: `/app/` karena reverse proxy host membagi satu domain per prefix path.
+# STAGING/DEV: `/` karena bundle dilayani di root origin-nya sendiri.
+# Salah nilai di sini = index.html memuat main.dart.js dari path yang tidak ada -> layar putih,
+# tanpa error di log nginx selain 404 aset.
+ARG BASE_HREF=/app/
+
+# `dev` | `staging` | `prod` — dibaca AppConfig.env (lib/src/config/app_config.dart).
+ARG APP_ENV=prod
 
 # --wasm: compile Dart to WasmGC (skwasm renderer) instead of JavaScript. The app
 # runs as compiled WebAssembly -> no multi-MB main.dart.js to parse/JIT on the main
@@ -71,8 +85,9 @@ ARG API_URL=
 # our own nginx instead of pulling from gstatic.com on every cold start -> removes a
 # third-party DNS+TLS round-trip and lets the files be compressed & hard-cached.
 RUN flutter build web --wasm --release --no-web-resources-cdn \
-    --base-href /app/ \
-    --dart-define=API_URL=/v2 \
+    --base-href "$BASE_HREF" \
+    --dart-define=APP_ENV=$APP_ENV \
+    --dart-define=API_URL=$API_URL \
     --dart-define=ENTRA_TENANT_ID=$ENTRA_TENANT_ID \
     --dart-define=ENTRA_CLIENT_ID=$ENTRA_CLIENT_ID
 
