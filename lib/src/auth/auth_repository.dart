@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../network/ssl_pinning.dart';
 import 'auth_session.dart';
+import 'session_store.dart';
 
 /// The verified Microsoft account has no MBIS mapping yet and has been queued for
 /// admin review (backend returns HTTP 202). The login screen shows a "waiting for
@@ -31,12 +32,21 @@ class AuthRepository {
     required this.sharedPreferences,
     FlutterSecureStorage? secureStorage,
     http.Client? httpClient,
-  })  : secureStorage = secureStorage ?? const FlutterSecureStorage(),
+    SessionStore? sessionStore,
+  })  : _sessionStore = sessionStore ??
+            createSessionStore(
+              preferences: sharedPreferences,
+              secureStorage: secureStorage ?? const FlutterSecureStorage(),
+            ),
         _http = httpClient ?? AppHttpClient.instance;
 
-  static const String _sessionKey = 'mbis.auth.session';
   final SharedPreferences sharedPreferences;
-  final FlutterSecureStorage secureStorage;
+
+  /// Penyimpanan sesi. Bukan `FlutterSecureStorage` langsung: di web pada origin HTTP
+  /// polos paket itu melempar `only works in secure contexts`, sehingga pemilihan
+  /// implementasinya dipusatkan di [createSessionStore] — termasuk pagar yang mencegah
+  /// build prod ikut memakai jalur fallback-nya.
+  final SessionStore _sessionStore;
 
   /// Klien bersama dari [AppHttpClient] — BUKAN fungsi `http.post` tingkat-atas.
   ///
@@ -56,17 +66,10 @@ class AuthRepository {
   Uri _endpoint(String path) => Uri.parse('${AppConfig.apiBaseUrl}/api/auth$path');
 
   Future<AuthSession?> loadSession() async {
-    var raw = await secureStorage.read(key: _sessionKey);
-    if (raw == null || raw.isEmpty) {
-      // Migrasi sekali jalan: build lama menyimpan sesi (termasuk refresh token)
-      // sebagai teks biasa di SharedPreferences. Pindahkan ke secure storage lalu
-      // hapus salinan plaintext-nya, tanpa memaksa user login ulang.
-      final legacy = sharedPreferences.getString(_sessionKey);
-      if (legacy == null || legacy.isEmpty) return null;
-      await secureStorage.write(key: _sessionKey, value: legacy);
-      await sharedPreferences.remove(_sessionKey);
-      raw = legacy;
-    }
+    // Migrasi dari build lama yang menyimpan sesi sebagai teks biasa kini ditangani
+    // SecureSessionStore.read().
+    final raw = await _sessionStore.read();
+    if (raw == null || raw.isEmpty) return null;
     try {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       return AuthSession.fromJson(map);
@@ -76,14 +79,11 @@ class AuthRepository {
   }
 
   Future<void> saveSession(AuthSession session) async {
-    final raw = jsonEncode(session.toJson());
-    await secureStorage.write(key: _sessionKey, value: raw);
+    await _sessionStore.write(jsonEncode(session.toJson()));
   }
 
   Future<void> clearSession() async {
-    await secureStorage.delete(key: _sessionKey);
-    // Defensif: bersihkan juga sisa salinan plaintext dari build lama.
-    await sharedPreferences.remove(_sessionKey);
+    await _sessionStore.delete();
   }
 
   Future<AuthSession> login({required String identifier, required String password}) async {
