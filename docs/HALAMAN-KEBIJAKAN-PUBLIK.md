@@ -36,12 +36,23 @@ dikerjakan di sisi server**.
 | Layar (in-app) | `presentation/screens/kebijakan_privasi_screen.dart` | `presentation/screens/hapus_akun_screen.dart` |
 | Berkas HTML publik (turunan) | `web/kebijakan-privasi.html` | `web/hapus-akun.html` |
 | **URL publik (prod)** | `https://mbis.askrindo.co.id/app/kebijakan-privasi` | `https://mbis.askrindo.co.id/app/hapus-akun` |
-| URL publik (staging) | `https://mbis.askrindo.net/kebijakan-privasi` | `https://mbis.askrindo.net/hapus-akun` |
+| URL non-prod (internal) | `http://10.100.20.53:3014/kebijakan-privasi` | `http://10.100.20.53:3014/hapus-akun` |
 | Rute Flutter publik | `/kebijakan-privasi` | `/hapus-akun` |
 | Rute dalam aplikasi | `/profil/privasi/kebijakan` (+ salinan shell Agen) | dibuka dari Privasi & Akun dan dari kebijakan bagian 11 |
 
 Tata letak versi in-app dirender `presentation/widgets/policy_view.dart`; rute dan
 konstantanya di `lib/src/legal/legal_routes.dart`.
+
+> **Yang boleh masuk Play Console hanya baris prod.** Domain staging `mbis.askrindo.net`
+> tidak berlaku sejak 28 Agustus 2026 dan digantikan server internal dev, yang **tidak
+> terjangkau dari luar jaringan kantor**. Play mensyaratkan kedua halaman ini bisa dibuka
+> **tanpa memasang aplikasi**, dan pemeriksanya datang dari internet — URL non-prod di
+> tabel hanya untuk verifikasi manual saat pengembangan.
+>
+> Perbedaan prefiks itu bukan salah ketik: prod memakai `/app/` karena reverse proxy host
+> membagi satu domain per prefiks path lalu **membuang** prefiksnya, sedangkan build
+> non-prod dilayani di root (`--base-href /`). Sumber kebenarannya `BASE_HREF` per-branch
+> di `Jenkinsfile`.
 
 ### Kenapa HTML statis lagi, dan kenapa di frontend
 

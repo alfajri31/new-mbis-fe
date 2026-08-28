@@ -29,9 +29,11 @@ COPY . .
 ARG ENTRA_TENANT_ID=
 ARG ENTRA_CLIENT_ID=
 
-# Base URL backend. KOSONG = perilaku lama: web memanggil '/api' di origin-nya sendiri dan
-# nginx (stage 2) mem-proxy-nya ke backend, sehingga ganti domain tidak perlu rebuild. Itu
-# yang masih dipakai staging (mbis.askrindo.net) dan wajib tetap begitu.
+# Base URL backend. KOSONG = web memanggil '/api' di origin-nya sendiri dan nginx (stage 2)
+# mem-proxy-nya ke backend, sehingga pindah host/port tidak perlu rebuild. Itu yang dipakai
+# SELURUH non-prod, dan sejak 2026-08-28 itu berarti server internal dev
+# (web http://10.100.20.53:3014, backend http://10.100.20.53:3013). Domain staging lama
+# `mbis.askrindo.net` sudah tidak berlaku.
 #
 # PROD memakai topologi lain: satu domain dibagi per prefix path oleh reverse proxy host
 # (/etc/nginx/sites-available/mbis), BUKAN per hostname —

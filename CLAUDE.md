@@ -22,3 +22,31 @@ Skill: [`../.claude/skills/`](../.claude/skills/).
 - **CI/CD**: manual; iOS via cloud macOS (Codemagic). Bundle id `com.example.mbis` (placeholder). Lihat `ci-pipeline`.
 
 **Pagar**: token di secure storage; PII jangan di-log; migrasi wajib behavior-preserving (UI/alur sama sebelum & sesudah).
+
+**Penyimpanan sesi & HTTP di lingkungan internal (keputusan, 2026-08-28).** Deployment
+non-prod **memakai HTTP** — server internal, diakses lewat IP (mis. dev `http://10.100.20.53:3014`),
+tanpa TLS dan tanpa rencana menambahkannya. Konsekuensinya nyata: `flutter_secure_storage`
+v10 di web memakai `crypto.subtle`, yang browser hanya sediakan di *secure context*
+(HTTPS atau `localhost`), sehingga di origin itu login berhasil lalu **gagal saat
+menyimpan sesi**. Karena itu `lib/src/auth/session_store.dart` memilih penyimpanan saat
+runtime, bukan memaksa satu jalur:
+
+- **web + bukan secure context + `APP_ENV` ∈ {`dev`,`staging`}** → `localStorage` (teks biasa);
+- selain itu → secure storage, termasuk **seluruh build prod**, seluruh build native
+  (Android/iOS), dan origin non-prod mana pun yang kebetulan sudah HTTPS/`localhost`.
+
+Gerbang `APP_ENV`-nya **allowlist**, bukan `!= prod`, supaya nilai tak dikenal (salah
+ketik `production`, atau `--dart-define` yang lupa dipasang — default-nya `dev`)
+**gagal-tertutup**: aplikasi tetap memakai secure storage dan melempar error yang
+kelihatan, bukan diam-diam menyimpan refresh token 7 hari sebagai teks biasa.
+
+Pagar "token di secure storage" **tetap berlaku penuh untuk prod**. Jangan longgarkan
+gerbang ini demi kenyamanan, dan jangan hapus pemeriksaan secure-context-nya walau kini
+semua non-prod memakai HTTP: itulah yang membuat fallback **mati sendiri** begitu sebuah
+origin naik ke HTTPS (atau dibuka lewat tunnel `http://localhost:<port>`), tanpa perlu
+ubah kode maupun variabel baru.
+
+> **Domain staging lama `mbis.askrindo.net` tidak berlaku sejak 2026-08-28.** Non-prod =
+> server internal dev: web `http://10.100.20.53:3014`, backend `http://10.100.20.53:3013`.
+> Dokumen di `docs/` yang menyebut domain itu adalah laporan bertanggal — dibiarkan apa
+> adanya sebagai catatan sejarah, jangan dijadikan acuan keadaan sekarang.
