@@ -108,11 +108,34 @@ RUN find build/web -type f -name '*.symbols' -delete && \
 # Stage 2: Serve the static bundle with nginx and reverse-proxy /api -> backend.
 # ---------------------------------------------------------------------------
 FROM nginx:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# nginx.conf is an envsubst TEMPLATE (see its header). The stock nginx entrypoint renders
+# /etc/nginx/templates/*.template into /etc/nginx/conf.d/ on every start, so the backend the
+# /api/ proxy points at is a CONTAINER env var — changing it is a `docker service update
+# --env-add`, not a rebuild of the whole Flutter bundle.
+#
+# NGINX_ENVSUBST_FILTER restricts substitution to names starting with MBIS_. Without it,
+# envsubst would also expand nginx's own $host / $uri / $backend into empty strings and the
+# container would crash-loop on a syntax error at startup.
+ENV NGINX_ENVSUBST_FILTER=^MBIS_
+
+# Defaults reproduce the previously hard-coded target, so a plain `docker build && docker run`
+# with no env behaves exactly as before. Dev overrides both (the backend there is a compose
+# container reachable only through the host's published port).
+ENV MBIS_BACKEND_HOST=mbis-backend
+ENV MBIS_BACKEND_PORT=3023
+
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+
+# Drop the image's stock config. If rendering ever fails, nginx should have no config at all
+# and refuse to start — far louder than silently serving the nginx welcome page in place of
+# the app, which looks like a broken deploy of OUR bundle.
+RUN rm -f /etc/nginx/conf.d/default.conf
+
 COPY --from=build /app/build/web /usr/share/nginx/html
 EXPOSE 80
 # Use 127.0.0.1 (not localhost): our custom nginx.conf only `listen 80` (IPv4),
-# and the base image's IPv6-default script is skipped because the conf differs —
+# and the base image's IPv6-default script is skipped (it finds no stock default.conf) —
 # so `localhost` resolving to ::1 first would make the probe fail and Coolify/Traefik
 # mark the container unhealthy ("no available server") even though nginx is serving.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \

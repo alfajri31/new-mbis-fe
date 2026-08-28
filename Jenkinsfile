@@ -58,12 +58,24 @@ pipeline {
         FLUTTER_IMAGE = "ghcr.io/cirruslabs/flutter:3.44.0"
 
         // Container port. nginx.conf `listen 80` and the Dockerfile's EXPOSE — change all three
-        // together. The published host port is set on the Swarm service, not here.
+        // together. This is the `target=` side of --publish and never varies per environment.
         APP_PORT = "80"
 
-        // Backend port on the internal Docker network. nginx.conf proxies /api/ -> mbis-backend:3023
-        // for staging; prod bypasses that proxy entirely via an absolute API_URL.
-        BACKEND_PORT = "3023"
+        // Host ports the Swarm service publishes. Set once by `docker service create`; changing a
+        // number here does NOT move a running service, it only corrects what the pre-flight prints.
+        // To actually move one: docker service update --publish-rm <old> --publish-add <new>,target=80
+        //
+        // Dev sits next to the backend on 10.100.20.53 (backend 3013, web 3014). If SSO is ever
+        // enabled for dev, the Entra redirect URI is origin-bound — http://<host>:3014/auth.html —
+        // so moving this port means re-registering it in Entra too.
+        DEV_PUBLISH_PORT = "3014"
+        PROD_PUBLISH_PORT = "3024"
+
+        // Port the dev backend publishes ON THE HOST. Dev runs it as a plain compose container
+        // (magang-mbis-backend-1, listening on 8080 inside), on a bridge network a Swarm task
+        // cannot join — so the /api/ proxy has to go out to the host's published port instead of
+        // resolving a service name. Change here if that container is ever republished elsewhere.
+        DEV_BACKEND_PORT = "3013"
 
         // Visit dates, SLA windows and the "hari ini" filters are computed client-side; an unset TZ
         // on the container shows up as reports off by one day rather than as an error.
@@ -87,10 +99,12 @@ pipeline {
                         error "Aborting build: no `version` in pubspec.yaml."
                     }
 
-                    // Docker tags allow [A-Za-z0-9_.-] only, so the `+build` separator becomes `-`:
-                    // 1.0.1+9 -> 1.0.1-9. Side benefit over fe-prime: the build number is part of
-                    // the tag, so bumping ONLY `+n` still produces a fresh, non-overwriting tag.
-                    env.DOCKER_TAG_VERSION = env.APP_VERSION.replace('+', '-')
+                    // A trailing comment or a stray character would otherwise ride along into the
+                    // image tag and fail `docker build` with a message that says nothing about
+                    // pubspec.yaml being the culprit.
+                    if (!(env.APP_VERSION ==~ /^\d+\.\d+\.\d+(\+\d+)?$/)) {
+                        error "Aborting build: pubspec version '${env.APP_VERSION}' is not <major>.<minor>.<patch>[+build]."
+                    }
 
                     if (env.BRANCH_NAME == 'main') {
                         env.REMOTE_HOST = "${env.PROD_SSH_MBIS_HOST}"
@@ -105,6 +119,13 @@ pipeline {
                         env.BASE_HREF = "/app/"
                         env.API_URL = env.PROD_API_URL_MBIS?.trim() ? env.PROD_API_URL_MBIS.trim()
                                                                    : "https://mbis.askrindo.co.id/v2"
+
+                        // Only a fallback: prod calls the API cross-path via an absolute API_URL, so
+                        // the /api/ proxy is not on its request path at all. Set anyway so the two
+                        // environments differ in one place, not two.
+                        env.BACKEND_HOST = "mbis-backend"
+                        env.BACKEND_PORT = "3023"
+                        env.PUBLISH_PORT = "${env.PROD_PUBLISH_PORT}"
 
                         env.ENTRA_TENANT_ID = env.PROD_ENTRA_TENANT_ID ?: ''
                         env.ENTRA_CLIENT_ID = env.PROD_ENTRA_CLIENT_ID ?: ''
@@ -122,11 +143,31 @@ pipeline {
                         env.BASE_HREF = "/"
                         env.API_URL = env.DEV_API_URL_MBIS?.trim() ? env.DEV_API_URL_MBIS.trim() : ""
 
+                        // Backend lives on this same host, published on DEV_BACKEND_PORT. Reaching it
+                        // by host IP rather than by container name is deliberate: a Swarm task and a
+                        // compose container do not share a network, so DNS between them cannot work.
+                        env.BACKEND_HOST = "${env.REMOTE_HOST}"
+                        env.BACKEND_PORT = "${env.DEV_BACKEND_PORT}"
+                        env.PUBLISH_PORT = "${env.DEV_PUBLISH_PORT}"
+
                         env.ENTRA_TENANT_ID = env.DEV_ENTRA_TENANT_ID ?: ''
                         env.ENTRA_CLIENT_ID = env.DEV_ENTRA_CLIENT_ID ?: ''
                     } else {
                         error "Aborting build: Branch '${env.BRANCH_NAME}' is not allowed for deployment."
                     }
+
+                    // Tag = <version>-<env>-<build>, e.g. 1.0.1-9-staging-27. Three parts, each
+                    // load-bearing:
+                    //   version  Docker tags allow [A-Za-z0-9_.-] only, so `+` becomes `-`.
+                    //   env      WITHOUT this, main and testing collide. Both branches read the same
+                    //            pubspec.yaml, so both would push `1.0.1-9` — but the bundles differ
+                    //            (base-href, API_URL are compiled in). A testing build would overwrite
+                    //            the prod image, and prod would serve the dev bundle the next time a
+                    //            task restarted or rescheduled. Silent until someone reloads prod.
+                    //   build    Makes every tag immutable. Rebuilding without bumping pubspec no
+                    //            longer destroys the image the running service was created from, so
+                    //            `docker service rollback` and `--image <older tag>` stay usable.
+                    env.DOCKER_TAG_VERSION = "${env.APP_VERSION.replace('+', '-')}-${env.APP_ENV}-${env.BUILD_NUMBER}"
 
                     env.FULL_IMAGE_PATH = "${HARBOR_PROJECT}/${IMAGE_NAME}:${env.DOCKER_TAG_VERSION}"
 
@@ -158,7 +199,7 @@ pipeline {
                         echo "NOTE: Entra SSO identifiers are unset for '${env.BRANCH_NAME}' — the Microsoft sign-in button will be hidden and local login used."
                     }
 
-                    echo "Deploying ${IMAGE_NAME} v${env.APP_VERSION} (${env.APP_ENV}) -> ${env.REMOTE_HOST}, base-href ${env.BASE_HREF}, API '${env.API_URL ?: '(same-origin)'}'"
+                    echo "Deploying ${IMAGE_NAME} v${env.APP_VERSION} (${env.APP_ENV}) -> ${env.REMOTE_HOST}, base-href ${env.BASE_HREF}, API '${env.API_URL ?: "(same-origin -> ${env.BACKEND_HOST}:${env.BACKEND_PORT})"}'"
                 }
             }
         }
@@ -276,6 +317,23 @@ pipeline {
                     echo "$H_PASS" | docker login -u "$H_USER" --password-stdin $REGISTRY_URL
 
                     if [ \$? -eq 0 ]; then
+                        if ! docker service inspect ${SWARM_SERVICE} >/dev/null 2>&1; then
+                            echo "ERROR: Swarm service '${SWARM_SERVICE}' does not exist on this host."
+                            echo "It is created ONCE by hand — ports and networks are an ops decision, not this pipeline's."
+                            echo "No --network flag: the /api/ proxy reaches the backend at MBIS_BACKEND_HOST:MBIS_BACKEND_PORT,"
+                            echo "which is a published host port, so the default network is enough. Add --network <overlay> only"
+                            echo "if the backend is itself a Swarm service you want to reach by service name."
+                            echo "  docker service create --name ${SWARM_SERVICE} --replicas 1 \\"
+                            echo "    --publish published=${PUBLISH_PORT},target=${APP_PORT} \\"
+                            echo "    --env TZ=${TZ} \\"
+                            echo "    --env MBIS_BACKEND_HOST=${BACKEND_HOST} --env MBIS_BACKEND_PORT=${BACKEND_PORT} \\"
+                            echo "    --update-order start-first --update-failure-action rollback \\"
+                            echo "    --with-registry-auth ${FULL_IMAGE_PATH}"
+                            echo "start-first + rollback are worth setting at create time: a 1-replica service otherwise stops before it starts, so every deploy is a few seconds of 502."
+                            echo "The MBIS_BACKEND_* pair is what the /api/ proxy resolves; getting it wrong shows up as 502 on every API call, not as a failed deploy."
+                            echo "The image above is already pushed, so re-running this build after creating the service is enough."
+                            exit 1
+                        fi
                         echo "Login success, updating service..."
                         docker service update \
                             --image $FULL_IMAGE_PATH \
@@ -306,7 +364,7 @@ EOF
             cleanWs()
         }
         failure {
-            echo "Build FAILED for ${env.BRANCH_NAME} — check the Analyze & Test gate first, it fails on warnings."
+            echo "Build FAILED for ${env.BRANCH_NAME} — scroll up to the first red stage, not this line."
         }
     }
 }
