@@ -286,8 +286,14 @@ pipeline {
             steps {
                 script {
                     echo "Scanning image via Trivy Remote Server: ${FULL_IMAGE_PATH}"
+
+                    // --skip-version-check (borrowed from be-prime): trivy otherwise calls out to
+                    // GitHub on every run just to see if a newer trivy exists. The scan itself goes
+                    // to our own TRIVY_URL, so that check is the one piece of public-internet traffic
+                    // in this stage — and this agent's egress has already proven flaky enough to
+                    // time out a docker login. Nothing about the scan result changes.
                     sh """
-                    trivy image --server ${env.TRIVY_URL} --token ${env.TRIVY_TOKEN} --severity HIGH,CRITICAL --scanners vuln --quiet ${FULL_IMAGE_PATH}
+                    trivy image --server ${env.TRIVY_URL} --token ${env.TRIVY_TOKEN} --severity HIGH,CRITICAL --skip-version-check --scanners vuln --quiet ${FULL_IMAGE_PATH}
                     """
                 }
             }
@@ -295,9 +301,31 @@ pipeline {
 
         stage('Push Image') {
             steps {
-                script {
-                    docker.withRegistry(REGISTRY_URL, DOCKER_AUTH_ID) {
-                        sh "docker push ${FULL_IMAGE_PATH}"
+                // The only stage that depends on the public internet, and it is the one that fails
+                // intermittently: `docker login` has come back with
+                //   Get "https://auth.docker.io/token?...": context deadline exceeded
+                // after ~16s while the very same agent logged in fine minutes earlier. A timeout is
+                // neither a rate limit (429) nor bad credentials (401) — it is egress flakiness, so
+                // the right answer is to try again rather than to fail a build that already spent
+                // ten minutes compiling.
+                //
+                // If it starts failing EVERY time, retrying will not save it: the registry calls are
+                // made by the docker DAEMON, not the CLI, so a proxy configured only in the shell is
+                // invisible to it. That fix belongs in the daemon's systemd unit on the agent.
+                //
+                // The sleep sits before the rethrow because Jenkins' retry() has no backoff of its
+                // own and would otherwise fire all three attempts into the same outage.
+                retry(3) {
+                    script {
+                        try {
+                            docker.withRegistry(REGISTRY_URL, DOCKER_AUTH_ID) {
+                                sh "docker push ${FULL_IMAGE_PATH}"
+                            }
+                        } catch (err) {
+                            echo "Push failed (${err.message}) — waiting before retry."
+                            sleep time: 20, unit: 'SECONDS'
+                            throw err
+                        }
                     }
                 }
             }
