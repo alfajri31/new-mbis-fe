@@ -29,9 +29,11 @@ COPY . .
 ARG ENTRA_TENANT_ID=
 ARG ENTRA_CLIENT_ID=
 
-# Base URL backend. KOSONG = perilaku lama: web memanggil '/api' di origin-nya sendiri dan
-# nginx (stage 2) mem-proxy-nya ke backend, sehingga ganti domain tidak perlu rebuild. Itu
-# yang masih dipakai staging (mbis.askrindo.net) dan wajib tetap begitu.
+# Base URL backend. KOSONG = web memanggil '/api' di origin-nya sendiri dan nginx (stage 2)
+# mem-proxy-nya ke backend, sehingga pindah host/port tidak perlu rebuild. Itu yang dipakai
+# SELURUH non-prod, dan sejak 2026-08-28 itu berarti server internal dev
+# (web http://10.100.20.53:3014, backend http://10.100.20.53:3013). Domain staging lama
+# `mbis.askrindo.net` sudah tidak berlaku.
 #
 # PROD memakai topologi lain: satu domain dibagi per prefix path oleh reverse proxy host
 # (/etc/nginx/sites-available/mbis), BUKAN per hostname —
@@ -57,7 +59,21 @@ ARG ENTRA_CLIENT_ID=
 #
 # Sengaja diletakkan SETELAH `flutter pub get`: nilainya berubah tiap ganti target, dan
 # ARG di atas COPY pubspec akan membatalkan cache dependensi setiap kali.
-ARG API_URL=
+#
+# Default `/v2` = topologi PROD (lihat penjelasan panjang di atas). Jenkinsfile menimpanya
+# per-branch: `main` mengirim URL prod absolut, `testing` mengirim NILAI KOSONG supaya
+# staging kembali ke same-origin dan blok /api/ di nginx.conf yang mem-proxy ke backend.
+ARG API_URL=/v2
+
+# Prefix path tempat bundle dilayani, HARUS diakhiri garis miring.
+# PROD: `/app/` karena reverse proxy host membagi satu domain per prefix path.
+# STAGING/DEV: `/` karena bundle dilayani di root origin-nya sendiri.
+# Salah nilai di sini = index.html memuat main.dart.js dari path yang tidak ada -> layar putih,
+# tanpa error di log nginx selain 404 aset.
+ARG BASE_HREF=/app/
+
+# `dev` | `staging` | `prod` — dibaca AppConfig.env (lib/src/config/app_config.dart).
+ARG APP_ENV=prod
 
 # --wasm: compile Dart to WasmGC (skwasm renderer) instead of JavaScript. The app
 # runs as compiled WebAssembly -> no multi-MB main.dart.js to parse/JIT on the main
@@ -71,8 +87,9 @@ ARG API_URL=
 # our own nginx instead of pulling from gstatic.com on every cold start -> removes a
 # third-party DNS+TLS round-trip and lets the files be compressed & hard-cached.
 RUN flutter build web --wasm --release --no-web-resources-cdn \
-    --base-href /app/ \
-    --dart-define=API_URL=/v2 \
+    --base-href "$BASE_HREF" \
+    --dart-define=APP_ENV=$APP_ENV \
+    --dart-define=API_URL=$API_URL \
     --dart-define=ENTRA_TENANT_ID=$ENTRA_TENANT_ID \
     --dart-define=ENTRA_CLIENT_ID=$ENTRA_CLIENT_ID
 
@@ -93,11 +110,34 @@ RUN find build/web -type f -name '*.symbols' -delete && \
 # Stage 2: Serve the static bundle with nginx and reverse-proxy /api -> backend.
 # ---------------------------------------------------------------------------
 FROM nginx:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# nginx.conf is an envsubst TEMPLATE (see its header). The stock nginx entrypoint renders
+# /etc/nginx/templates/*.template into /etc/nginx/conf.d/ on every start, so the backend the
+# /api/ proxy points at is a CONTAINER env var — changing it is a `docker service update
+# --env-add`, not a rebuild of the whole Flutter bundle.
+#
+# NGINX_ENVSUBST_FILTER restricts substitution to names starting with MBIS_. Without it,
+# envsubst would also expand nginx's own $host / $uri / $backend into empty strings and the
+# container would crash-loop on a syntax error at startup.
+ENV NGINX_ENVSUBST_FILTER=^MBIS_
+
+# Defaults reproduce the previously hard-coded target, so a plain `docker build && docker run`
+# with no env behaves exactly as before. Dev overrides both (the backend there is a compose
+# container reachable only through the host's published port).
+ENV MBIS_BACKEND_HOST=mbis-backend
+ENV MBIS_BACKEND_PORT=3023
+
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+
+# Drop the image's stock config. If rendering ever fails, nginx should have no config at all
+# and refuse to start — far louder than silently serving the nginx welcome page in place of
+# the app, which looks like a broken deploy of OUR bundle.
+RUN rm -f /etc/nginx/conf.d/default.conf
+
 COPY --from=build /app/build/web /usr/share/nginx/html
 EXPOSE 80
 # Use 127.0.0.1 (not localhost): our custom nginx.conf only `listen 80` (IPv4),
-# and the base image's IPv6-default script is skipped because the conf differs —
+# and the base image's IPv6-default script is skipped (it finds no stock default.conf) —
 # so `localhost` resolving to ::1 first would make the probe fail and Coolify/Traefik
 # mark the container unhealthy ("no available server") even though nginx is serving.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
