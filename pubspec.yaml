@@ -127,6 +127,7 @@ dependencies:
   # pengguna saja. Jangan pernah menaruh PII (NIK, NPWP, nama nasabah) di custom
   # key — lihat core/observability/crash_reporter.dart.
   firebase_crashlytics: ^4.3.10
+  intl: ^0.20.3
 
 dev_dependencies:
   flutter_test:

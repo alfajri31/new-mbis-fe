@@ -38,6 +38,11 @@ import '../presentation/screens/hapus_akun_screen.dart';
 import 'legal/legal_routes.dart';
 import '../presentation/screens/export_screen.dart';
 import '../presentation/screens/ganti_password_screen.dart';
+import 'quotation_slip/qs_form_screen.dart';
+import 'quotation_slip/qs_form_state.dart';
+import 'setting_rates_charges/setting_rates_charges_screen.dart';
+import 'visit_rm/visit_rm_screen.dart';
+import 'visit_rm/visit_rm_detail_screen.dart';
 
 /// The app's URL-addressable route table.
 ///
@@ -251,6 +256,18 @@ GoRouter buildRouter({
           builder: (_, s) =>
               AgentDetailScreen(agentId: s.pathParameters['agentId']!),
         ),
+        GoRoute(
+          path: '/quotation-slip',
+          builder: (_, s) => QsFormScreen(
+            product: s.uri.queryParameters['product'] == 'paXtra'
+                ? QsProduct.paXtra
+                : QsProduct.psakdi,
+          ),
+        ),
+        GoRoute(
+          path: '/setting-rates-charges',
+          builder: (_, _) => const SettingRatesChargesScreen(),
+        ),
       ],
     );
 
@@ -325,6 +342,16 @@ List<RouteBase> _toolsSubRoutes() => [
       GoRoute(
           path: 'kelola-premi', builder: (_, _) => const KelolaPremiScreen()),
       GoRoute(path: 'assistant', builder: (_, _) => const AssistantScreen()),
+      GoRoute(
+          path: 'quotation-slip',
+          builder: (_, s) => QsFormScreen(
+            product: s.uri.queryParameters['product'] == 'paXtra'
+                ? QsProduct.paXtra
+                : QsProduct.psakdi,
+          )),
+      GoRoute(
+          path: 'setting-rates-charges',
+          builder: (_, _) => const SettingRatesChargesScreen()),
     ];
 
 /// The management consoles, as a reusable sub-route list. Nested both under
@@ -361,6 +388,22 @@ List<RouteBase> _konsolSubRoutes() => [
           builder: (_, _) => const ImportPipelineScreen()),
       GoRoute(
           path: 'import-target', builder: (_, _) => const ImportTargetScreen()),
+      GoRoute(
+          path: 'setting-rates-charges',
+          builder: (_, _) => const SettingRatesChargesScreen()),
+      GoRoute(
+        path: 'visit-rm',
+        builder: (_, _) => const VisitRmScreen(),
+        routes: [
+          GoRoute(
+            path: 'detail/:visitId',
+            builder: (_, s) => VisitRmDetailScreen(
+              visitId: s.pathParameters['visitId']!,
+              activeRoleLabel: s.uri.queryParameters['role'] ?? 'Pinca KC Padang',
+            ),
+          ),
+        ],
+      ),
     ];
 
 /// Customer detail (and the pipeline detail reachable from within it). Reused
