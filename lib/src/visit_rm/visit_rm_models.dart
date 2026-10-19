@@ -57,38 +57,6 @@ class VisitModel {
     required this.tindakLanjut,
     this.pipelineId,
   });
-
-  VisitModel copyWith({
-    String? id,
-    String? rmId,
-    String? perusahaan,
-    String? tanggal,
-    String? jam,
-    String? stage,
-    double? nilai,
-    bool? foto,
-    String? lokasi,
-    String? tujuan,
-    String? hasil,
-    String? tindakLanjut,
-    String? pipelineId,
-  }) {
-    return VisitModel(
-      id: id ?? this.id,
-      rmId: rmId ?? this.rmId,
-      perusahaan: perusahaan ?? this.perusahaan,
-      tanggal: tanggal ?? this.tanggal,
-      jam: jam ?? this.jam,
-      stage: stage ?? this.stage,
-      nilai: nilai ?? this.nilai,
-      foto: foto ?? this.foto,
-      lokasi: lokasi ?? this.lokasi,
-      tujuan: tujuan ?? this.tujuan,
-      hasil: hasil ?? this.hasil,
-      tindakLanjut: tindakLanjut ?? this.tindakLanjut,
-      pipelineId: pipelineId ?? this.pipelineId,
-    );
-  }
 }
 
 class VisitReview {

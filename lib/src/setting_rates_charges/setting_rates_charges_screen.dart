@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../theme/app_theme.dart';
+import '../quotation_slip/widgets/common/rupiah_input_formatter.dart';
 import 'setting_rates_charges_provider.dart';
 
 class SettingRatesChargesScreen extends ConsumerStatefulWidget {
@@ -61,6 +62,7 @@ class _SettingRatesChargesScreenState
   String _cleanNumber(String text) => text.replaceAll(RegExp(r'[^0-9.]'), '');
 
   void _handleReset() {
+    FocusScope.of(context).unfocus();
     ref.read(settingRatesChargesProvider.notifier).resetToDefaults();
     final defaultValues = ref.read(settingRatesChargesProvider).values;
     setState(() {
@@ -76,6 +78,7 @@ class _SettingRatesChargesScreenState
   }
 
   void _handleSave() {
+    FocusScope.of(context).unfocus();
     final Map<String, dynamic> submitted = {};
     for (final entry in SettingRatesChargesNotifier.defaultValues.entries) {
       final key = entry.key;
@@ -111,61 +114,65 @@ class _SettingRatesChargesScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgScaffold,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceWhite,
-            border: Border(bottom: BorderSide(color: AppColors.borderDivider, width: 1)),
-          ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
-                    onPressed: () {
-                      if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 4),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Pengaturan Tarif & Biaya',
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                          letterSpacing: -0.2,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
+        backgroundColor: AppColors.bgScaffold,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceWhite,
+              border: Border(bottom: BorderSide(color: AppColors.borderDivider, width: 1)),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Pengaturan Tarif & Biaya',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textDark,
+                            letterSpacing: -0.2,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'PSAKDI & PA Xtra · UW / Admin',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w500,
+                        Text(
+                          'PSAKDI & PA Xtra · UW / Admin',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+        body: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 580),
@@ -329,8 +336,9 @@ class _SettingRatesChargesScreenState
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ── Widget: Card Generic Group dengan Baris 3-Kolom ──
   Widget _buildSectionCard({
@@ -401,7 +409,7 @@ class _SettingRatesChargesScreenState
               inputFormatters: [
                 if (item.unit == 'Rp') ...[
                   FilteringTextInputFormatter.digitsOnly,
-                  _RupiahFormatter(),
+                  const RupiahInputFormatter(),
                 ] else ...[
                   FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                 ],
@@ -684,24 +692,4 @@ class _RowItem {
   final String unit;
 
   const _RowItem(this.key, this.label, this.unit);
-}
-
-class _RupiahFormatter extends TextInputFormatter {
-  final NumberFormat _fmt = NumberFormat('#,###', 'id_ID');
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    if (newValue.text.isEmpty) return newValue;
-    final clean = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (clean.isEmpty) return const TextEditingValue();
-    final num = int.tryParse(clean) ?? 0;
-    final formatted = _fmt.format(num).replaceAll(',', '.');
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
 }

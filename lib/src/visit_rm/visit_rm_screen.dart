@@ -3,6 +3,10 @@ import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import 'visit_rm_models.dart';
 import 'visit_rm_detail_screen.dart';
+import 'widget/visit_rm_metrics_row.dart';
+import 'widget/visit_rm_idle_card.dart';
+import 'widget/visit_rm_filter_card.dart';
+import 'widget/visit_item_card.dart';
 
 class VisitRmScreen extends StatefulWidget {
   const VisitRmScreen({super.key});
@@ -202,52 +206,89 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     // Total reviewed count
     final reviewedCount = inPeriodVisits.where((v) => VisitReviewStore.instance.isReviewed(v.id)).length;
 
-    return Scaffold(
-      backgroundColor: AppColors.bgScreen,
-      appBar: _buildAppBar(context, filteredVisits.length),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Prototype role simulator banner
-              _buildRoleSimulatorBanner(),
-              const SizedBox(height: 12),
-
-              // Search bar and Filter toggle button
-              _buildSearchAndFilterBar(),
-              const SizedBox(height: 12),
-
-              // Expandable Filter card
-              if (_showFilter) ...[
-                _buildFilterCard(branchesInScope, rmsInBranchScope),
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
+        backgroundColor: AppColors.bgScreen,
+        appBar: _buildAppBar(context, filteredVisits.length),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Prototype role simulator banner
+                _buildRoleSimulatorBanner(),
                 const SizedBox(height: 12),
-              ],
 
-              // Active filter chips row
-              _buildActiveFilterChips(startDate, endDate),
-              const SizedBox(height: 12),
-
-              // 4 Metrics cards
-              _buildMetricsRow(totalVisit, activeRmCount, idleRms.length, avgPerRm),
-              const SizedBox(height: 12),
-
-              // Expandable Idle RM list
-              if (_showIdle) ...[
-                _buildIdleRmCard(idleRms),
+                // Search bar and Filter toggle button
+                _buildSearchAndFilterBar(),
                 const SizedBox(height: 12),
+
+                // Expandable Filter card
+                if (_showFilter) ...[
+                  VisitRmFilterCard(
+                    quickPeriod: _quickPeriod,
+                    onQuickPeriodChanged: (val) => setState(() => _quickPeriod = val),
+                    quickPeriodOptions: _quickPeriodOptions,
+                    customDari: _customDari,
+                    onCustomDariChanged: (val) => setState(() => _customDari = val),
+                    customSampai: _customSampai,
+                    onCustomSampaiChanged: (val) => setState(() => _customSampai = val),
+                    activeRole: _activeRole,
+                    selectedWil: _selectedWil,
+                    onSelectedWilChanged: (val) => setState(() {
+                      _selectedWil = val ?? '';
+                      _selectedCab = '';
+                      _selectedRm = '';
+                    }),
+                    selectedCab: _selectedCab,
+                    onSelectedCabChanged: (val) => setState(() {
+                      _selectedCab = val ?? '';
+                      _selectedRm = '';
+                    }),
+                    selectedRm: _selectedRm,
+                    onSelectedRmChanged: (val) => setState(() => _selectedRm = val ?? ''),
+                    branchesInScope: branchesInScope,
+                    rmsInBranchScope: rmsInBranchScope,
+                    onReset: _resetFilters,
+                    onClose: () => setState(() => _showFilter = false),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Active filter chips row
+                _buildActiveFilterChips(startDate, endDate),
+                const SizedBox(height: 12),
+
+                // 4 Metrics cards
+                VisitRmMetricsRow(
+                  total: totalVisit,
+                  activeRm: activeRmCount,
+                  idleRm: idleRms.length,
+                  avg: avgPerRm,
+                  onToggleIdle: () => setState(() => _showIdle = !_showIdle),
+                ),
+                const SizedBox(height: 12),
+
+                // Expandable Idle RM list
+                if (_showIdle) ...[
+                  VisitRmIdleCard(idleRms: idleRms),
+                  const SizedBox(height: 12),
+                ],
+
+                // View Tab toggle ("Per Kunjungan" vs "Per RM")
+                _buildViewTabs(reviewedCount),
+                const SizedBox(height: 14),
+
+                // Main content list
+                _viewMode == 'list'
+                    ? _buildVisitList(dateGroups)
+                    : _buildRmList(effectiveRms, inPeriodVisits),
               ],
-
-              // View Tab toggle ("Per Kunjungan" vs "Per RM")
-              _buildViewTabs(reviewedCount),
-              const SizedBox(height: 14),
-
-              // Main content list
-              _viewMode == 'list'
-                  ? _buildVisitList(dateGroups)
-                  : _buildRmList(effectiveRms, inPeriodVisits),
-            ],
+            ),
           ),
         ),
       ),
@@ -438,7 +479,10 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
         const SizedBox(width: 8),
         // Filter button
         OutlinedButton.icon(
-          onPressed: () => setState(() => _showFilter = !_showFilter),
+          onPressed: () {
+            FocusScope.of(context).unfocus();
+            setState(() => _showFilter = !_showFilter);
+          },
           icon: const Icon(Icons.filter_list, size: 18, color: AppColors.navyMbis),
           label: Row(
             mainAxisSize: MainAxisSize.min,
@@ -480,302 +524,6 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  // --- Expandable Filter Card ---
-  Widget _buildFilterCard(List<String> branchesInScope, List<RmModel> rmsInBranchScope) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderDivider),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Period quick pills
-          const Text(
-            'Periode kunjungan',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textLabel,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: _quickPeriodOptions.map((opt) {
-              final isSelected = opt['id'] == _quickPeriod;
-              return ChoiceChip(
-                label: Text(opt['label']!),
-                selected: isSelected,
-                onSelected: (val) {
-                  if (val) setState(() => _quickPeriod = opt['id']!);
-                },
-                selectedColor: AppColors.navyMbis,
-                backgroundColor: AppColors.surfaceWhite,
-                labelStyle: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? AppColors.surfaceWhite : AppColors.textDark,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  side: BorderSide(
-                    color: isSelected ? AppColors.navyMbis : AppColors.borderDefault,
-                    width: 1.5,
-                  ),
-                ),
-                showCheckmark: false,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              );
-            }).toList(),
-          ),
-
-          // Custom date pickers if 'custom'
-          if (_quickPeriod == 'custom') ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Dari', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                      const SizedBox(height: 4),
-                      _buildDateField(
-                        value: _customDari,
-                        onChanged: (val) => setState(() => _customDari = val),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Sampai', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                      const SizedBox(height: 4),
-                      _buildDateField(
-                        value: _customSampai,
-                        onChanged: (val) => setState(() => _customSampai = val),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-
-          // Wilayah Dropdown (Admin only)
-          if (_activeRole == 'admin') ...[
-            const Text(
-              'Kantor Wilayah',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textLabel,
-              ),
-            ),
-            const SizedBox(height: 4),
-            _buildDropdown<String>(
-              value: _selectedWil,
-              items: [
-                const DropdownMenuItem(value: '', child: Text('Semua Kanwil')),
-                ...kDefaultKanwils.map((k) => DropdownMenuItem(value: k.id, child: Text(k.name))),
-              ],
-              onChanged: (val) {
-                setState(() {
-                  _selectedWil = val ?? '';
-                  _selectedCab = '';
-                  _selectedRm = '';
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // Cabang Dropdown
-          const Text(
-            'Cabang',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textLabel,
-            ),
-          ),
-          const SizedBox(height: 4),
-          _buildDropdown<String>(
-            value: _activeRole == 'pinca' ? 'Padang' : _selectedCab,
-            enabled: _activeRole != 'pinca',
-            items: [
-              if (_activeRole != 'pinca')
-                const DropdownMenuItem(value: '', child: Text('Semua Cabang')),
-              ...branchesInScope.map((c) => DropdownMenuItem(value: c, child: Text('KC $c'))),
-            ],
-            onChanged: (val) {
-              setState(() {
-                _selectedCab = val ?? '';
-                _selectedRm = '';
-              });
-            },
-          ),
-          if (_activeRole == 'pinca') ...[
-            const SizedBox(height: 2),
-            const Text(
-              'Pinca hanya melihat cabangnya sendiri',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-            ),
-          ],
-          const SizedBox(height: 12),
-
-          // RM Dropdown
-          const Text(
-            'Nama RM',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textLabel,
-            ),
-          ),
-          const SizedBox(height: 4),
-          _buildDropdown<String>(
-            value: _selectedRm,
-            items: [
-              const DropdownMenuItem(value: '', child: Text('Semua RM')),
-              ...rmsInBranchScope.map((r) => DropdownMenuItem(
-                    value: r.id,
-                    child: Text('${r.nama} · ${r.cab}'),
-                  )),
-            ],
-            onChanged: (val) => setState(() => _selectedRm = val ?? ''),
-          ),
-          const SizedBox(height: 16),
-
-          // Action buttons: Reset & Tutup
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 42,
-                  child: OutlinedButton(
-                    onPressed: _resetFilters,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.borderDefault, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      foregroundColor: AppColors.textLabel,
-                    ),
-                    child: const Text('Reset', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 42,
-                  child: ElevatedButton(
-                    onPressed: () => setState(() => _showFilter = false),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.navyMbis,
-                      foregroundColor: AppColors.surfaceWhite,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Tutup', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDateField({
-    required String value,
-    required ValueChanged<String> onChanged,
-  }) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderDefault, width: 1.5),
-      ),
-      alignment: Alignment.centerLeft,
-      child: InkWell(
-        onTap: () async {
-          final parts = value.split('-');
-          final initial = parts.length == 3
-              ? DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]))
-              : DateTime(2026, 9, 23);
-          final picked = await showDatePicker(
-            context: context,
-            initialDate: initial,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2030),
-          );
-          if (picked != null) {
-            final y = picked.year.toString().padLeft(4, '0');
-            final m = picked.month.toString().padLeft(2, '0');
-            final d = picked.day.toString().padLeft(2, '0');
-            onChanged('$y-$m-$d');
-          }
-        },
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              VisitRmHelpers.formatIndoDate(value),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
-              ),
-            ),
-            const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.iconDropdown),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDropdown<T>({
-    required T value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-    bool enabled = true,
-  }) {
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: enabled ? AppColors.surfaceWhite : AppColors.bgDisabled,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderDefault, width: 1.5),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          items: items,
-          onChanged: enabled ? onChanged : null,
-          isExpanded: true,
-          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.iconDropdown),
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: enabled ? AppColors.textDark : AppColors.textDisabled,
-          ),
-        ),
-      ),
     );
   }
 
@@ -831,179 +579,6 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     );
   }
 
-  // --- Metrics 4-cards grid ---
-  Widget _buildMetricsRow(int total, int activeRm, int idleRm, String avg) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _buildMetricItem(
-              number: '$total',
-              label: 'Total Visit',
-              numColor: AppColors.navyMbis,
-              bgColor: AppColors.surfaceWhite,
-              borderColor: AppColors.borderDivider,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildMetricItem(
-              number: '$activeRm',
-              label: 'RM Aktif',
-              numColor: AppColors.navyMbis,
-              bgColor: AppColors.surfaceWhite,
-              borderColor: AppColors.borderDivider,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildMetricItem(
-              number: '$idleRm',
-              label: 'RM Belum Visit ›',
-              numColor: AppColors.orangeDark,
-              bgColor: AppColors.alertBg,
-              borderColor: AppColors.alertBorder,
-              onTap: () => setState(() => _showIdle = !_showIdle),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildMetricItem(
-              number: avg,
-              label: 'Rata-rata / RM',
-              numColor: AppColors.navyMbis,
-              bgColor: AppColors.surfaceWhite,
-              borderColor: AppColors.borderDivider,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricItem({
-    required String number,
-    required String label,
-    required Color numColor,
-    required Color bgColor,
-    required Color borderColor,
-    VoidCallback? onTap,
-  }) {
-    return Material(
-      color: AppColors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                number,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: numColor,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: onTap != null ? AppColors.alertTitle : AppColors.textMuted,
-                  height: 1.25,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- Expandable Idle RM list card ---
-  Widget _buildIdleRmCard(List<RmModel> idleRms) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        border: Border.all(color: AppColors.alertBorder),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'RM belum melakukan visit pada periode ini',
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.alertTitle,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (idleRms.isEmpty)
-            const Text(
-              'Semua RM sudah visit.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            )
-          else
-            ...idleRms.map((rm) {
-              return Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: AppColors.badgeIdleDivider)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: const BoxDecoration(
-                        color: AppColors.badgeP2Bg,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.person_outline, size: 18, color: AppColors.alertTitle),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            rm.nama,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          Text(
-                            '${rm.jab} · KC ${rm.cab}',
-                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
 
   // --- View tabs (Per Kunjungan vs Per RM) ---
   Widget _buildViewTabs(int reviewedCount) {
@@ -1127,117 +702,13 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
                       (r) => r.id == v.rmId,
                       orElse: () => const RmModel(id: '', nama: '-', jab: '', cab: '-'),
                     );
-                    final stageInfo = VisitRmHelpers.getStageInfo(v.stage);
                     final isReviewed = VisitReviewStore.instance.isReviewed(v.id);
 
-                    return InkWell(
+                    return VisitItemCard(
+                      visit: v,
+                      rm: rm,
+                      isReviewed: isReviewed,
                       onTap: () => _openDetail(v),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // Avatar circle with camera badge
-                            _buildAvatarWithBadge(v),
-                            const SizedBox(width: 12),
-
-                            // Company, Time/Cabang, and Badges
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    v.perusahaan,
-                                    style: const TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textDark,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${v.jam} · KC ${rm.cab}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: stageInfo.bg,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          stageInfo.label,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: stageInfo.fg,
-                                          ),
-                                        ),
-                                      ),
-                                      if (isReviewed)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.badgeP1Bg,
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: const Text(
-                                            '✓ Ditinjau',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.greenTotal,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-
-                            // RM name and Pipeline Value
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  rm.nama,
-                                  style: const TextStyle(
-                                    fontSize: 12.5,
-                                    color: AppColors.textLabel,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  VisitRmHelpers.formatRupiah(v.nilai),
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.navyMbis,
-                                  ),
-                                ),
-                                const SizedBox(height: 1),
-                                const Text(
-                                  'Nilai pipeline',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    color: AppColors.iconDropdown,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -1249,56 +720,6 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     );
   }
 
-  Widget _buildAvatarWithBadge(VisitModel v) {
-    if (!v.foto) {
-      return const SizedBox(width: 52, height: 52);
-    }
-    final initials = VisitRmHelpers.getCompanyInitials(v.perusahaan);
-    return SizedBox(
-      width: 52,
-      height: 52,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              gradient: VisitRmHelpers.getAvatarGradient(v.id),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initials,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: AppColors.surfaceWhite,
-              ),
-            ),
-          ),
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceWhite,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.borderDivider),
-              ),
-              child: const Icon(
-                Icons.camera_alt_outlined,
-                size: 11,
-                color: AppColors.navyMbis,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // --- RM List (Per RM) ---
   Widget _buildRmList(List<RmModel> rms, List<VisitModel> inPeriodVisits) {

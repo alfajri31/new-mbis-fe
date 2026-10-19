@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import 'visit_rm_models.dart';
+import 'widget/visit_detail_widgets.dart';
 
 class VisitRmDetailScreen extends StatefulWidget {
   final String visitId;
@@ -52,39 +53,43 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
     final stageInfo = VisitRmHelpers.getStageInfo(v.stage);
     final isReviewed = review != null;
 
-    return Scaffold(
-      backgroundColor: AppColors.bgScreen,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceWhite,
-        surfaceTintColor: AppColors.transparent,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.borderDivider, height: 1),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: AppColors.textDark),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/kelola/visit-rm');
-            }
-          },
-        ),
-        titleSpacing: 0,
-        title: const Text(
-          'Detail Visit RM',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textDark,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
+        backgroundColor: AppColors.bgScreen,
+        appBar: AppBar(
+          backgroundColor: AppColors.surfaceWhite,
+          surfaceTintColor: AppColors.transparent,
+          elevation: 0,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(color: AppColors.borderDivider, height: 1),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: AppColors.textDark),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/kelola/visit-rm');
+              }
+            },
+          ),
+          titleSpacing: 0,
+          title: const Text(
+            'Detail Visit RM',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -197,10 +202,10 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
               const SizedBox(height: 14),
 
               // Rekap Detail Card
-              _buildSectionCard(
+              VisitDetailSectionCard(
                 title: 'Rekap Detail',
                 children: [
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Nama Perusahaan',
                     Text(
                       v.perusahaan,
@@ -211,7 +216,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ),
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Nama RM',
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,7 +240,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ],
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Tanggal',
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,7 +264,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ],
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Stage Pipeline',
                     Align(
                       alignment: Alignment.centerLeft,
@@ -280,7 +285,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ),
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Nilai Pipeline',
                     Text(
                       VisitRmHelpers.formatRupiah(v.nilai),
@@ -296,10 +301,10 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
               const SizedBox(height: 14),
 
               // Hasil Kunjungan Card
-              _buildSectionCard(
+              VisitDetailSectionCard(
                 title: 'Hasil Kunjungan',
                 children: [
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Lokasi check-in',
                     Text(
                       v.lokasi,
@@ -311,7 +316,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ),
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Tujuan',
                     Text(
                       v.tujuan,
@@ -323,7 +328,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ),
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Hasil',
                     Text(
                       v.hasil,
@@ -335,7 +340,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                       ),
                     ),
                   ),
-                  _buildDetailRow(
+                  VisitDetailRow(
                     'Tindak lanjut',
                     Text(
                       v.tindakLanjut,
@@ -474,6 +479,7 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
                         height: 44,
                         child: ElevatedButton(
                           onPressed: () {
+                            FocusScope.of(context).unfocus();
                             VisitReviewStore.instance.markReviewed(
                               v.id,
                               widget.activeRoleLabel,
@@ -539,63 +545,9 @@ class _VisitRmDetailScreenState extends State<VisitRmDetailScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Widget _buildSectionCard({
-    required String title,
-    required List<Widget> children,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        border: Border.all(color: AppColors.borderDivider),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textDark,
-              ),
-            ),
-          ),
-          ...children,
-        ],
-      ),
-    );
-  }
 
-  Widget _buildDetailRow(String label, Widget content) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.bgDisabled)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: content),
-        ],
-      ),
-    );
-  }
 }

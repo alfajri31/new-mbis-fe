@@ -36,23 +36,6 @@ class SettingRatesChargesState {
       isSaving: isSaving ?? this.isSaving,
     );
   }
-
-  // Helper getters
-  double getDouble(String key, [double fallback = 0.0]) {
-    final val = values[key];
-    if (val is double) return val;
-    if (val is int) return val.toDouble();
-    if (val is String) return double.tryParse(val) ?? fallback;
-    return fallback;
-  }
-
-  int getInt(String key, [int fallback = 0]) {
-    final val = values[key];
-    if (val is int) return val;
-    if (val is double) return val.toInt();
-    if (val is String) return int.tryParse(val) ?? fallback;
-    return fallback;
-  }
 }
 
 /// Notifier pengelola state pengaturan tarif, biaya, dan audit log.
@@ -160,18 +143,6 @@ class SettingRatesChargesNotifier
     );
   }
 
-  /// Memperbarui satu konfigurasi
-  void updateValue(String key, dynamic value) {
-    final newValues = Map<String, dynamic>.from(state.values);
-    newValues[key] = value;
-    state = state.copyWith(values: newValues);
-  }
-
-  /// Memperbarui sekumpulan konfigurasi
-  void updateValues(Map<String, dynamic> updates) {
-    final newValues = Map<String, dynamic>.from(state.values)..addAll(updates);
-    state = state.copyWith(values: newValues);
-  }
 
   /// Kembalikan semua konfigurasi ke nilai default
   void resetToDefaults() {
@@ -218,28 +189,7 @@ class SettingRatesChargesNotifier
     return changedFields;
   }
 
-  /// Update rate PSAKDI spesifik
-  void updatePsakdiRate(String type, int kelasIndex, double value) {
-    final key = 'r$type$kelasIndex';
-    updateValue(key, value);
   }
-
-  /// Update rate pokok PA Xtra
-  void updatePaXtraRatePokok(double withoutCacat, double withCacat) {
-    final newValues = Map<String, dynamic>.from(state.values);
-    newValues['p_pokok'] = withoutCacat;
-    newValues['p_cacat'] = withCacat;
-    state = state.copyWith(values: newValues);
-  }
-
-  /// Update santunan PA Xtra
-  void updatePaXtraSantunan(String key, double rate, double plafon) {
-    final newValues = Map<String, dynamic>.from(state.values);
-    newValues['p_$key'] = rate;
-    newValues['c_$key'] = plafon;
-    state = state.copyWith(values: newValues);
-  }
-}
 
 /// Provider Riverpod untuk modul Setting Rates & Charges.
 final settingRatesChargesProvider =

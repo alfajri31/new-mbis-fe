@@ -69,30 +69,11 @@ class QsStepPertanggunganState {
     return false;
   }
 
-  /// Usia yang dihitung pada saat tanggal mulai polis.
-  int get calculatedAge {
-    if (tglLahir == null) return 0;
-    final ref = tglMulai ?? DateTime.now();
-    var age = ref.year - tglLahir!.year;
-    if (ref.month < tglLahir!.month ||
-        (ref.month == tglLahir!.month && ref.day < tglLahir!.day)) {
-      age--;
-    }
-    return age;
-  }
-
   /// Pesan error validasi usia bila tidak memenuhi syarat produk.
   String? get usiaError => validasiUsia(product, tglLahir, tglMulai);
 
   /// Saran kelas pekerjaan otomatis.
   int? get saranKelasResult => saranKelas(pekerjaan);
-
-  /// Indikator bila kelas yang dipilih lebih rendah dari saran sistem.
-  bool get kelasMismatch {
-    if (klasifikasiPeserta == null) return false;
-    final saran = saranKelasResult;
-    return saran != null && klasifikasiPeserta! < saran;
-  }
 }
 
 /// Notifier pengelola state Step 1 Pertanggungan.
@@ -125,9 +106,6 @@ class QsStepPertanggunganNotifier extends Notifier<QsStepPertanggunganState> {
     );
   }
 
-  void setProduct(QsProduct product) {
-    state = state.copyWith(product: product);
-  }
 
   void setType(QsType type) {
     state = state.copyWith(type: type);
