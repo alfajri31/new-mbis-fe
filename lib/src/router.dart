@@ -38,11 +38,11 @@ import '../presentation/screens/hapus_akun_screen.dart';
 import 'legal/legal_routes.dart';
 import '../presentation/screens/export_screen.dart';
 import '../presentation/screens/ganti_password_screen.dart';
-import 'quotation_slip/qs_form_screen.dart';
-import 'quotation_slip/qs_form_state.dart';
-import 'setting_rates_charges/setting_rates_charges_screen.dart';
-import 'visit_rm/visit_rm_screen.dart';
-import 'visit_rm/visit_rm_detail_screen.dart';
+import '../features/quotation_slip/qs_form_screen.dart';
+import '../features/quotation_slip/qs_form_state.dart';
+import '../features/setting_rates_charges/setting_rates_charges_screen.dart';
+import '../features/visit_rm/visit_rm_screen.dart';
+import '../features/visit_rm/visit_rm_detail_screen.dart';
 
 /// The app's URL-addressable route table.
 ///
@@ -262,6 +262,7 @@ GoRouter buildRouter({
             product: s.uri.queryParameters['product'] == 'paXtra'
                 ? QsProduct.paXtra
                 : QsProduct.psakdi,
+            customerName: s.uri.queryParameters['customerName'],
           ),
         ),
         GoRoute(
@@ -348,6 +349,7 @@ List<RouteBase> _toolsSubRoutes() => [
             product: s.uri.queryParameters['product'] == 'paXtra'
                 ? QsProduct.paXtra
                 : QsProduct.psakdi,
+            customerName: s.uri.queryParameters['customerName'],
           )),
       GoRoute(
           path: 'setting-rates-charges',

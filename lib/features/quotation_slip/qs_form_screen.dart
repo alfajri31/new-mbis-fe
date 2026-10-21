@@ -66,10 +66,10 @@ class _QsFormScreenState extends State<QsFormScreen>
   DateTime? _tglMulai;
   DateTime? _tglAkhir;
   bool _dataSamaPolis = false;
-  final _namaTertanggungCtrl = TextEditingController(text: 'Suwito');
-  final _noKtpCtrl = TextEditingController(text: '3202145123112');
+  final _namaTertanggungCtrl = TextEditingController(text: '');
+  final _noKtpCtrl = TextEditingController(text: '');
   DateTime? _tglLahir = DateTime(2000, 2, 14);
-  final _pekerjaanCtrl = TextEditingController(text: 'Karyawan');
+  final _pekerjaanCtrl = TextEditingController(text: '');
   int? _klasifikasiPeserta = 1;
 
   // ── Tab 2: Uang Pertanggungan ──
@@ -111,11 +111,11 @@ class _QsFormScreenState extends State<QsFormScreen>
     super.initState();
     _product = widget.product;
     _namaPolisCtrl =
-        TextEditingController(text: widget.customerName ?? 'PT Prima Kaplas');
+        TextEditingController(text: widget.customerName ?? '');
     _alamatCtrl = TextEditingController(
-        text: widget.customerAddress ?? 'Jl Pelangi Raya No.56 Jakarta Selatan');
+        text: widget.customerAddress ?? '');
     _bidangUsahaCtrl = TextEditingController(
-        text: widget.customerBidangUsaha ?? 'Percetakan');
+        text: widget.customerBidangUsaha ?? '');
     _emailCtrl =
         TextEditingController(text: widget.customerEmail ?? '');
 

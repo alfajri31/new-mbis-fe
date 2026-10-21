@@ -37,6 +37,8 @@ import 'add_activity_screen.dart';
 import 'add_pipeline_screen.dart';
 import 'tender_status_screen.dart';
 import '../widgets/dispose_callback.dart';
+import '../../features/quotation_slip/qs_form_screen.dart';
+import '../../features/quotation_slip/qs_form_state.dart' show QsProduct;
 
 class PipelineDetailScreen extends ConsumerStatefulWidget {
   final String pipelineId;
@@ -569,6 +571,12 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
         const SizedBox(height: 20),
       ],
 
+      // === Buat Quotation Slip (QS)
+      if (!isAgent && !isWon && !isDeclined) ...[
+        _buildQuotationSlipSection(pipeline),
+        const SizedBox(height: 20),
+      ],
+
       // WON — read-only celebration + (RM) cancel option.
       if (isWon) ...[
         Container(
@@ -1070,6 +1078,176 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     }
   }
 
+  // ── Quotation Slip (QS) Integration (Prototype 1:1) ──
+
+  QsProduct? _detectQsProduct(PipelineDetailModel pipeline) {
+    final candidates = [
+      pipeline.product,
+      pipeline.lobName,
+      pipeline.projectName,
+      pipeline.tenderName,
+    ];
+    for (final text in candidates) {
+      if (text == null || text.trim().isEmpty) continue;
+      final lower = text.toLowerCase();
+      if (lower.contains('pa xtra') ||
+          lower.contains('paxtra') ||
+          lower.contains('pa extra') ||
+          lower.contains('personal accident')) {
+        return QsProduct.paXtra;
+      }
+      if (lower.contains('psakdi') || lower.contains('kecelakaan diri')) {
+        return QsProduct.psakdi;
+      }
+    }
+    return null;
+  }
+
+  Widget _buildQuotationSlipSection(PipelineDetailModel pipeline) {
+    final qsProd = _detectQsProduct(pipeline);
+    if (qsProd != null) {
+      final prodLabel = qsProd == QsProduct.psakdi ? 'PSAKDI' : 'PA Xtra';
+      final hint = '$prodLabel · data customer & pipeline terisi otomatis';
+      return _buildActiveQsButton(pipeline, qsProd, hint);
+    }
+    return _buildDisabledQsBanner(pipeline);
+  }
+
+  Widget _buildActiveQsButton(
+    PipelineDetailModel pipeline,
+    QsProduct product,
+    String hint,
+  ) {
+    return Material(
+      color: const Color(0xFFFFF6EF),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => QsFormScreen(
+                product: product,
+                customerName: pipeline.customerName,
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE8732A), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8732A),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.post_add_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Buat Quotation Slip (QS)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF9A4712),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hint,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFF5A6475),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: Color(0xFF9A4712),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDisabledQsBanner(PipelineDetailModel pipeline) {
+    return CustomPaint(
+      painter: DashedRectPainter(
+        color: AppColors.borderDashed,
+        strokeWidth: 1.5,
+        gap: 5,
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F8FA),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.lock_outline,
+                size: 20,
+                color: Color(0xFF6B7485),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'QS belum tersedia untuk produk ini',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF3A4557),
+                    ),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Saat ini QS hanya tersedia untuk PSAKDI – Personal dan PA Xtra – Personal.',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xFF5A6475),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ===========================================================================

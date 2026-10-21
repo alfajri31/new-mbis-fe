@@ -1,12 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 import '../common/qs_section_card.dart';
 import '../../../../theme/app_theme.dart';
 import '../../qs_form_state.dart';
+import 'repositories/pekerjaan_repository.dart';
 import 'qs_pertanggungan_fields.dart';
 
+const _kelasInfo = [
+  {
+    'v': 1,
+    'title': 'Kelas 1 — Pekerjaan kantor',
+    'desc':
+        'Orang-orang yang melakukan pekerjaan di kantor atau sering tinggal / berada di kantor seperti: direktur, akuntan, sekretaris, karyawan administrasi, dsb.',
+    'rates': 'Rate standar: A 0.05% · A/B 0.10% · C 0.15%',
+  },
+  {
+    'v': 2,
+    'title': 'Kelas 2 — Sering bepergian / dinas luar',
+    'desc':
+        'Orang-orang dari kelas 1 yang sering bepergian / dinas luar, seperti: bagian penjualan, ibu rumah tangga, pimpinan proyek, manajer atau karyawan lapangan yang tidak terlibat langsung dalam pekerjaan, dan sejenisnya.',
+    'rates': 'Rate standar: A 0.08% · A/B 0.15% · C 0.20%',
+  },
+  {
+    'v': 3,
+    'title': 'Kelas 3 — Memakai alat / sarana kerja',
+    'desc':
+        'Orang-orang yang dalam pekerjaannya memerlukan alat-alat atau sarana lainnya untuk mendukung kegiatannya seperti: dokter gigi, ahli bedah, paramedis, sopir, mekanik, petugas laboratorium atau manajer lapangan yang terlibat langsung dalam proses pekerjaan, dan sejenisnya.',
+    'rates': 'Rate standar: A 0.12% · A/B 0.25% · C 0.30%',
+  },
+  {
+    'v': 4,
+    'title': 'Kelas 4 — Pekerjaan berat & berbahaya (ajukan manual)',
+    'desc':
+        'Orang-orang yang melakukan pekerjaan berat dan berbahaya berkaitan dengan tempat tugasnya, seperti: pekerja tambang, pekerja bangunan ketinggian, penyelam, dsb.',
+    'rates': 'Memerlukan persetujuan Underwriting khusus',
+  },
+];
+
 /// Card Section 5: Orang yang Dipertanggungkan
-class QsTertanggungCard extends StatelessWidget {
+class QsTertanggungCard extends StatefulWidget {
   final QsProduct product;
   final QsType type;
   final bool dataSamaPolis;
@@ -25,46 +58,8 @@ class QsTertanggungCard extends StatelessWidget {
   final int? klasifikasiPeserta;
   final ValueChanged<int?> onKlasifikasiChanged;
   final VoidCallback? onFieldChanged;
+  final PekerjaanController? pekerjaanController;
 
-  static const _chKerja = [
-    'Karyawan',
-    'Wiraswasta',
-    'PNS / BUMN',
-    'Ibu Rumah Tangga',
-    'Sopir',
-    'Pekerja Tambang',
-  ];
-
-  static const _kelasInfo = [
-    {
-      'v': 1,
-      'title': 'Kelas 1 — Pekerjaan kantor',
-      'desc':
-          'Orang-orang yang melakukan pekerjaan di kantor atau sering tinggal / berada di kantor seperti: direktur, akuntan, sekretaris, karyawan administrasi, dsb.',
-      'rates': 'Rate standar: A 0.05% · A/B 0.10% · C 0.15%',
-    },
-    {
-      'v': 2,
-      'title': 'Kelas 2 — Sering bepergian / dinas luar',
-      'desc':
-          'Orang-orang dari kelas 1 yang sering bepergian / dinas luar, seperti: bagian penjualan, ibu rumah tangga, pimpinan proyek, manajer atau karyawan lapangan yang tidak terlibat langsung dalam pekerjaan, dan sejenisnya.',
-      'rates': 'Rate standar: A 0.08% · A/B 0.15% · C 0.20%',
-    },
-    {
-      'v': 3,
-      'title': 'Kelas 3 — Memakai alat / sarana kerja',
-      'desc':
-          'Orang-orang yang dalam pekerjaannya memerlukan alat-alat atau sarana lainnya untuk mendukung kegiatannya seperti: dokter gigi, ahli bedah, paramedis, sopir, mekanik, petugas laboratorium atau manajer lapangan yang terlibat langsung dalam proses pekerjaan, dan sejenisnya.',
-      'rates': 'Rate standar: A 0.12% · A/B 0.25% · C 0.30%',
-    },
-    {
-      'v': 4,
-      'title': 'Kelas 4 — Pekerjaan berat & berbahaya (ajukan manual)',
-      'desc':
-          'Orang-orang yang melakukan pekerjaan berat dan berbahaya berkaitan dengan tempat tugasnya, seperti: pekerja tambang, pekerja bangunan ketinggian, penyelam, dsb.',
-      'rates': 'Memerlukan persetujuan Underwriting khusus',
-    },
-  ];
 
   const QsTertanggungCard({
     super.key,
@@ -86,10 +81,59 @@ class QsTertanggungCard extends StatelessWidget {
     required this.klasifikasiPeserta,
     required this.onKlasifikasiChanged,
     this.onFieldChanged,
+    this.pekerjaanController,
   });
 
   @override
+  State<QsTertanggungCard> createState() => _QsTertanggungCardState();
+}
+
+class _QsTertanggungCardState extends State<QsTertanggungCard> {
+  late final PekerjaanController _controller;
+  bool _ownsController = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pekerjaanController != null) {
+      _controller = widget.pekerjaanController!;
+      _ownsController = false;
+    } else {
+      _controller = PekerjaanController();
+      _ownsController = true;
+    }
+    // Langsung get dari API setiap kali card/layar dibuka
+    _controller.loadPekerjaan();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) {
+      _controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final product = widget.product;
+    final type = widget.type;
+    final dataSamaPolis = widget.dataSamaPolis;
+    final onDataSamaPolisChanged = widget.onDataSamaPolisChanged;
+    final namaPolis = widget.namaPolis;
+    final namaTertanggungCtrl = widget.namaTertanggungCtrl;
+    final noKtpCtrl = widget.noKtpCtrl;
+    final tglLahir = widget.tglLahir;
+    final onTglLahirChanged = widget.onTglLahirChanged;
+    final tglLahirGroupCtrl = widget.tglLahirGroupCtrl;
+    final refDate = widget.refDate;
+    final usiaError = widget.usiaError;
+    final pekerjaanCtrl = widget.pekerjaanCtrl;
+    final onPekerjaanChanged = widget.onPekerjaanChanged;
+    final saranKelas = widget.saranKelas;
+    final klasifikasiPeserta = widget.klasifikasiPeserta;
+    final onKlasifikasiChanged = widget.onKlasifikasiChanged;
+    final onFieldChanged = widget.onFieldChanged;
     final isSingle = type == QsType.single;
 
     return QsSectionCard(
@@ -196,7 +240,7 @@ class QsTertanggungCard extends StatelessWidget {
           ),
           if (tglLahir != null) ...[
             Builder(builder: (context) {
-              final lahir = tglLahir!;
+              final lahir = tglLahir;
               int totalMonths = (refDate.year - lahir.year) * 12 +
                   (refDate.month - lahir.month);
               if (refDate.day < lahir.day) totalMonths--;
@@ -218,7 +262,7 @@ class QsTertanggungCard extends StatelessWidget {
           if (usiaError != null) ...[
             const SizedBox(height: 4),
             Text(
-              usiaError!,
+              usiaError,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -301,21 +345,102 @@ class QsTertanggungCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _chKerja.map((chip) {
-                final isSel = pekerjaanCtrl.text == chip;
-                return QsQuickChip(
-                  label: chip,
-                  isSelected: isSel,
-                  onTap: () {
-                    pekerjaanCtrl.text = chip;
-                    onPekerjaanChanged(chip);
-                    onFieldChanged?.call();
-                  },
+            ListenableBuilder(
+              listenable: _controller,
+              builder: (context, _) {
+                // 1. Loading State (Shimmer Skeletonizer)
+                if (_controller.isLoading) {
+                  return const _PekerjaanSkeletonChips();
+                }
+
+                // 2. Negative Case (Error / Gagal Memuat)
+                if (_controller.hasError) {
+                  return Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorBannerBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppColors.errorBannerBorder,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 16,
+                          color: AppColors.redRequired,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _controller.error ?? 'Gagal memuat pekerjaan',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.errorBannerText,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => _controller.loadPekerjaan(),
+                          borderRadius: BorderRadius.circular(4),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.refresh,
+                                  size: 14,
+                                  color: AppColors.orangeMbis,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Coba lagi',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.orangeMbis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // 3. Empty State (tidak ada item dari response API)
+                if (_controller.items.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                // 4. Success State (Render Chips dari API)
+                final chKerja = _controller.items;
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: chKerja.map((chip) {
+                    final isSel = pekerjaanCtrl.text == chip;
+                    return QsQuickChip(
+                      label: chip,
+                      isSelected: isSel,
+                      onTap: () {
+                        pekerjaanCtrl.text = chip;
+                        onPekerjaanChanged(chip);
+                        onFieldChanged?.call();
+                      },
+                    );
+                  }).toList(),
                 );
-              }).toList(),
+              },
             ),
             if (saranKelas == 4) ...[
               const SizedBox(height: 8),
@@ -555,6 +680,38 @@ class QsTertanggungCard extends StatelessWidget {
           ],
         ],
       ],
+    );
+  }
+}
+
+/// Widget skeleton loading shimmer untuk pilihan chip pekerjaan
+class _PekerjaanSkeletonChips extends StatelessWidget {
+  const _PekerjaanSkeletonChips();
+
+  static const _placeholders = [
+    'Loading',
+    'Loading',
+    'Loading',
+    'Loading',
+    'Loading',
+    'Loading',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeletonizer(
+      enabled: true,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _placeholders.map((label) {
+          return QsQuickChip(
+            label: label,
+            isSelected: false,
+            onTap: () {},
+          );
+        }).toList(),
+      ),
     );
   }
 }
