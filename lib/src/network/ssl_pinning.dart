@@ -1,4 +1,5 @@
 import 'package:http/http.dart' as http;
+import '../dev_tools/http_activity_client.dart';
 
 import 'ssl_pinning_stub.dart'
     if (dart.library.io) 'ssl_pinning_io.dart' as impl;
@@ -191,7 +192,10 @@ class AppHttpClient {
   /// normal padahal perlindungannya tidak ada.
   static Future<void> initialize([SslPinningConfig? config]) async {
     final cfg = config ?? SslPinningConfig.fromEnvironment();
-    _instance = await impl.createAppHttpClient(cfg);
+
+    final client = await impl.createAppHttpClient(cfg);
+
+    _instance = HttpActivityClient(client);
   }
 
   /// Hanya untuk pengujian.

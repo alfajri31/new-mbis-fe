@@ -86,8 +86,14 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
   PipelineRepository get _pipelineRepo => ref.read(pipelineRepoProvider);
 
   /// Dummy pipelineId untuk keperluan testing
+  /// Pa Xtra
   static const String _dummyPipelineId = "ce116c9b-3a0b-4109-84ae-56175ffb27f2";
+  // psakdi 
+  // static const String _dummyPipelineId = "d7c76c91-e161-41a0-9288-07b6ce6c0c90";
+
   String get _activePipelineId => _dummyPipelineId;
+
+  
 
   @override
   void initState() {
@@ -532,12 +538,15 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
             onPressed: () => _openStatusEditor(pipeline),
             icon: Icon(pipeline.isTender ? Icons.trending_up : Icons.swap_vert,
                 size: 20, color: const Color(0xFF0E2B53)),
-            label: Text(
-              pipeline.isTender ? 'Maju Proses Tender' : 'Ubah Status Pipeline',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0E2B53),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                pipeline.isTender ? 'Maju Proses Tender' : 'Ubah Status Pipeline',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0E2B53),
+                ),
               ),
             ),
             style: OutlinedButton.styleFrom(
@@ -553,12 +562,15 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           child: OutlinedButton.icon(
             onPressed: _showScheduleSheet,
             icon: const Icon(Icons.event, size: 20, color: Color(0xFF0E2B53)),
-            label: const Text(
-              'Jadwalkan Visit',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0E2B53),
+            label: const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Jadwalkan Visit',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0E2B53),
+                ),
               ),
             ),
             style: OutlinedButton.styleFrom(
@@ -592,12 +604,15 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                 }
               },
               icon: const Icon(Icons.add, color: Colors.white, size: 20),
-              label: const Text(
-                'Tambah Aktivitas/Visit',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              label: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'Tambah Aktivitas/Visit',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
               style: ElevatedButton.styleFrom(

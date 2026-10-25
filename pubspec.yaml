@@ -128,6 +128,7 @@ dependencies:
   # key — lihat core/observability/crash_reporter.dart.
   firebase_crashlytics: ^4.3.10
   intl: ^0.20.3
+  skeletonizer: ^3.0.0
 
 dev_dependencies:
   flutter_test:

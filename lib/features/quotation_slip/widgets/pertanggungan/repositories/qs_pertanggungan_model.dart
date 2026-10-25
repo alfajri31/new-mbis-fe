@@ -1,5 +1,6 @@
 class QsPertanggunganResponse {
   final String? id;
+  final String? nomorQs;
   final String? productCode;
   final PemegangPolisData? pemegangPolis;
   final TipePertanggunganData? tipePertanggungan;
@@ -13,6 +14,7 @@ class QsPertanggunganResponse {
 
   QsPertanggunganResponse({
     this.id,
+    this.nomorQs,
     this.productCode,
     this.pemegangPolis,
     this.tipePertanggungan,
@@ -28,6 +30,9 @@ class QsPertanggunganResponse {
   factory QsPertanggunganResponse.fromJson(Map<String, dynamic> json) {
     return QsPertanggunganResponse(
       id: json['id']?.toString(),
+      nomorQs: json['nomorQs']?.toString() ??
+          json['nomor']?.toString() ??
+          json['quotationNumber']?.toString(),
       productCode: json['productCode']?.toString(),
       pemegangPolis: json['pemegangPolis'] is Map<String, dynamic>
           ? PemegangPolisData.fromJson(json['pemegangPolis'])

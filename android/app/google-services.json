@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:436844402963:android:5313728d05fe6ddd9ee2e6",
         "android_client_info": {
-          "package_name": "com.askrindo.mbis.mobile"
+          "package_name": "com.askrindo.mbis.mobile.staging"
         }
       },
       "oauth_client": [],

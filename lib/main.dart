@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/observability/crash_reporter.dart';
@@ -38,6 +39,7 @@ Future<void> main() async {
     _initFirebase(),
     SharedPreferences.getInstance(),
     AppHttpClient.initialize(),
+    initializeDateFormatting('id', null),
   ]);
   final sharedPreferences = bootstrap[1] as SharedPreferences;
   final authRepository = AuthRepository(sharedPreferences: sharedPreferences);

@@ -30,6 +30,8 @@ import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/
 import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/qs_pertanggungan_repository.dart';
 import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/product_classification_model.dart';
 import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/product_classification_repository.dart';
+import 'package:mbis/features/quotation_slip/domain/repositories/qs_repository.dart';
+import 'package:mbis/features/quotation_slip/data/repositories/api_qs_repository.dart';
 
 import 'app_providers.dart';
 
@@ -172,4 +174,8 @@ final psakdiClassificationsProvider = FutureProvider<List<QsProductClassificatio
   final repo = ref.watch(qsProductClassificationRepoProvider);
   return repo.getProductClassifications(kPsakdiTocCode);
 });
+
+final qsRepositoryProvider = Provider<QsRepository>(
+  (ref) => ApiQsRepository(apiClient: ref.watch(apiClientProvider)),
+);
 

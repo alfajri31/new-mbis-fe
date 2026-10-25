@@ -37,8 +37,27 @@ class AppConfig {
   /// `Dockerfile` dan `docs/MIGRASI-DOMAIN-PROD-V2.md`. Staging tetap same-origin.
   static String get apiBaseUrl {
     if (_apiUrlOverride.isNotEmpty) return _stripTrailingSlash(_apiUrlOverride);
-    return kIsWeb ? '' : 'http://10.0.2.2:8080';
+    // return kIsWeb ? '' : 'http://10.0.2.2:8080';
+    // server dev
+    // return kIsWeb ? '' : 'http://10.100.10.136:3014';
+
+    // wifi kantor
+    // return kIsWeb ? '' : 'http://172.20.1.174:8082';
+
+    // mockoon
+    // return kIsWeb ? '' : 'http://172.20.1.174:3567';
+
+    // wifi kosan
+    // return kIsWeb ? '' : 'http://192.168.100.192:8082';
+
+    // staging mas fajri
+    return kIsWeb ? '' : 'https://bathyal-coastally-stefany.ngrok-free.dev';
+    // return kIsWeb ? '' : 'https://football-mutual-nextel-increase.trycloudflare.com';
+
   }
+
+  /// URL Mockoon lokal/dev khusus untuk endpoint mock
+  // static String get mockoonBaseUrl => kIsWeb ? '' : 'http://172.20.1.174:3567';
 
   /// Buang garis miring di akhir supaya `.../v2/` + `/api/x` tidak jadi `.../v2//api/x`.
   /// Sebagian server memperlakukan `//` sebagai path lain dan membalas 404 — kesalahan

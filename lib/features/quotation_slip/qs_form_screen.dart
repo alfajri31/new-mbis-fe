@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/providers/repository_providers.dart';
 import '../../theme/app_theme.dart';
+import 'domain/entities/qs_api_exception.dart';
 import 'qs_form_state.dart';
 import 'widgets/pertanggungan/repositories/qs_pertanggungan_model.dart';
 import 'widgets/qs_step_pertanggungan.dart';
@@ -31,6 +32,14 @@ class QsFormScreen extends ConsumerStatefulWidget {
   final String? productCode;
   final String? qsId;
 
+  // Parameter v2 untuk Mode Underwriting & Riwayat
+  final bool isUwMode;
+  final int initialStep;
+  final String? initialStatus;
+  final String? initialStatusValue;
+  final String? serverNomorQs;
+  final bool viewOnly;
+
   const QsFormScreen({
     super.key,
     this.product = QsProduct.psakdi,
@@ -41,6 +50,12 @@ class QsFormScreen extends ConsumerStatefulWidget {
     this.pipelineId,
     this.productCode,
     this.qsId,
+    this.isUwMode = false,
+    this.initialStep = 0,
+    this.initialStatus,
+    this.initialStatusValue,
+    this.serverNomorQs,
+    this.viewOnly = false,
   });
 
   @override
@@ -155,6 +170,7 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
   final _warantiTambahanCtrl = TextEditingController();
   final _pengecualianTambahanCtrl = TextEditingController();
   final _deductibleCtrl = TextEditingController();
+  final _uwRevisionReasonCtrl = TextEditingController();
   String? _namaFile;
 
   @override
@@ -162,6 +178,17 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
     super.initState();
     _product = widget.product;
     _qsId = widget.qsId;
+    if (widget.serverNomorQs != null && widget.serverNomorQs!.isNotEmpty) {
+      _serverNomorQs = widget.serverNomorQs;
+    }
+    if (widget.isUwMode) {
+      _currentStep = widget.initialStep > 0 ? widget.initialStep : 1;
+    } else {
+      _currentStep = widget.initialStep;
+    }
+    if (widget.viewOnly) {
+      _isPreviewing = true;
+    }
 
     // Bersihkan form tanpa nilai default statis
     _namaPolisCtrl = TextEditingController(text: widget.customerName ?? '');
@@ -189,23 +216,54 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
     }
   }
 
-  Future<void> _fetchInitialData() async {
+  void _showBackendErrorPopup(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.info_outline, color: AppColors.orangeMbis, size: 24),
+            SizedBox(width: 8),
+            Text('Perhatian', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.navyMbis)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _fetchInitialData({bool reloadPrefill = false}) async {
     final pId = widget.pipelineId;
     if (pId == null || pId.isEmpty) return;
 
     final pCode = _productCode;
 
-    setState(() {
-      _isLoadingInitial = true;
-      _initialError = null;
-    });
+    if (!reloadPrefill) {
+      setState(() {
+        _isLoadingInitial = true;
+        _initialError = null;
+      });
+    }
 
     try {
-      final repo = ref.read(qsPertanggunganRepoProvider);
-      final res = await repo.getPertanggungan(
+      final repo = ref.read(qsRepositoryProvider);
+      final rawData = await repo.getPrefill(
         pipelineId: pId,
+        qsId: _qsId ?? widget.qsId,
         productCode: pCode,
       );
+
+      final res = QsPertanggunganResponse.fromJson(rawData);
 
       if (!mounted) return;
 
@@ -213,6 +271,9 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
         _apiResponse = res;
         if (res.id != null && res.id!.isNotEmpty) {
           _qsId = res.id;
+        }
+        if (res.nomorQs != null && res.nomorQs!.isNotEmpty) {
+          _serverNomorQs = res.nomorQs;
         }
 
         // 1. Resolve Product
@@ -447,10 +508,11 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
     });
 
     try {
-      final repo = ref.read(qsPertanggunganRepoProvider);
-      final bytes = await repo.getPreviewQsPdf(
+      final repo = ref.read(qsRepositoryProvider);
+      final bytes = await repo.getPreviewPdf(
         pipelineId: pId,
-        productCode: pCode,
+        productKey: pCode,
+        qsId: _qsId ?? widget.qsId,
       );
 
       if (!mounted) return;
@@ -503,6 +565,7 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
     _warantiTambahanCtrl.dispose();
     _pengecualianTambahanCtrl.dispose();
     _deductibleCtrl.dispose();
+    _uwRevisionReasonCtrl.dispose();
     super.dispose();
   }
 
@@ -523,10 +586,9 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
       return _serverNomorQs!;
     }
     final prod = _product == QsProduct.psakdi ? 'PSAKDI' : 'PAXTRA';
-    final prefix = _status == QsStatus.draft ? 'XXX' : '001';
     final now = DateTime.now();
     final mm = now.month.toString().padLeft(2, '0');
-    return '$prefix/QS-$prod/RO2-SBY/$mm/${now.year}';
+    return '004/QS-$prod/RO2-SBY/$mm/${now.year}';
   }
 
   List<UwDeviation> get _deviations => detectDeviations(
@@ -1539,7 +1601,16 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
       'klasifikasiPeserta': klasifikasiPeserta,
       'jangkaWaktu': jangkaWaktu,
       'orangDipertanggungkan': orangDipertanggungkan,
+      'continue': activeStep >= 1,
     };
+
+    if (_qsId != null && _qsId!.isNotEmpty) {
+      payload['qsId'] = _qsId;
+    }
+
+    if (_uwRevisionReasonCtrl.text.trim().isNotEmpty) {
+      payload['uwRevisionReason'] = _uwRevisionReasonCtrl.text.trim();
+    }
 
     // 7. Step 2 (Uang Pertanggungan & Biaya Asuransi) - dikirim jika >= step 2 (index 1)
     if (activeStep >= 1) {
@@ -1604,7 +1675,39 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
 
     // 8. Step 3 (T/C & Penerbitan) - dikirim jika >= step 3 (index 2)
     if (activeStep >= 2) {
-      final step3Map = {
+      final List<Map<String, dynamic>> termsList = [];
+      if (_klausulTambahanCtrl.text.trim().isNotEmpty) {
+        termsList.add({
+          'tipeTerms': 'KLAUSULA',
+          'descriptions': _klausulTambahanCtrl.text.trim().split('\n').where((s) => s.trim().isNotEmpty).toList(),
+        });
+      }
+      if (_kondisiTambahanCtrl.text.trim().isNotEmpty) {
+        termsList.add({
+          'tipeTerms': 'KONDISI',
+          'descriptions': _kondisiTambahanCtrl.text.trim().split('\n').where((s) => s.trim().isNotEmpty).toList(),
+        });
+      }
+      if (_warantiTambahanCtrl.text.trim().isNotEmpty) {
+        termsList.add({
+          'tipeTerms': 'WARANTI',
+          'descriptions': _warantiTambahanCtrl.text.trim().split('\n').where((s) => s.trim().isNotEmpty).toList(),
+        });
+      }
+      if (_pengecualianTambahanCtrl.text.trim().isNotEmpty) {
+        termsList.add({
+          'tipeTerms': 'PENGECUALIAN',
+          'descriptions': _pengecualianTambahanCtrl.text.trim().split('\n').where((s) => s.trim().isNotEmpty).toList(),
+        });
+      }
+      if (_deductibleCtrl.text.trim().isNotEmpty) {
+        termsList.add({
+          'tipeTerms': 'DEDUCTIBLE',
+          'descriptions': [_deductibleCtrl.text.trim()],
+        });
+      }
+
+      final step3Map = <String, dynamic>{
         'penerbitan': {
           'kota': _kotaCtrl.text.trim(),
           'tanggalTerbit': _tglPenerbitan != null
@@ -1616,11 +1719,11 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
         },
       };
 
-      payload['step3'] = step3Map;
-    }
+      if (termsList.isNotEmpty) {
+        step3Map['terms'] = termsList;
+      }
 
-    if (_qsId != null && _qsId!.isNotEmpty) {
-      payload['qsId'] = _qsId;
+      payload['step3'] = step3Map;
     }
 
     return payload;
@@ -1647,8 +1750,8 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
         final pCode = _productCode;
 
         final payload = _buildQuotationSlipPayload();
-        final repo = ref.read(qsPertanggunganRepoProvider);
-        final res = await repo.saveQuotationSlip(
+        final repo = ref.read(qsRepositoryProvider);
+        final res = await repo.upsertQuotationSlip(
           pipelineId: pId,
           productCode: pCode,
           payload: payload,
@@ -1657,17 +1760,11 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
         if (!mounted) return;
 
         setState(() {
-          if (res.id != null && res.id!.isNotEmpty) {
-            _qsId = res.id;
+          if (res['id'] != null && res['id'].toString().isNotEmpty) {
+            _qsId = res['id'].toString();
           }
-          if (res.nomorQs != null && res.nomorQs!.isNotEmpty) {
-            _serverNomorQs = res.nomorQs;
-          }
-          if (res.payload != null) {
-            _apiResponse = res.payload;
-            if (res.payload!.perhitunganBiaya != null) {
-              _apiPerhitunganBiaya = res.payload!.perhitunganBiaya;
-            }
+          if (res['nomorQs'] != null && res['nomorQs'].toString().isNotEmpty) {
+            _serverNomorQs = res['nomorQs'].toString();
           }
           _isSavingQs = false;
 
@@ -1681,37 +1778,45 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
             _fetchPreviewPdf(pId, pCode);
           }
         });
+
+        // Kebutuhan 10: Prefill dipanggil saat Langkah 1 dibuat dan lagi pada setiap "Lanjut".
+        _fetchInitialData(reloadPrefill: true);
       } catch (e) {
         if (!mounted) return;
         setState(() => _isSavingQs = false);
 
-        final cleanMsg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(
-                  Icons.error_outline_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Gagal menyimpan draft QS: $cleanMsg',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+        // Kebutuhan 1: Error 400/422: tampilkan pop-up yang HANYA berisi message dari backend. Status lain: snackbar.
+        if (e is QsApiException && (e.statusCode == 400 || e.statusCode == 422)) {
+          _showBackendErrorPopup(e.message);
+        } else {
+          final cleanMsg = e.toString().replaceFirst('Exception: ', '');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white,
+                    size: 20,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Gagal menyimpan draft QS: $cleanMsg',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.errorRed,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
             ),
-            backgroundColor: AppColors.errorRed,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 4),
-          ),
-        );
+          );
+        }
       }
     } else {
       // Jika tanpa pipelineId, transisi langkah secara lokal
@@ -1727,11 +1832,142 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
     }
   }
 
+  Future<void> _simpanDraft() async {
+    if (_isSavingQs) return;
+    final pId = _pipelineId;
+    if (pId == null || pId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✓ Draft tersimpan secara lokal')),
+      );
+      return;
+    }
+
+    setState(() => _isSavingQs = true);
+    try {
+      final pCode = _productCode;
+      final payload = _buildQuotationSlipPayload();
+      final repo = ref.read(qsRepositoryProvider);
+      final res = await repo.upsertQuotationSlip(
+        pipelineId: pId,
+        productCode: pCode,
+        payload: payload,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        if (res['id'] != null && res['id'].toString().isNotEmpty) {
+          _qsId = res['id'].toString();
+        }
+        if (res['nomorQs'] != null && res['nomorQs'].toString().isNotEmpty) {
+          _serverNomorQs = res['nomorQs'].toString();
+        }
+        _isSavingQs = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Draft QS berhasil disimpan.'),
+          backgroundColor: AppColors.primaryNavy,
+        ),
+      );
+
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingQs = false);
+      if (e is QsApiException && (e.statusCode == 400 || e.statusCode == 422)) {
+        _showBackendErrorPopup(e.message);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan draft QS: $e'),
+            backgroundColor: AppColors.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleUwSetujuDenganPerubahan() async {
+    final revisionNotes = _uwRevisionReasonCtrl.text.trim();
+    if (revisionNotes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Catatan revisi UW wajib diisi.'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+      return;
+    }
+
+    final pId = _pipelineId;
+    if (pId == null || pId.isEmpty) return;
+
+    setState(() => _isSavingQs = true);
+    try {
+      final pCode = _productCode;
+      final payload = _buildQuotationSlipPayload(2);
+      payload['underwriterNotes'] = revisionNotes;
+
+      final repo = ref.read(qsRepositoryProvider);
+
+      // 1. Simpan perubahan UW
+      final res = await repo.upsertQuotationSlip(
+        pipelineId: pId,
+        productCode: pCode,
+        payload: payload,
+      );
+
+      final qsId = res['id']?.toString() ?? _qsId ?? widget.qsId ?? '';
+
+      // 2. Submit & kirim email ke customer
+      await repo.submitEmail(
+        pipelineId: pId,
+        qsId: qsId,
+      );
+
+      if (!mounted) return;
+      setState(() => _isSavingQs = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Persetujuan & perubahan UW berhasil disimpan, QS telah diterbitkan.'),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingQs = false);
+
+      if (e is QsApiException && (e.statusCode == 400 || e.statusCode == 422)) {
+        _showBackendErrorPopup(e.message);
+      } else {
+        final cleanMsg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal memproses persetujuan UW: $cleanMsg'),
+            backgroundColor: AppColors.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
   void _onBack() {
     if (_isSavingQs) return;
     FocusScope.of(context).unfocus();
     if (_isPreviewing) {
       setState(() => _isPreviewing = false);
+    } else if (widget.isUwMode) {
+      if (_currentStep > 1) {
+        setState(() => _currentStep--);
+      } else {
+        Navigator.maybePop(context);
+      }
     } else if (_currentStep > 0) {
       setState(() => _currentStep--);
     } else {
@@ -1828,29 +2064,30 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
                     ],
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isPreviewing = false;
-                      _currentStep = 0;
-                    });
-                  },
-                  icon: const Icon(Icons.edit, size: 14, color: AppColors.surfaceWhite),
-                  label: const Text(
-                    'Edit',
-                    style: TextStyle(
-                        color: AppColors.surfaceWhite,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13),
+                if (!widget.viewOnly)
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _isPreviewing = false;
+                        _currentStep = widget.isUwMode ? 1 : 0;
+                      });
+                    },
+                    icon: const Icon(Icons.edit, size: 14, color: AppColors.surfaceWhite),
+                    label: const Text(
+                      'Edit',
+                      style: TextStyle(
+                          color: AppColors.surfaceWhite,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: AppColors.whiteAlpha14,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: AppColors.whiteAlpha14,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1858,7 +2095,34 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
       ),
       body: Column(
         children: [
-          if (hasDeviations) ...[
+          if (widget.isUwMode) ...[
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.blueLightBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primaryNavy.withValues(alpha: 0.2)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.rate_review_outlined, size: 20, color: AppColors.primaryNavy),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Mode Review Underwriting: Periksa dokumen PDF di bawah. Tinjau Langkah 2 atau T/C jika perlu perubahan, lalu isi catatan revisi dan setujui.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryNavy,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (hasDeviations) ...[
             Container(
               margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               padding: const EdgeInsets.all(14),
@@ -1917,27 +2181,30 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
               ),
             ),
           ],
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-            child: Row(
-              children: [
-                const Text(
-                  'Ubah: ',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textLabel),
-                ),
-                const SizedBox(width: 4),
-                _jumpChip('Pertanggungan', 0),
-                const SizedBox(width: 6),
-                _jumpChip('Uang Pertanggungan & Biaya Asuransi', 1),
-                const SizedBox(width: 6),
-                _jumpChip('T/C', 2),
-              ],
+          if (!widget.viewOnly)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              child: Row(
+                children: [
+                  const Text(
+                    'Ubah: ',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textLabel),
+                  ),
+                  const SizedBox(width: 4),
+                  if (!widget.isUwMode) ...[
+                    _jumpChip('Pertanggungan', 0),
+                    const SizedBox(width: 6),
+                  ],
+                  _jumpChip('Uang Pertanggungan & Biaya Asuransi', 1),
+                  const SizedBox(width: 6),
+                  _jumpChip('T/C', 2),
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: _buildPdfViewerContent(),
           ),
@@ -1950,58 +2217,169 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
           border: Border(top: BorderSide(color: AppColors.borderDivider)),
         ),
         child: SafeArea(
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _simpanDraft,
-                  style: OutlinedButton.styleFrom(
+          child: widget.viewOnly
+              ? FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navyMbis,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: const BorderSide(color: AppColors.navyMbis),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: const Text(
-                    'Simpan Draft',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.navyMbis),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: hasDeviations
-                    ? FilledButton.icon(
-                        onPressed: _ajukanKeUW,
-                        icon: const Icon(Icons.send, size: 18),
-                        label: const Text('Ajukan ke UW',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 15)),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.orangeMbis,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                  child: const Text('Tutup',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                )
+              : widget.isUwMode
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgScreen,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderDivider),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Text(
+                                    'Catatan revisi UW',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: AppColors.navyMbis,
+                                    ),
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '(wajib)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                      color: AppColors.redRequired,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _uwRevisionReasonCtrl,
+                                maxLines: 2,
+                                onChanged: (_) => setState(() {}),
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Tuliskan alasan perubahan tarif / ketentuan...',
+                                  hintStyle: const TextStyle(
+                                      fontSize: 12.5, color: AppColors.hintText),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.borderDefault),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  fillColor: Colors.white,
+                                  filled: true,
+                                ),
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
                         ),
-                      )
-                    : FilledButton.icon(
-                        onPressed: _finalisasi,
-                        icon: const Icon(Icons.check, size: 18),
-                        label: const Text('OK',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 15)),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.navyMbis,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: (_uwRevisionReasonCtrl.text.trim().isEmpty ||
+                                  _isSavingQs)
+                              ? null
+                              : _handleUwSetujuDenganPerubahan,
+                          icon: _isSavingQs
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.check_circle_outline, size: 18),
+                          label: Text(
+                            _isSavingQs
+                                ? 'Menyimpan...'
+                                : 'Setuju dengan perubahan',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 15),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.greenTotal,
+                            disabledBackgroundColor:
+                                AppColors.greenTotal.withValues(alpha: 0.4),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
+                          ),
                         ),
-                      ),
-              ),
-            ],
-          ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _simpanDraft,
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: AppColors.navyMbis),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Text(
+                              'Simpan Draft',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.navyMbis),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: hasDeviations
+                              ? FilledButton.icon(
+                                  onPressed: _ajukanKeUW,
+                                  icon: const Icon(Icons.send, size: 18),
+                                  label: const Text('Ajukan ke UW',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15)),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.orangeMbis,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                  ),
+                                )
+                              : FilledButton.icon(
+                                  onPressed: _finalisasi,
+                                  icon: const Icon(Icons.check, size: 18),
+                                  label: const Text('OK',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15)),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.navyMbis,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
         ),
       ),
     ),
@@ -2171,19 +2549,6 @@ class _QsFormScreenState extends ConsumerState<QsFormScreen>
         ),
       ),
     );
-  }
-
-  void _simpanDraft() {
-    setState(() => _status = QsStatus.draft);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✓ Draft QS tersimpan di pipeline'),
-        backgroundColor: AppColors.navyMbis,
-      ),
-    );
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
   }
 
 

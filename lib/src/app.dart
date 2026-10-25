@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mbis/src/dev_tools/dev_tools_fab.dart';
 
 import '../theme/app_theme.dart';
 import '../core/providers/app_providers.dart';
@@ -24,7 +25,8 @@ class MbisApp extends ConsumerStatefulWidget {
   final AuthRepository authRepository;
   final AuthSession? initialSession;
 
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   /// Lets screens (e.g. the dashboard) refresh when a pushed full-screen route is
   /// popped back to them — subscribe as a [RouteAware] and refetch in didPopNext().
@@ -61,6 +63,7 @@ class MbisApp extends ConsumerStatefulWidget {
     'KUP',
     'BM',
     'RO',
+    'UW',
     ...Roles.headOfficeDivisions,
   };
 
@@ -227,6 +230,12 @@ class MbisAppState extends ConsumerState<MbisApp> {
       // Web/desktop: let the mouse drag-scroll lists (not just the wheel) and
       // keep Material's scrollbars. Touch is unaffected on mobile.
       scrollBehavior: const _AppScrollBehavior(),
+      builder: (context, child) => Stack(
+        children: [
+          MediaQuery.withNoTextScaling(child: child ?? const SizedBox.shrink()),
+          const DevToolsFab(),
+        ],
+      ),
     );
   }
 }
@@ -238,9 +247,9 @@ class _AppScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.trackpad,
-        PointerDeviceKind.stylus,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+  };
 }
