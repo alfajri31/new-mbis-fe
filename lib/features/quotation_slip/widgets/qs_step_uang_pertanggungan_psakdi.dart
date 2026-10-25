@@ -11,7 +11,6 @@ import 'uang_pertanggungan/qs_calculation_mode_banner.dart';
 import 'uang_pertanggungan/qs_diskon_biaya_admin_card.dart';
 import 'uang_pertanggungan/psakdi_rincian_premi_card.dart';
 import 'uang_pertanggungan/qs_risiko_dijamin_card.dart';
-import 'uang_pertanggungan/qs_uw_alert_banner.dart';
 
 /// Tab 2 – Uang Pertanggungan & Suku Premi Khusus PSAKDI (Prototype 1:1).
 class QsStepUangPertanggunganPsakdi extends StatefulWidget {
@@ -297,13 +296,7 @@ class _QsStepUangPertanggunganPsakdiState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Underwriting Deviations Banner
-          if (widget.deviations.isNotEmpty) ...[
-            QsUwAlertBanner(deviations: widget.deviations),
-            const SizedBox(height: 14),
-          ],
-
-          // 2. Jenis Risiko PSAKDI
+          // 1. Jenis Risiko PSAKDI
           PsakdiJenisRisikoCard(
             klasifikasiPeserta: widget.klasifikasiPeserta,
             upACtrl: widget.upACtrl,

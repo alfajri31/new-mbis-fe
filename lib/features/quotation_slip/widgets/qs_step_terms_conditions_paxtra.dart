@@ -35,6 +35,12 @@ class QsStepTermsConditionsPaXtra extends StatefulWidget {
   final TextEditingController pengecualianTambahanCtrl;
   final TextEditingController deductibleCtrl;
 
+  // Optional dynamic standard lists
+  final List<String>? standardKlausula;
+  final List<String>? standardKondisi;
+  final List<String>? standardWaranti;
+  final List<String>? standardPengecualian;
+
   // Dokumen
   final String? namaFile;
   final VoidCallback onPilihFile;
@@ -56,6 +62,10 @@ class QsStepTermsConditionsPaXtra extends StatefulWidget {
     required this.warantiTambahanCtrl,
     required this.pengecualianTambahanCtrl,
     required this.deductibleCtrl,
+    this.standardKlausula,
+    this.standardKondisi,
+    this.standardWaranti,
+    this.standardPengecualian,
     required this.namaFile,
     required this.onPilihFile,
     required this.onHapusFile,
@@ -140,32 +150,8 @@ class _QsStepTermsConditionsPaXtraState
     super.initState();
     _initListsFromControllers();
 
-    // Default prototype: 15 September 2026
-    _tglPenerbitan = widget.tglPenerbitan != null &&
-            (widget.tglPenerbitan!.year != DateTime.now().year ||
-                widget.tglPenerbitan!.month != DateTime.now().month ||
-                widget.tglPenerbitan!.day != DateTime.now().day)
-        ? widget.tglPenerbitan!
-        : DateTime(2026, 9, 15);
-    _masaBerlaku = widget.masaBerlaku != null &&
-            (widget.masaBerlaku!.year != DateTime.now().year ||
-                widget.masaBerlaku!.month != DateTime.now().month ||
-                widget.masaBerlaku!.day != DateTime.now().day)
-        ? widget.masaBerlaku!
-        : DateTime(2026, 9, 29);
-
-    if (widget.kotaCtrl.text.isEmpty) {
-      widget.kotaCtrl.text = 'Padang';
-    }
-    if (widget.cabangCtrl.text.isEmpty) {
-      widget.cabangCtrl.text = 'PADANG';
-    }
-    if (widget.penandatanganCtrl.text.isEmpty) {
-      widget.penandatanganCtrl.text = 'Sarno';
-    }
-    if (widget.jabatanCtrl.text.isEmpty) {
-      widget.jabatanCtrl.text = 'Pemimpin Cabang';
-    }
+    _tglPenerbitan = widget.tglPenerbitan ?? DateTime.now();
+    _masaBerlaku = widget.masaBerlaku ?? DateTime.now().add(const Duration(days: 14));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onTglPenerbitanChanged(_tglPenerbitan);
@@ -183,6 +169,12 @@ class _QsStepTermsConditionsPaXtraState
     if (widget.masaBerlaku != null &&
         widget.masaBerlaku != oldWidget.masaBerlaku) {
       _masaBerlaku = widget.masaBerlaku!;
+    }
+    if (widget.klausulTambahanCtrl.text != oldWidget.klausulTambahanCtrl.text ||
+        widget.kondisiTambahanCtrl.text != oldWidget.kondisiTambahanCtrl.text ||
+        widget.warantiTambahanCtrl.text != oldWidget.warantiTambahanCtrl.text ||
+        widget.pengecualianTambahanCtrl.text != oldWidget.pengecualianTambahanCtrl.text) {
+      _initListsFromControllers();
     }
   }
 
@@ -248,7 +240,8 @@ class _QsStepTermsConditionsPaXtraState
 
           // 2. Klausula Card & Tambahan
           PaXtraKlausulaCard(
-            standardKlausula: kPaxtraKlausulaStandar,
+            standardKlausula:
+                widget.standardKlausula ?? kPaxtraKlausulaStandar,
             isExpanded: _showKlausula,
             onToggleExpand: () =>
                 setState(() => _showKlausula = !_showKlausula),
@@ -275,7 +268,7 @@ class _QsStepTermsConditionsPaXtraState
           PaXtraTambahanSectionCard(
             title: 'Kondisi',
             subtitle: 'Standar tercentang & terkunci · tambahan boleh diisi',
-            standardItems: kPaxtraKondisiStandar,
+            standardItems: widget.standardKondisi ?? kPaxtraKondisiStandar,
             tambahanTitle: 'Pilihan Kondisi Tambahan',
             draftPlaceholder: 'Tulis tambahan…',
             draftCtrl: _draftKondisiCtrl,
@@ -301,7 +294,7 @@ class _QsStepTermsConditionsPaXtraState
           PaXtraTambahanSectionCard(
             title: 'Waranti',
             subtitle: 'Standar tercentang & terkunci · tambahan boleh diisi',
-            standardItems: kPaxtraWarantiStandar,
+            standardItems: widget.standardWaranti ?? kPaxtraWarantiStandar,
             tambahanTitle: 'Pilihan Waranti Tambahan',
             draftPlaceholder: 'Tulis tambahan…',
             draftCtrl: _draftWarantiCtrl,
@@ -327,7 +320,8 @@ class _QsStepTermsConditionsPaXtraState
           PaXtraTambahanSectionCard(
             title: 'Pengecualian',
             subtitle: 'Standar tercentang & terkunci · tambahan boleh diisi',
-            standardItems: kPaxtraPengecualianStandar,
+            standardItems:
+                widget.standardPengecualian ?? kPaxtraPengecualianStandar,
             tambahanTitle: 'Pilihan Pengecualian Tambahan',
             draftPlaceholder: 'Tulis tambahan…',
             draftCtrl: _draftPengecualianCtrl,

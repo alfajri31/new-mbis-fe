@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../visit_rm_models.dart';
 
-/// Kartu filter tanggal, periode cepat, kanwil, cabang, dan RM
+/// Kartu filter lengkap sesuai prototype M-BIS:
+/// Periode kunjungan, Wilayah (Admin), Cabang (Disabled untuk RM/Pinca),
+/// Nama RM (hidden untuk RM), Stage Pipeline, Kategori, Entitas BUMN,
+/// Status HVC, Sumber Bisnis, COB, LOB, TOC, serta tombol Reset & Tutup.
 class VisitRmFilterCard extends StatelessWidget {
   final String quickPeriod;
   final ValueChanged<String> onQuickPeriodChanged;
@@ -20,6 +23,23 @@ class VisitRmFilterCard extends StatelessWidget {
   final ValueChanged<String?> onSelectedCabChanged;
   final String selectedRm;
   final ValueChanged<String?> onSelectedRmChanged;
+
+  final String selectedStage;
+  final ValueChanged<String?> onSelectedStageChanged;
+  final String selectedKat;
+  final ValueChanged<String?> onSelectedKatChanged;
+  final String selectedEnt;
+  final ValueChanged<String?> onSelectedEntChanged;
+  final String selectedHvc;
+  final ValueChanged<String?> onSelectedHvcChanged;
+  final String selectedSumber;
+  final ValueChanged<String?> onSelectedSumberChanged;
+  final String selectedCob;
+  final ValueChanged<String?> onSelectedCobChanged;
+  final String selectedLob;
+  final ValueChanged<String?> onSelectedLobChanged;
+  final String selectedToc;
+  final ValueChanged<String?> onSelectedTocChanged;
 
   final List<String> branchesInScope;
   final List<RmModel> rmsInBranchScope;
@@ -42,14 +62,59 @@ class VisitRmFilterCard extends StatelessWidget {
     required this.onSelectedCabChanged,
     required this.selectedRm,
     required this.onSelectedRmChanged,
+    required this.selectedStage,
+    required this.onSelectedStageChanged,
+    required this.selectedKat,
+    required this.onSelectedKatChanged,
+    required this.selectedEnt,
+    required this.onSelectedEntChanged,
+    required this.selectedHvc,
+    required this.onSelectedHvcChanged,
+    required this.selectedSumber,
+    required this.onSelectedSumberChanged,
+    required this.selectedCob,
+    required this.onSelectedCobChanged,
+    required this.selectedLob,
+    required this.onSelectedLobChanged,
+    required this.selectedToc,
+    required this.onSelectedTocChanged,
     required this.branchesInScope,
     required this.rmsInBranchScope,
     required this.onReset,
     required this.onClose,
   });
 
+  static const List<String> _allLobs = [
+    'Asuransi Harta Benda',
+    'Asuransi Kecelakaan Diri',
+    'Asuransi Kendaraan Bermotor',
+    'Asuransi Rekayasa',
+  ];
+
+  static List<String> _getTocs(String lob) {
+    if (lob == 'Asuransi Kecelakaan Diri') {
+      return ['PA Xtra – Personal', 'PSAKDI – Personal'];
+    } else if (lob == 'Asuransi Harta Benda') {
+      return ['IAR / Industrial All Risk'];
+    } else if (lob == 'Asuransi Kendaraan Bermotor') {
+      return ['Kendaraan Pengangkut Barang'];
+    } else if (lob == 'Asuransi Rekayasa') {
+      return ['CAR / Contractor All Risk'];
+    }
+    return [
+      'CAR / Contractor All Risk',
+      'IAR / Industrial All Risk',
+      'Kendaraan Pengangkut Barang',
+      'PA Xtra – Personal',
+      'PSAKDI – Personal',
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isRmOrPinca = activeRole == 'rm' || activeRole == 'pinca';
+    final tocs = _getTocs(selectedLob);
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceWhite,
@@ -60,7 +125,7 @@ class VisitRmFilterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Period quick pills
+          // 1. Periode kunjungan
           const Text(
             'Periode kunjungan',
             style: TextStyle(
@@ -140,15 +205,11 @@ class VisitRmFilterCard extends StatelessWidget {
           ],
           const SizedBox(height: 12),
 
-          // Wilayah Dropdown (Admin only)
+          // 2. Kantor Wilayah (Admin only)
           if (activeRole == 'admin') ...[
             const Text(
               'Kantor Wilayah',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textLabel,
-              ),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
             ),
             const SizedBox(height: 4),
             _buildDropdown<String>(
@@ -162,48 +223,188 @@ class VisitRmFilterCard extends StatelessWidget {
             const SizedBox(height: 10),
           ],
 
-          // Cabang Dropdown (Admin & Pinwil)
-          if (activeRole != 'pinca') ...[
+          // 3. Cabang (disabled untuk RM & Pinca)
+          const Text(
+            'Cabang',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: isRmOrPinca ? 'Padang' : selectedCab,
+            enabled: !isRmOrPinca,
+            items: isRmOrPinca
+                ? const [DropdownMenuItem(value: 'Padang', child: Text('KC Padang'))]
+                : [
+                    const DropdownMenuItem(value: '', child: Text('Semua Cabang')),
+                    ...branchesInScope.map((b) => DropdownMenuItem(value: b, child: Text('KC $b'))),
+                  ],
+            onChanged: isRmOrPinca ? (_) {} : onSelectedCabChanged,
+          ),
+          if (isRmOrPinca) ...[
+            const SizedBox(height: 4),
+            Text(
+              activeRole == 'rm'
+                  ? 'RM hanya melihat cabangnya sendiri'
+                  : 'Pinca hanya melihat cabangnya sendiri',
+              style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            ),
+          ],
+          const SizedBox(height: 10),
+
+          // 4. Nama RM (hanya jika bukan role RM)
+          if (activeRole != 'rm') ...[
             const Text(
-              'Kantor Cabang',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textLabel,
-              ),
+              'Nama RM',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
             ),
             const SizedBox(height: 4),
             _buildDropdown<String>(
-              value: selectedCab,
+              value: selectedRm,
               items: [
-                const DropdownMenuItem(value: '', child: Text('Semua Cabang')),
-                ...branchesInScope.map((b) => DropdownMenuItem(value: b, child: Text('KC $b'))),
+                const DropdownMenuItem(value: '', child: Text('Semua RM')),
+                ...rmsInBranchScope.map((r) => DropdownMenuItem(
+                      value: r.id,
+                      child: Text('${r.nama} · ${r.cab}'),
+                    )),
               ],
-              onChanged: onSelectedCabChanged,
+              onChanged: onSelectedRmChanged,
             ),
             const SizedBox(height: 10),
           ],
 
-          // RM Dropdown (all roles)
+          // 5. Stage Pipeline
           const Text(
-            'Nama RM',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textLabel,
-            ),
+            'Stage Pipeline',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
           ),
           const SizedBox(height: 4),
           _buildDropdown<String>(
-            value: selectedRm,
-            items: [
-              const DropdownMenuItem(value: '', child: Text('Semua RM')),
-              ...rmsInBranchScope.map((r) => DropdownMenuItem(
-                    value: r.id,
-                    child: Text('${r.nama} · ${r.cab}'),
-                  )),
+            value: selectedStage,
+            items: const [
+              DropdownMenuItem(value: '', child: Text('Semua Stage')),
+              DropdownMenuItem(value: 'P3', child: Text('P3 · Prospek')),
+              DropdownMenuItem(value: 'P2', child: Text('P2 · Proses')),
+              DropdownMenuItem(value: 'P1', child: Text('P1 · Penerbitan')),
+              DropdownMenuItem(value: 'WON', child: Text('Won')),
             ],
-            onChanged: onSelectedRmChanged,
+            onChanged: onSelectedStageChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 6. Kategori
+          const Text(
+            'Kategori',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedKat,
+            items: const [
+              DropdownMenuItem(value: '', child: Text('Semua Kategori')),
+              DropdownMenuItem(value: 'Perbankan', child: Text('Perbankan')),
+              DropdownMenuItem(value: 'Non Perbankan', child: Text('Non Perbankan')),
+            ],
+            onChanged: onSelectedKatChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 7. Entitas BUMN
+          const Text(
+            'Entitas BUMN',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedEnt,
+            items: const [
+              DropdownMenuItem(value: '', child: Text('Semua Entitas')),
+              DropdownMenuItem(value: 'BUMN', child: Text('BUMN')),
+              DropdownMenuItem(value: 'Non BUMN', child: Text('Non BUMN')),
+            ],
+            onChanged: onSelectedEntChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 8. Status HVC
+          const Text(
+            'Status HVC',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedHvc,
+            items: const [
+              DropdownMenuItem(value: '', child: Text('Semua Status')),
+              DropdownMenuItem(value: 'hvc', child: Text('HVC')),
+              DropdownMenuItem(value: 'non', child: Text('Non HVC')),
+            ],
+            onChanged: onSelectedHvcChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 9. Sumber Bisnis
+          const Text(
+            'Sumber Bisnis',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedSumber,
+            items: const [
+              DropdownMenuItem(value: '', child: Text('Semua Sumber')),
+              DropdownMenuItem(value: 'DIRECT', child: Text('DIRECT')),
+              DropdownMenuItem(value: 'BROKER', child: Text('BROKER')),
+              DropdownMenuItem(value: 'AGEN', child: Text('AGEN')),
+            ],
+            onChanged: onSelectedSumberChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 10. COB
+          const Text(
+            'COB',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedCob,
+            items: const [
+              DropdownMenuItem(value: '', child: Text('Semua COB')),
+              DropdownMenuItem(value: 'Asuransi Umum', child: Text('Asuransi Umum')),
+            ],
+            onChanged: onSelectedCobChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 11. LOB
+          const Text(
+            'LOB',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedLob,
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Semua LOB')),
+              ..._allLobs.map((l) => DropdownMenuItem(value: l, child: Text(l))),
+            ],
+            onChanged: onSelectedLobChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // 12. TOC
+          const Text(
+            'TOC',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textLabel),
+          ),
+          const SizedBox(height: 4),
+          _buildDropdown<String>(
+            value: selectedToc,
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Semua TOC')),
+              ...tocs.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+            ],
+            onChanged: onSelectedTocChanged,
           ),
           const SizedBox(height: 16),
 
@@ -304,6 +505,8 @@ class VisitRmFilterCard extends StatelessWidget {
     required ValueChanged<T?> onChanged,
     bool enabled = true,
   }) {
+    final effectiveValue = items.any((it) => it.value == value) ? value : items.first.value as T;
+
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -314,7 +517,7 @@ class VisitRmFilterCard extends StatelessWidget {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
-          value: value,
+          value: effectiveValue,
           items: items,
           onChanged: enabled ? onChanged : null,
           isExpanded: true,

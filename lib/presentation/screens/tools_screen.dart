@@ -55,6 +55,14 @@ class ToolsScreen extends StatelessWidget {
         bg: AppColors.greenLight,
         route: '$basePath/kalkulator-premi',
       ),
+      _Tool(
+        icon: '📋',
+        label: 'Visit RM',
+        desc:
+            'Pantau aktivitas kunjungan RM: lokasi, stage pipeline, dan nilai pipeline',
+        bg: AppColors.navyBg,
+        route: '$basePath/visit-rm',
+      ),
     ];
 
     // AI Assistant — RM, BM, pimpinan Kanwil, dan KUP (CR-17). ADMIN mengatur

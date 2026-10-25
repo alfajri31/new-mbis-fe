@@ -12,7 +12,6 @@ import 'uang_pertanggungan/qs_calculation_mode_banner.dart';
 import 'uang_pertanggungan/qs_diskon_biaya_admin_card.dart';
 import 'uang_pertanggungan/paxtra_rincian_biaya_card.dart';
 import 'uang_pertanggungan/qs_risiko_dijamin_card.dart';
-import 'uang_pertanggungan/qs_uw_alert_banner.dart';
 
 /// Tab 2 – Uang Pertanggungan & Biaya Asuransi Khusus PA Xtra (Prototype 1:1).
 class QsStepUangPertanggunganPaXtra extends StatefulWidget {
@@ -393,13 +392,7 @@ class _QsStepUangPertanggunganPaXtraState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Underwriting Deviations Banner
-          if (widget.deviations.isNotEmpty) ...[
-            QsUwAlertBanner(deviations: widget.deviations),
-            const SizedBox(height: 14),
-          ],
-
-          // 2. Jaminan Pokok
+          // 1. Jaminan Pokok
           PaXtraJaminanPokokCard(
             upPaXtraCtrl: widget.upPaXtraCtrl,
             onFieldChanged: _onRebuild,

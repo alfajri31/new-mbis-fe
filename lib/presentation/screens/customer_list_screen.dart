@@ -16,6 +16,8 @@ import '../widgets/rm_picker_sheet.dart';
 import '../widgets/state_views.dart';
 import 'add_customer_screen.dart';
 import 'add_pipeline_screen.dart';
+import '../providers/pipeline_list_provider.dart';
+import '../widgets/pipeline_tab/pipeline_tab_view.dart';
 
 class CustomerListScreen extends ConsumerStatefulWidget {
   /// When true, lists the logged-in agent's customers (agent portal) and hides
@@ -32,6 +34,9 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
     with RouteAware {
   // First page kept small so the list paints fast; more streams in on scroll.
   static const int _pageSize = kCustomerPageSize;
+
+  /// Tab aktif: 0 = Customer, 1 = Pipeline (sesuai prototype).
+  int _selectedTab = 0;
 
   // UI-ephemeral (tetap di widget): scroll, kolom cari, debounce.
   final ScrollController _scrollController = ScrollController();
@@ -173,8 +178,8 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
       backgroundColor: AppColors.bgScreen,
       extendBodyBehindAppBar: true,
       appBar: GlassAppBar(
-        title: 'Customer',
-        actions: !_canAddCustomer
+        title: _selectedTab == 0 ? 'Customer' : 'Pipeline',
+        actions: (!_canAddCustomer || _selectedTab != 0)
             ? const []
             : [_buildTambahButton(), const SizedBox(width: AppSpacing.lg)],
       ),
@@ -188,76 +193,94 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
           child: RefreshIndicator(
             color: AppColors.primaryNavy,
             displacement: topInset,
-            onRefresh: _refresh,
+            onRefresh: _selectedTab == 0
+                ? _refresh
+                : () => ref.read(pipelineListProvider.notifier).fetchPipelines(),
             child: CustomScrollView(
-              controller: _scrollController,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _buildStatsAndSearch(topInset: topInset, kpi: kpi),
-                ),
-                if (_initialLoading)
-                  // SkeletonList is a ListView (scrollable); hasScrollBody must be
-                  // true, else SliverFillRemaining tries to measure a viewport's
-                  // intrinsic height and throws.
-                  const SliverFillRemaining(
-                    hasScrollBody: true,
-                    child: SkeletonList(itemCount: 6),
-                  )
-                else if (_error != null && _items.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: ErrorStateView(message: _error!, onRetry: _refresh),
-                  )
-                else if (customers.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _buildEmptyState(),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    // Desktop/tablet: two columns so more customers fit per screen.
-                    // Cards vary in height (name can wrap to 2 lines), so pair them
-                    // into Rows rather than a fixed-extent grid to avoid overflow.
-                    sliver: Responsive.isWide(context)
-                        ? SliverList.builder(
-                            itemCount: ((customers.length + 1) ~/ 2) + 1,
-                            itemBuilder: (context, rowIndex) {
-                              final rowCount = (customers.length + 1) ~/ 2;
-                              if (rowIndex == rowCount) return _buildFooter();
-                              final left = rowIndex * 2;
-                              final right = left + 1;
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: CustomerCard(
-                                      customer: customers[left],
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.md),
-                                  Expanded(
-                                    child: right < customers.length
-                                        ? CustomerCard(
-                                            customer: customers[right],
-                                          )
-                                        : const SizedBox.shrink(),
-                                  ),
-                                ],
-                              );
-                            },
-                          )
-                        : SliverList.builder(
-                            itemCount: customers.length + 1,
-                            itemBuilder: (context, index) {
-                              if (index == customers.length) {
-                                return _buildFooter();
-                              }
-                              return CustomerCard(customer: customers[index]);
-                            },
+              controller: _selectedTab == 0 ? _scrollController : null,
+              slivers: _selectedTab == 0
+                  ? [
+                      SliverToBoxAdapter(
+                        child: _buildStatsAndSearch(topInset: topInset, kpi: kpi),
+                      ),
+                      if (_initialLoading)
+                        // SkeletonList is a ListView (scrollable); hasScrollBody must be
+                        // true, else SliverFillRemaining tries to measure a viewport's
+                        // intrinsic height and throws.
+                        const SliverFillRemaining(
+                          hasScrollBody: true,
+                          child: SkeletonList(itemCount: 6),
+                        )
+                      else if (_error != null && _items.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: ErrorStateView(message: _error!, onRetry: _refresh),
+                        )
+                      else if (customers.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyState(),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          // Desktop/tablet: two columns so more customers fit per screen.
+                          // Cards vary in height (name can wrap to 2 lines), so pair them
+                          // into Rows rather than a fixed-extent grid to avoid overflow.
+                          sliver: Responsive.isWide(context)
+                              ? SliverList.builder(
+                                  itemCount: ((customers.length + 1) ~/ 2) + 1,
+                                  itemBuilder: (context, rowIndex) {
+                                    final rowCount = (customers.length + 1) ~/ 2;
+                                    if (rowIndex == rowCount) return _buildFooter();
+                                    final left = rowIndex * 2;
+                                    final right = left + 1;
+                                    return Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: CustomerCard(
+                                            customer: customers[left],
+                                          ),
+                                        ),
+                                        const SizedBox(width: AppSpacing.md),
+                                        Expanded(
+                                          child: right < customers.length
+                                              ? CustomerCard(
+                                                  customer: customers[right],
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                )
+                              : SliverList.builder(
+                                  itemCount: customers.length + 1,
+                                  itemBuilder: (context, index) {
+                                    if (index == customers.length) {
+                                      return _buildFooter();
+                                    }
+                                    return CustomerCard(customer: customers[index]);
+                                  },
+                                ),
+                        ),
+                    ]
+                  : [
+                      SliverToBoxAdapter(
+                        child: Container(
+                          color: AppColors.surfaceWhite,
+                          padding: EdgeInsets.fromLTRB(
+                            AppSpacing.lg,
+                            topInset + AppSpacing.md,
+                            AppSpacing.lg,
+                            0,
                           ),
-                  ),
-              ],
+                          child: _buildTabSwitcher(),
+                        ),
+                      ),
+                      PipelineTabView(topInset: topInset),
+                    ],
             ),
           ),
         ),
@@ -396,6 +419,73 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
     );
   }
 
+  Widget _buildTabSwitcher() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.bgScaffold,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                if (_selectedTab != 0) {
+                  setState(() => _selectedTab = 0);
+                }
+              },
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _selectedTab == 0 ? AppColors.navyMbis : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'Customer',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _selectedTab == 0 ? AppColors.surfaceWhite : AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                if (_selectedTab != 1) {
+                  setState(() => _selectedTab = 1);
+                }
+              },
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _selectedTab == 1 ? AppColors.navyMbis : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'Pipeline',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _selectedTab == 1 ? AppColors.surfaceWhite : AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTambahButton() {
     return Center(
       child: ElevatedButton.icon(
@@ -471,6 +561,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildTabSwitcher(),
           // Supervisor monitoring: Target / Realisasi / Visit cards + COB filter.
           // With no filter these match the front dashboard for the caller's scope.
           if (_isSupervisor) ...[
@@ -1563,7 +1654,12 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen>
         value: value,
         valueColor: valueColor,
         selected: stage != null && _stageFilter == stage,
-        onTap: _isPaged ? () => _onStageChanged(stage) : null,
+        onTap: stage != null
+            ? () {
+                setState(() => _selectedTab = 1);
+                ref.read(pipelineListProvider.notifier).setStage(stage);
+              }
+            : (_isPaged ? () => _onStageChanged(stage) : null),
       );
 
   Widget _buildHeaderStatCard({

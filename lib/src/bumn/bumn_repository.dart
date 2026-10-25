@@ -16,12 +16,18 @@ class BumnLink {
   final String stage; // backend: P3 | P2 | P1 | WON | DECLINE
   final double? premi;
   final BumnCustomer customer;
+  final String? kanwil;
+  final String? kc;
+  final String? rm;
 
   const BumnLink({
     required this.pipelineId,
     required this.stage,
     this.premi,
     required this.customer,
+    this.kanwil,
+    this.kc,
+    this.rm,
   });
 
   bool get isActive => stage != 'WON' && stage != 'DECLINE';
@@ -199,6 +205,9 @@ class BumnTreeCustomer {
             stage: m['stage'] ?? '',
             premi: m['premi'] != null ? (m['premi'] as num).toDouble() : null,
             customer: BumnCustomer(m['customerId'] ?? '', m['customerName'] ?? ''),
+            kanwil: m['kanwil']?.toString() ?? m['kanwilName']?.toString(),
+            kc: m['kc']?.toString() ?? m['branch']?.toString() ?? m['cabang']?.toString(),
+            rm: m['rm']?.toString() ?? m['rmName']?.toString(),
           );
         }).toList(),
         children: (j['children'] as List<dynamic>? ?? [])
@@ -291,6 +300,9 @@ class BumnRepository {
         stage: m['stage'] ?? '',
         premi: m['premi'] != null ? (m['premi'] as num).toDouble() : null,
         customer: BumnCustomer(m['customerId'] ?? '', m['customerName'] ?? ''),
+        kanwil: m['kanwil']?.toString() ?? m['kanwilName']?.toString(),
+        kc: m['kc']?.toString() ?? m['branch']?.toString() ?? m['cabang']?.toString(),
+        rm: m['rm']?.toString() ?? m['rmName']?.toString(),
       );
     }).toList();
     return BumnView(

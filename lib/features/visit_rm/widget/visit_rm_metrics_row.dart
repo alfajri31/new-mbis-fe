@@ -8,6 +8,9 @@ class VisitRmMetricsRow extends StatelessWidget {
   final int idleRm;
   final String avg;
   final VoidCallback onToggleIdle;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback? onRetry;
 
   const VisitRmMetricsRow({
     super.key,
@@ -16,10 +19,45 @@ class VisitRmMetricsRow extends StatelessWidget {
     required this.idleRm,
     required this.avg,
     required this.onToggleIdle,
+    this.isLoading = false,
+    this.error,
+    this.onRetry,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (error != null) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.alertBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.alertBorder),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, size: 20, color: AppColors.orangeDark),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Gagal memuat ringkasan metrik: $error',
+                style: const TextStyle(fontSize: 12, color: AppColors.alertTitle, fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: AppColors.navyMbis,
+                ),
+                child: const Text('Coba Lagi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+          ],
+        ),
+      );
+    }
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -94,11 +132,11 @@ class VisitRmMetricsRow extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                number,
+                isLoading ? '—' : number,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  color: numColor,
+                  color: isLoading ? AppColors.textMuted : numColor,
                 ),
               ),
               const SizedBox(height: 4),

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
-import 'package:mbis/src/config/app_config.dart';
 import 'package:mbis/src/network/api_client.dart';
 
 /// Kontrak repository bidang usaha (lapisan `data`).
@@ -10,18 +9,16 @@ abstract class BidangUsahaRepository {
 }
 
 /// Implementasi nyata: ambil daftar bidang usaha via [ApiClient].
-/// Selalu melakukan request ke API /api/bidang-usaha di Mockoon port 3567 (tanpa cache).
+/// Selalu melakukan request ke API /api/bidang-usaha (tanpa cache).
 class ApiBidangUsahaRepository implements BidangUsahaRepository {
-  final ApiClient _client;
+  final ApiClient apiClient;
 
-  ApiBidangUsahaRepository({ApiClient? client})
-      : _client = client ??
-            ApiClient(customBaseUrl: AppConfig.mockoonBaseUrl);
+  ApiBidangUsahaRepository({required this.apiClient});
 
   @override
   Future<List<String>> list() async {
     try {
-      final res = await _client.get('/api/bidang-usaha');
+      final res = await apiClient.get('/api/bidang-usaha');
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         if (decoded is List) {
@@ -66,38 +63,55 @@ class MockBidangUsahaRepository implements BidangUsahaRepository {
 /// Memisahkan logika pemanggilan API dari tampilan UI. Menyediakan state loading,
 /// error (negative case), dan data sukses.
 class BidangUsahaController extends ChangeNotifier {
-  final BidangUsahaRepository _repository;
+  final BidangUsahaRepository repository;
 
   List<String> _items = const [];
   bool _isLoading = false;
   String? _error;
+  bool _disposed = false;
 
-  BidangUsahaController({BidangUsahaRepository? repository})
-      : _repository = repository ?? ApiBidangUsahaRepository();
+  BidangUsahaController({required this.repository});
 
   List<String> get items => _items;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasError => _error != null;
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) {
+      super.notifyListeners();
+    }
+  }
+
   /// Memuat daftar bidang usaha dari API tanpa cache.
   Future<void> loadBidangUsaha() async {
-    if (_isLoading) return;
+    if (_isLoading || _disposed) return;
 
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final result = await _repository.list();
+      final result = await repository.list();
+      if (_disposed) return;
       _items = result;
       _error = null;
     } catch (e) {
+      if (_disposed) return;
       _error = e.toString().replaceAll('Exception: ', '');
       _items = const [];
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_disposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

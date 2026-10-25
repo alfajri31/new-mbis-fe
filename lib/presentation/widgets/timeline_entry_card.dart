@@ -60,25 +60,37 @@ class TimelineEntryCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)),
                 ],
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    const Icon(Icons.access_time, size: 12, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(AppFormat.dateTime(entry.at),
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    ),
-                    if (entry.actorName != null) ...[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.person_outline, size: 12, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(entry.actorName!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.access_time, size: 12, color: AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        Text(AppFormat.dateTime(entry.at),
                             style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                    if (entry.actorName != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.person_outline, size: 12, color: AppColors.textSecondary),
+                          const SizedBox(width: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 150),
+                            child: Text(
+                              entry.actorName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
                   ],
                 ),
               ],

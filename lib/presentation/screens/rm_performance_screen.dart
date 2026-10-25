@@ -770,6 +770,8 @@ class _RmPerformanceScreenState extends ConsumerState<RmPerformanceScreen> {
                   ),
                   child: Row(
                     children: [
+                      _statColumn('Visit', '${rm.activePipelines}', AppColors.primaryNavy),
+                      _statDivider(),
                       _statColumn('Pipeline Aktif', '${rm.activePipelines}', AppColors.primaryNavy),
                       _statDivider(),
                       _statColumn('Target', AppFormat.currencyShort(rm.target), AppColors.textSecondary),

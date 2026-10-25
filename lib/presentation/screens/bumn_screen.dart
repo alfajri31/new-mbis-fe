@@ -12,8 +12,11 @@ import '../providers/bumn_provider.dart';
 import '../widgets/glass_app_bar.dart';
 import '../widgets/kpi_drilldown_sheet.dart';
 import '../widgets/state_views.dart';
+import 'bumn_detail_screen.dart';
 import 'bumn_tree_screen.dart';
 import 'tender_report_screen.dart';
+import '../../features/visit_rm/visit_rm_models.dart'
+    show kDefaultKanwils, kDefaultRms;
 
 /// BUMN — read-only view over BUMN customers connected to the RM and their
 /// pipelines. Mirrors the Broker screen: each BUMN is one card; tapping it opens
@@ -60,6 +63,7 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
   BumnTreeCustomer? get _selectedNode => _bs.selectedNode;
   // Selected-node card scope: true = node + descendants, false = this node only.
   bool get _includeDescendants => _bs.includeDescendants;
+  BumnFilter get _filter => _bs.filter;
 
   @override
   void didChangeDependencies() {
@@ -98,9 +102,145 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
   void _clearSelection() => _notifier.clearSelection();
   void _toggleExpand(String id) => _notifier.toggleExpand(id);
 
-  List<({BumnTreeCustomer node, int depth})> _searchRows(
-      List<BumnTreeCustomer> roots, String query) =>
-      bumnSearchRows(roots, query, _searchCollapsed);
+  static String _bumnCategory(BumnTreeCustomer node) {
+    final lvl = (node.level ?? '').toLowerCase();
+    if (lvl.contains('induk')) return 'Induk';
+    if (lvl.contains('anak') || lvl.contains('anper')) return 'Anper';
+    if (lvl.contains('usaha') || lvl.contains('uper')) return 'Uper';
+    if (lvl.contains('cucu') || lvl.contains('ciper') || lvl.contains('cicit')) return 'Ciper';
+    return node.hasChildren ? 'Induk' : 'Anper';
+  }
+
+  static String _categoryLabel(String kat) {
+    switch (kat) {
+      case 'Induk':
+        return 'Induk';
+      case 'Anper':
+        return 'Anak Perusahaan (Anper)';
+      case 'Uper':
+        return 'Usaha Perusahaan (Uper)';
+      case 'Ciper':
+        return 'Cucu Perusahaan (Ciper)';
+      default:
+        return kat;
+    }
+  }
+
+  static (String kanwil, String kc, String rm) _resolveLinkPeng(BumnLink link) {
+    if (link.kanwil != null && link.kc != null && link.rm != null) {
+      return (link.kanwil!, link.kc!, link.rm!);
+    }
+    switch (link.pipelineId) {
+      case 'bp1':
+      case 'bp2':
+      case 'bp6':
+        return ('Kantor Wilayah 2', 'Jakarta Selatan', 'Siti Rahmawati');
+      case 'bp3':
+        return ('Kantor Wilayah 2', 'Jakarta Selatan', 'Andi Pratama');
+      case 'bp4':
+        return ('Kantor Wilayah 2', 'Bandung', 'Rina Kartika');
+      case 'bp5':
+        return ('Kantor Wilayah 1', 'Padang', 'Mohammad Ridwan Majid');
+      case 'bp7':
+        return ('Kantor Wilayah 1', 'Medan', 'Dedi Kurniawan');
+      case 'bp8':
+        return ('Kantor Wilayah 2', 'Pontianak', 'Yusuf Hidayat');
+      default:
+        final hash = (link.pipelineId.hashCode ^ link.customer.id.hashCode).abs();
+        final rm = kDefaultRms[hash % kDefaultRms.length];
+        String kanwil = 'Kantor Wilayah 1';
+        for (final kw in kDefaultKanwils) {
+          if (kw.cab.contains(rm.cab)) {
+            kanwil = kw.name;
+            break;
+          }
+        }
+        return (link.kanwil ?? kanwil, link.kc ?? rm.cab, link.rm ?? rm.nama);
+    }
+  }
+
+  bool _linkMatchesFilter(BumnLink link, BumnFilter filter) {
+    if (filter.stage.isNotEmpty &&
+        link.stage.toUpperCase() != filter.stage.toUpperCase()) {
+      return false;
+    }
+    final (kanwil, kc, rm) = _resolveLinkPeng(link);
+    if (filter.wil.isNotEmpty && kanwil != filter.wil) return false;
+    if (filter.cab.isNotEmpty && kc != filter.cab) return false;
+    if (filter.rm.isNotEmpty && rm != filter.rm) return false;
+    return true;
+  }
+
+  bool _nodeOrKidsHasMatchingPipe(BumnTreeCustomer node, BumnFilter filter) {
+    final pipeOn = filter.wil.isNotEmpty ||
+        filter.cab.isNotEmpty ||
+        filter.rm.isNotEmpty ||
+        filter.stage.isNotEmpty;
+    if (!pipeOn) return true;
+    if (node.links.any((l) => _linkMatchesFilter(l, filter))) return true;
+    return node.children.any((c) => _nodeOrKidsHasMatchingPipe(c, filter));
+  }
+
+  bool _nodeMatchesCategory(BumnTreeCustomer node, BumnFilter filter) {
+    if (filter.kat.isEmpty) return true;
+    return _bumnCategory(node) == filter.kat;
+  }
+
+  int _matchingBumnCount(List<BumnTreeCustomer> roots, BumnFilter filter) {
+    final allNodes = _flattenNodes(roots);
+    return allNodes
+        .where((n) =>
+            _nodeMatchesCategory(n, filter) &&
+            _nodeOrKidsHasMatchingPipe(n, filter))
+        .length;
+  }
+
+  List<({BumnTreeCustomer node, int depth})> _buildRows(
+      List<BumnTreeCustomer> roots, String query, BumnFilter filter) {
+    if (query.isNotEmpty) {
+      final searched = bumnSearchRows(roots, query, _searchCollapsed);
+      if (!filter.isActive) return searched;
+      return searched.where((r) {
+        return _nodeMatchesCategory(r.node, filter) &&
+            _nodeOrKidsHasMatchingPipe(r.node, filter);
+      }).toList();
+    }
+
+    if (filter.isActive) {
+      if (filter.kat.isNotEmpty) {
+        final all = _flattenNodes(roots);
+        final filtered = all
+            .where((n) =>
+                _nodeMatchesCategory(n, filter) &&
+                _nodeOrKidsHasMatchingPipe(n, filter))
+            .toList();
+        filtered.sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        return filtered.map((n) => (node: n, depth: 0)).toList();
+      }
+
+      return _visibleFilteredRows(roots, filter);
+    }
+
+    return _visibleRows(roots);
+  }
+
+  List<({BumnTreeCustomer node, int depth})> _visibleFilteredRows(
+      List<BumnTreeCustomer> roots, BumnFilter filter) {
+    final out = <({BumnTreeCustomer node, int depth})>[];
+    void walk(List<BumnTreeCustomer> nodes, int depth) {
+      for (final n in nodes) {
+        if (!_nodeOrKidsHasMatchingPipe(n, filter)) continue;
+        out.add((node: n, depth: depth));
+        if (n.hasChildren && _expanded.contains(n.id)) {
+          walk(n.children, depth + 1);
+        }
+      }
+    }
+
+    walk(roots, 0);
+    return out;
+  }
 
   Color _avatarColor(String id) => _avatarColors[id.hashCode.abs() % _avatarColors.length];
 
@@ -174,11 +314,9 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
           }
 
           final roots = snapshot.data ?? const <BumnTreeCustomer>[];
-          // Search keeps matches together with their ancestors (a "cucu" match is
-          // shown under its induk, auto-expanded); tapping a row still just filters
-          // the KPI cards. Otherwise show the full pruned tree.
           final searching = _query.isNotEmpty;
-          final rows = searching ? _searchRows(roots, _query) : _visibleRows(roots);
+          final isFilterActive = _filter.isActive;
+          final rows = _buildRows(roots, _query, _filter);
 
           return Center(
             child: ConstrainedBox(
@@ -201,10 +339,10 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
                             SliverFillRemaining(
                               hasScrollBody: false,
                               child: EmptyStateView(
-                                icon: searching
+                                icon: (searching || isFilterActive)
                                     ? Icons.search_off
                                     : Icons.account_balance_outlined,
-                                title: searching
+                                title: (searching || isFilterActive)
                                     ? 'BUMN tidak ditemukan'
                                     : 'Belum ada BUMN dengan customer',
                               ),
@@ -220,16 +358,15 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
                                 itemBuilder: (context, i) {
                                   final row = rows[i];
                                   final id = row.node.id;
-                                  // Mode pencarian: terbuka KECUALI ditutup manual.
-                                  // Chevron-nya tetap tombol sungguhan di kedua mode —
-                                  // dulu di mode pencarian ia hanya Icon mati yang
-                                  // bentuknya sama persis, jadi terbaca sebagai rusak.
+                                  final isFlat = searching || _filter.kat.isNotEmpty;
                                   return _treeRow(row.node, row.depth,
                                       expanded: searching
                                           ? !_searchCollapsed.contains(id)
                                           : _expanded.contains(id),
-                                      onToggle: searching
-                                          ? () => _notifier.toggleSearchCollapse(id)
+                                      onToggle: isFlat
+                                          ? (searching
+                                              ? () => _notifier.toggleSearchCollapse(id)
+                                              : null)
                                           : () => _toggleExpand(id));
                                 },
                               ),
@@ -368,62 +505,577 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
             ),
           ],
           const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            height: 44,
-            child: TextField(
-              controller: _searchController,
-              // The field text updates instantly (via the controller); only the
-              // expensive recursive filter is debounced 400ms after the last keystroke.
-              onChanged: (v) {
-                _searchDebounce?.cancel();
-                _searchDebounce = Timer(const Duration(milliseconds: 400), () {
-                  if (!mounted) return;
-                  // Trim + drop-selection-on-non-empty dipindah ke notifier.
-                  _notifier.setQuery(v);
-                });
-              },
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(fontSize: 11, color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Cari BUMN...',
-                hintStyle: const TextStyle(
-                    fontSize: 11, color: AppColors.textSecondary),
-                prefixIcon: const Icon(Icons.search,
-                    size: 20, color: AppColors.grayStage),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close,
-                            size: 18, color: AppColors.grayStage),
-                        tooltip: 'Hapus pencarian',
-                        onPressed: () {
-                          _searchDebounce?.cancel();
-                          _searchController.clear();
-                          _notifier.setQuery('');
-                        },
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F6FA),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE3E7EF)),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, size: 18, color: Color(0xFF5A6475)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (v) {
+                            _searchDebounce?.cancel();
+                            _searchDebounce =
+                                Timer(const Duration(milliseconds: 400), () {
+                              if (!mounted) return;
+                              _notifier.setQuery(v);
+                            });
+                          },
+                          textInputAction: TextInputAction.search,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Color(0xFF15223B),
+                          ),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'Cari BUMN…',
+                            hintStyle: TextStyle(
+                              fontSize: 15,
+                              color: Color(0xFF5A6475),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
                       ),
-                filled: true,
-                fillColor: AppColors.bgScreen,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(
-                  borderRadius: AppRadius.radiusMd,
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.radiusMd,
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: AppRadius.radiusMd,
-                  borderSide:
-                      const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+                      if (_query.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _searchDebounce?.cancel();
+                            _searchController.clear();
+                            _notifier.setQuery('');
+                          },
+                          child: const Icon(Icons.close,
+                              size: 18, color: Color(0xFF5A6475)),
+                        ),
+                    ],
+                  ),
                 ),
               ),
+              const SizedBox(width: 10),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _openFilterSheet(roots),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: _filter.isActive
+                          ? const Color(0xFFE9EEF6)
+                          : const Color(0xFFF4F6FA),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _filter.isActive
+                            ? const Color(0xFF0E2B53)
+                            : const Color(0xFFE3E7EF),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.tune,
+                          size: 18,
+                          color: _filter.isActive
+                              ? const Color(0xFF0E2B53)
+                              : const Color(0xFF3A4557),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Filter',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: _filter.isActive
+                                ? const Color(0xFF0E2B53)
+                                : const Color(0xFF3A4557),
+                          ),
+                        ),
+                        if (_filter.count > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            constraints: const BoxConstraints(minWidth: 20),
+                            height: 20,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0E2B53),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '${_filter.count}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_filter.isActive) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (_filter.wil.isNotEmpty)
+                    _filterChip(
+                      _filter.wil,
+                      () => _notifier.setFilter(_filter.copyWith(
+                        wil: '',
+                        cab: '',
+                        rm: '',
+                      )),
+                    ),
+                  if (_filter.cab.isNotEmpty)
+                    _filterChip(
+                      'KC ${_filter.cab}',
+                      () => _notifier.setFilter(_filter.copyWith(
+                        cab: '',
+                        rm: '',
+                      )),
+                    ),
+                  if (_filter.rm.isNotEmpty)
+                    _filterChip(
+                      _filter.rm,
+                      () => _notifier.setFilter(_filter.copyWith(rm: '')),
+                    ),
+                  if (_filter.stage.isNotEmpty)
+                    _filterChip(
+                      'Stage ${_filter.stage}',
+                      () => _notifier.setFilter(_filter.copyWith(stage: '')),
+                    ),
+                  if (_filter.kat.isNotEmpty)
+                    _filterChip(
+                      _categoryLabel(_filter.kat),
+                      () => _notifier.setFilter(_filter.copyWith(kat: '')),
+                    ),
+                ],
+              ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, VoidCallback onRemove) {
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.only(left: 12, right: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9EEF6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF0E2B53)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0E2B53),
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(Icons.close, size: 15, color: Color(0xFF0E2B53)),
           ),
         ],
       ),
+    );
+  }
+
+  void _openFilterSheet(List<BumnTreeCustomer> roots) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final current = _filter;
+
+            // Pilihan kanwil: dari kDefaultKanwils + data links
+            final wilOptions = <String>['', 'Kantor Wilayah 1', 'Kantor Wilayah 2'];
+            for (final n in _flattenNodes(roots)) {
+              for (final l in n.links) {
+                final (kw, _, _) = _resolveLinkPeng(l);
+                if (kw.isNotEmpty && !wilOptions.contains(kw)) {
+                  wilOptions.add(kw);
+                }
+              }
+            }
+
+            // Pilihan cabang (disaring berdasarkan kanwil terpilih jika ada)
+            List<String> cabList = [];
+            if (current.wil.isEmpty) {
+              cabList = [
+                'Padang',
+                'Pekanbaru',
+                'Medan',
+                'Jakarta Selatan',
+                'Bandung',
+                'Pontianak',
+              ];
+            } else {
+              for (final kw in kDefaultKanwils) {
+                if (kw.name == current.wil) {
+                  cabList = kw.cab;
+                  break;
+                }
+              }
+            }
+            final cabOptions = <String>['', ...cabList];
+
+            // Pilihan RM (disaring berdasarkan cabang terpilih jika ada)
+            List<String> rmList = [];
+            if (current.cab.isEmpty) {
+              rmList = kDefaultRms.map((r) => r.nama).toSet().toList();
+            } else {
+              rmList = kDefaultRms
+                  .where((r) => r.cab == current.cab)
+                  .map((r) => r.nama)
+                  .toList();
+            }
+            final rmOptions = <String>['', ...rmList];
+
+            final countResult = _matchingBumnCount(roots, current);
+
+            final rmHint = current.cab.isNotEmpty
+                ? 'Menampilkan ${rmList.length} RM di KC ${current.cab}.'
+                : 'Pilih kantor cabang untuk mempersempit daftar RM.';
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.9,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+                      child: Column(
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD5DCE7),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              const Icon(Icons.tune,
+                                  size: 22, color: Color(0xFF15223B)),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Filter BUMN',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF15223B),
+                                ),
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () {
+                                  _notifier.resetFilter();
+                                  setModalState(() {});
+                                },
+                                style: TextButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 4),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                child: const Text(
+                                  'Reset',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFC25A17),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFE3E7EF)),
+                    // Body scrollable
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1. Kantor Wilayah
+                            _buildDropdownField<String>(
+                              label: 'Kantor Wilayah',
+                              subtitle:
+                                  'Menampilkan BUMN yang punya pipeline di kanwil ini.',
+                              value: current.wil,
+                              items: wilOptions.map((w) {
+                                return DropdownMenuItem<String>(
+                                  value: w,
+                                  child: Text(
+                                      w.isEmpty ? 'Semua kantor wilayah' : w),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                _notifier.setFilter(current.copyWith(
+                                  wil: val ?? '',
+                                  cab: '',
+                                  rm: '',
+                                ));
+                                setModalState(() {});
+                              },
+                            ),
+                            const SizedBox(height: 20),
+
+                            // 2. Kantor Cabang
+                            _buildDropdownField<String>(
+                              label: 'Kantor Cabang',
+                              subtitle:
+                                  'Menampilkan BUMN yang punya pipeline di cabang ini.',
+                              value: cabOptions.contains(current.cab)
+                                  ? current.cab
+                                  : '',
+                              items: cabOptions.map((c) {
+                                return DropdownMenuItem<String>(
+                                  value: c,
+                                  child: Text(c.isEmpty
+                                      ? 'Semua kantor cabang'
+                                      : 'KC $c'),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                final newCab = val ?? '';
+                                final keepRm = current.rm.isNotEmpty &&
+                                    kDefaultRms.any((r) =>
+                                        r.nama == current.rm &&
+                                        (newCab.isEmpty || r.cab == newCab));
+                                _notifier.setFilter(current.copyWith(
+                                  cab: newCab,
+                                  rm: keepRm ? current.rm : '',
+                                ));
+                                setModalState(() {});
+                              },
+                            ),
+                            const SizedBox(height: 20),
+
+                            // 3. Nama RM
+                            _buildDropdownField<String>(
+                              label: 'Nama RM',
+                              subtitle: rmHint,
+                              value: rmOptions.contains(current.rm)
+                                  ? current.rm
+                                  : '',
+                              items: rmOptions.map((r) {
+                                final label = r.isEmpty
+                                    ? (current.cab.isNotEmpty
+                                        ? 'Semua RM di KC ${current.cab}'
+                                        : 'Semua RM')
+                                    : r;
+                                return DropdownMenuItem<String>(
+                                  value: r,
+                                  child: Text(label),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                _notifier.setFilter(
+                                    current.copyWith(rm: val ?? ''));
+                                setModalState(() {});
+                              },
+                            ),
+                            const SizedBox(height: 20),
+
+                            // 4. Stage Pipeline
+                            _buildDropdownField<String>(
+                              label: 'Stage Pipeline',
+                              subtitle:
+                                  'Menampilkan BUMN yang punya pipeline pada stage ini.',
+                              value: current.stage,
+                              items: const [
+                                DropdownMenuItem(
+                                    value: '', child: Text('Semua stage')),
+                                DropdownMenuItem(
+                                    value: 'P3', child: Text('P3 · Prospek')),
+                                DropdownMenuItem(
+                                    value: 'P2', child: Text('P2 · Proses')),
+                                DropdownMenuItem(
+                                    value: 'P1', child: Text('P1 · Penerbitan')),
+                                DropdownMenuItem(
+                                    value: 'WON', child: Text('Won')),
+                                DropdownMenuItem(
+                                    value: 'DECLINE', child: Text('Decline')),
+                              ],
+                              onChanged: (val) {
+                                _notifier.setFilter(
+                                    current.copyWith(stage: val ?? ''));
+                                setModalState(() {});
+                              },
+                            ),
+                            const SizedBox(height: 20),
+
+                            // 5. Kategori BUMN
+                            _buildDropdownField<String>(
+                              label: 'Kategori BUMN',
+                              subtitle:
+                                  'Induk, Anak Perusahaan, Usaha Perusahaan, atau Cucu Perusahaan.',
+                              value: current.kat,
+                              items: const [
+                                DropdownMenuItem(
+                                    value: '', child: Text('Semua kategori')),
+                                DropdownMenuItem(
+                                    value: 'Induk', child: Text('Induk')),
+                                DropdownMenuItem(
+                                    value: 'Anper',
+                                    child: Text('Anak Perusahaan (Anper)')),
+                                DropdownMenuItem(
+                                    value: 'Uper',
+                                    child: Text('Usaha Perusahaan (Uper)')),
+                                DropdownMenuItem(
+                                    value: 'Ciper',
+                                    child: Text('Cucu Perusahaan (Ciper)')),
+                              ],
+                              onChanged: (val) {
+                                _notifier.setFilter(
+                                    current.copyWith(kat: val ?? ''));
+                                setModalState(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Footer
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                      decoration: const BoxDecoration(
+                        border:
+                            Border(top: BorderSide(color: Color(0xFFE3E7EF))),
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(sheetCtx).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0E2B53),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            'Tampilkan $countResult BUMN',
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdownField<T>({
+    required String label,
+    required String subtitle,
+    required T value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF3A4557),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 12.5,
+            color: Color(0xFF5A6475),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F6FA),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFDCE2EC)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down,
+                  color: Color(0xFF5A6475)),
+              style: const TextStyle(
+                fontSize: 15,
+                color: Color(0xFF15223B),
+              ),
+              items: items,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -665,7 +1317,14 @@ class _BumnScreenState extends ConsumerState<BumnScreen> with RouteAware {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: InkWell(
-              onTap: () => _selectNode(n),
+              onTap: () {
+                _selectNode(n);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => BumnDetailScreen(node: n),
+                  ),
+                );
+              },
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Column(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
+import '../../../../core/providers/repository_providers.dart';
 import '../qs_form_state.dart';
 import '../qs_step_pertanggungan_provider.dart';
 import 'pertanggungan/qs_pemegang_polis_card.dart';
@@ -29,6 +31,9 @@ class QsStepPertanggungan extends ConsumerStatefulWidget {
   final ValueChanged<QsPremiMode> onPremiModeChanged;
   final GlobalKey<FormState> formKey;
 
+  final String? pipelineId;
+  final String? productCode;
+
   // Controllers passed from parent
   final TextEditingController namaPolisCtrl;
   final TextEditingController alamatCtrl;
@@ -55,6 +60,8 @@ class QsStepPertanggungan extends ConsumerStatefulWidget {
 
   const QsStepPertanggungan({
     super.key,
+    this.pipelineId,
+    this.productCode,
     required this.product,
     required this.type,
     required this.onTypeChanged,
@@ -91,11 +98,16 @@ class QsStepPertanggungan extends ConsumerStatefulWidget {
 
 class _QsStepPertanggunganState extends ConsumerState<QsStepPertanggungan> {
   late final TextEditingController _tglLahirGroupCtrl;
+  bool _isLoadingInitial = false;
+  String? _initialError;
 
   @override
   void initState() {
     super.initState();
     _tglLahirGroupCtrl = TextEditingController(text: 'TBA');
+    _isLoadingInitial = (widget.pipelineId != null &&
+        widget.pipelineId!.isNotEmpty &&
+        widget.namaPolisCtrl.text.isEmpty);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(qsStepPertanggunganProvider.notifier).init(
@@ -109,8 +121,174 @@ class _QsStepPertanggunganState extends ConsumerState<QsStepPertanggungan> {
               klasifikasiPeserta: widget.klasifikasiPeserta,
               pekerjaan: widget.pekerjaanCtrl.text,
             );
+        if (_isLoadingInitial) {
+          _fetchInitialData();
+        }
       }
     });
+  }
+
+  Future<void> _fetchInitialData() async {
+    final pId = widget.pipelineId;
+    final pCode = (widget.productCode != null && widget.productCode!.isNotEmpty)
+        ? widget.productCode!
+        : (widget.product == QsProduct.psakdi ? 'PSAKDI' : 'Personal Accident Xtra Insurance');
+
+    if (pId == null || pId.isEmpty || widget.namaPolisCtrl.text.isNotEmpty) {
+      if (mounted) {
+        setState(() => _isLoadingInitial = false);
+      }
+      return;
+    }
+
+    setState(() {
+      _isLoadingInitial = true;
+      _initialError = null;
+    });
+
+    try {
+      final repo = ref.read(qsPertanggunganRepoProvider);
+      final res = await repo.getPertanggungan(
+        pipelineId: pId,
+        productCode: pCode,
+      );
+
+      if (!mounted) return;
+
+      // 1. Pemegang Polis
+      final pp = res.pemegangPolis;
+      if (pp != null) {
+        if (pp.tertanggung != null && pp.tertanggung!.isNotEmpty) {
+          widget.namaPolisCtrl.text = pp.tertanggung!;
+        }
+        if (pp.alamat != null) widget.alamatCtrl.text = pp.alamat!;
+        if (pp.bidang != null) widget.bidangUsahaCtrl.text = pp.bidang!;
+        if (pp.email != null) widget.emailCtrl.text = pp.email!;
+        if (pp.pic != null) widget.namaPicCtrl.text = pp.pic!;
+        if (pp.hpPic != null) widget.noHpPicCtrl.text = pp.hpPic!;
+      }
+
+      // 2. Tipe Pertanggungan
+      final tp = res.tipePertanggungan;
+      QsType resolvedType = widget.type;
+      if (tp != null) {
+        final qTypeStr = (tp.qType ?? '').trim().toLowerCase();
+        resolvedType = (qTypeStr == 'group') ? QsType.group : QsType.single;
+        widget.onTypeChanged(resolvedType);
+        ref.read(qsStepPertanggunganProvider.notifier).setType(resolvedType);
+
+        if (tp.jmlOrang != null) {
+          widget.jumlahOrangCtrl.text = tp.jmlOrang.toString();
+        }
+        if (tp.aktivitas != null) {
+          widget.aktivitasCtrl.text = tp.aktivitas!;
+        }
+      }
+
+      // 3. Perhitungan Premi
+      final ppPrem = res.perhitunganPremi;
+      QsPremiMode resolvedPremiMode = widget.premiMode;
+      if (ppPrem != null) {
+        final calcStr = (ppPrem.calcType ?? '').trim().toLowerCase();
+        if (calcStr.contains('mutlak')) {
+          resolvedPremiMode = QsPremiMode.mutlak;
+        } else if (calcStr.contains('flat')) {
+          resolvedPremiMode = QsPremiMode.flat;
+        } else {
+          resolvedPremiMode = QsPremiMode.normal;
+        }
+        widget.onPremiModeChanged(resolvedPremiMode);
+        ref.read(qsStepPertanggunganProvider.notifier).setPremiMode(resolvedPremiMode);
+      }
+
+      // 4. Jangka Waktu
+      final jw = res.jangkaWaktu;
+      DateTime? resolvedStart = widget.tglMulai;
+      DateTime? resolvedEnd = widget.tglAkhir;
+      if (jw != null) {
+        if (jw.start != null && jw.start!.isNotEmpty) {
+          final sDate = DateTime.tryParse(jw.start!);
+          if (sDate != null) {
+            resolvedStart = sDate;
+            widget.onTglMulaiChanged(sDate);
+            ref.read(qsStepPertanggunganProvider.notifier).setTglMulai(sDate);
+          }
+        }
+        if (jw.end != null && jw.end!.isNotEmpty) {
+          final eDate = DateTime.tryParse(jw.end!);
+          if (eDate != null) {
+            resolvedEnd = eDate;
+            widget.onTglAkhirChanged(eDate);
+            ref.read(qsStepPertanggunganProvider.notifier).setTglAkhir(eDate);
+          }
+        }
+      }
+
+      // 5. Orang Dipertanggungkan
+      final od = res.orangDipertanggungkan;
+      DateTime? resolvedLahir = widget.tglLahir;
+      bool resolvedSamaPP = widget.dataSamaPolis;
+      if (od != null) {
+        resolvedSamaPP = od.samaDenganPP ?? true;
+        widget.onDataSamaPolisChanged(resolvedSamaPP);
+        ref.read(qsStepPertanggunganProvider.notifier).setDataSamaPolis(resolvedSamaPP);
+
+        if (od.nama != null && od.nama!.isNotEmpty) {
+          widget.namaTertanggungCtrl.text = od.nama!;
+        } else if (resolvedSamaPP && widget.namaPolisCtrl.text.isNotEmpty) {
+          widget.namaTertanggungCtrl.text = widget.namaPolisCtrl.text;
+        }
+
+        if (od.ktp != null) {
+          widget.noKtpCtrl.text = od.ktp!;
+        } else {
+          widget.noKtpCtrl.text = '';
+        }
+
+        if (od.lahir != null && od.lahir!.isNotEmpty) {
+          final lDate = DateTime.tryParse(od.lahir!);
+          resolvedLahir = lDate;
+          widget.onTglLahirChanged(lDate);
+          ref.read(qsStepPertanggunganProvider.notifier).setTglLahir(lDate);
+        } else {
+          resolvedLahir = null;
+          widget.onTglLahirChanged(null);
+          ref.read(qsStepPertanggunganProvider.notifier).setTglLahir(null);
+        }
+
+        if (od.pekerjaan != null && od.pekerjaan!.isNotEmpty) {
+          widget.pekerjaanCtrl.text = od.pekerjaan!;
+          ref.read(qsStepPertanggunganProvider.notifier).setPekerjaan(od.pekerjaan!);
+        } else {
+          widget.pekerjaanCtrl.text = '';
+          ref.read(qsStepPertanggunganProvider.notifier).setPekerjaan('');
+        }
+      }
+
+      // Sinkronkan ulang notifier state secara menyeluruh
+      ref.read(qsStepPertanggunganProvider.notifier).init(
+            product: widget.product,
+            type: resolvedType,
+            premiMode: resolvedPremiMode,
+            tglLahir: resolvedLahir,
+            tglMulai: resolvedStart,
+            tglAkhir: resolvedEnd,
+            dataSamaPolis: resolvedSamaPP,
+            klasifikasiPeserta: widget.klasifikasiPeserta,
+            pekerjaan: widget.pekerjaanCtrl.text,
+          );
+
+      setState(() {
+        _isLoadingInitial = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _initialError = e.toString().replaceFirst('Exception: ', '');
+          _isLoadingInitial = false;
+        });
+      }
+    }
   }
 
   @override
@@ -182,11 +360,74 @@ class _QsStepPertanggunganState extends ConsumerState<QsStepPertanggungan> {
     final stepState = ref.watch(qsStepPertanggunganProvider);
     final notifier = ref.read(qsStepPertanggunganProvider.notifier);
 
-    return Form(
-      key: widget.formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Skeletonizer(
+      enabled: _isLoadingInitial,
+      child: Form(
+        key: widget.formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          if (_isLoadingInitial) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF2563EB),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Memuat data auto-fill dari pipeline...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF1E40AF),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_initialError != null) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 18, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Gagal memuat auto-fill: $_initialError',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _fetchInitialData,
+                    child: const Text('Coba Lagi', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          ],
           // 1. Pemegang Polis
           QsPemegangPolisCard(
             namaPolisCtrl: widget.namaPolisCtrl,
@@ -281,6 +522,7 @@ class _QsStepPertanggunganState extends ConsumerState<QsStepPertanggungan> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

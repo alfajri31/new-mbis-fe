@@ -23,6 +23,13 @@ class PipelineListModel {
   final String? cancelReason;
   final bool isReferral;
   final String? referralStatus; // PENDING_SOURCE | PENDING_DEST | APPROVED | REJECTED
+  final String? projectName;
+  final String? rmName;
+  final String? kanwil;
+  final String? kc;
+  final bool isBumn;
+  final String? bumnName;
+  final String? createdAt;
 
   PipelineListModel({
     required this.id,
@@ -46,6 +53,13 @@ class PipelineListModel {
     this.cancelReason,
     this.isReferral = false,
     this.referralStatus,
+    this.projectName,
+    this.rmName,
+    this.kanwil,
+    this.kc,
+    this.isBumn = false,
+    this.bumnName,
+    this.createdAt,
   });
 
   factory PipelineListModel.fromJson(Map<String, dynamic> json) {
@@ -73,6 +87,13 @@ class PipelineListModel {
       cancelReason: json['cancelReason'],
       isReferral: json['isReferral'] == true,
       referralStatus: json['referralStatus'],
+      projectName: json['projectName'] ?? json['name'],
+      rmName: json['rmName'],
+      kanwil: json['kanwil']?.toString() ?? json['kanwilName']?.toString(),
+      kc: json['kc']?.toString() ?? json['branchName']?.toString() ?? json['cabang']?.toString(),
+      isBumn: json['isBumn'] == true || json['entityCategory'] == 'BUMN' || json['bumn'] != null,
+      bumnName: json['bumnName']?.toString() ?? json['bumnGroup']?.toString(),
+      createdAt: json['createdAt']?.toString(),
     );
   }
 }
@@ -192,6 +213,13 @@ class PipelineDetailModel {
   final double? realisasiIdr;
   final String? closingEstimasi;
   final String? rmName;
+  final String? rmJabatan;
+  final String? rmNip;
+  final String? kanwil;
+  final String? kc;
+  final bool isBumn;
+  final String? bumnGroup;
+  final String? bumnRelasi;
   final String? sourceType;
   final String? refId;
   final double? premi;
@@ -246,6 +274,13 @@ class PipelineDetailModel {
     this.realisasiIdr,
     this.closingEstimasi,
     this.rmName,
+    this.rmJabatan,
+    this.rmNip,
+    this.kanwil,
+    this.kc,
+    this.isBumn = false,
+    this.bumnGroup,
+    this.bumnRelasi,
     this.sourceType,
     this.refId,
     this.premi,
@@ -292,6 +327,22 @@ class PipelineDetailModel {
       realisasiIdr: json['realisasiIdr'] != null ? (json['realisasiIdr'] as num).toDouble() : null,
       closingEstimasi: json['closingEstimasi'],
       rmName: json['rmName'],
+      rmJabatan: json['rmJabatan']?.toString() ??
+          json['jabatan']?.toString() ??
+          json['jab']?.toString(),
+      rmNip: json['rmNip']?.toString() ?? json['nip']?.toString(),
+      kanwil: json['kanwil']?.toString() ?? json['kanwilName']?.toString(),
+      kc: json['kc']?.toString() ??
+          json['branchName']?.toString() ??
+          json['cabang']?.toString(),
+      isBumn: json['isBumn'] == true ||
+          json['entityCategory'] == 'BUMN' ||
+          json['bumn'] != null,
+      bumnGroup: json['bumnGroup']?.toString() ??
+          json['bumnName']?.toString() ??
+          json['indukBumn']?.toString(),
+      bumnRelasi:
+          json['bumnRelasi']?.toString() ?? json['strukturRelasi']?.toString(),
       sourceType: json['sourceType'],
       refId: json['refId'],
       premi: json['premi'] != null ? (json['premi'] as num).toDouble() : null,
@@ -341,6 +392,51 @@ class PipelineDocumentModel {
       );
 }
 
+class IsQasModelResponse {
+  String? id;
+  String? productCode;
+  String? productName;
+  bool? isQas;
+  String? cobCode;
+  String? cobName;
+  String? lobCode;
+  String? lobName;
+
+  IsQasModelResponse(
+      {this.id,
+      this.productCode,
+      this.productName,
+      this.isQas,
+      this.cobCode,
+      this.cobName,
+      this.lobCode,
+      this.lobName});
+
+  IsQasModelResponse.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    productCode = json['productCode'];
+    productName = json['productName'];
+    isQas = json['isQas'];
+    cobCode = json['cobCode'];
+    cobName = json['cobName'];
+    lobCode = json['lobCode'];
+    lobName = json['lobName'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['productCode'] = productCode;
+    data['productName'] = productName;
+    data['isQas'] = isQas;
+    data['cobCode'] = cobCode;
+    data['cobName'] = cobName;
+    data['lobCode'] = lobCode;
+    data['lobName'] = lobName;
+    return data;
+  }
+}
+
 /// Marker: dipakai layar detail untuk membedakan gagal-karena-izin dari gagal lain.
 class PipelineDeleteForbidden implements Exception {
   @override
@@ -351,6 +447,19 @@ class PipelineRepository {
   final ApiClient apiClient;
 
   PipelineRepository({required this.apiClient});
+
+  /// Cek ketersediaan Quotation Slip (QS) untuk pipeline ini.
+  Future<IsQasModelResponse> getPipelineQas(String pipelineId) async {
+    final response = await apiClient.get('/api/pipeline/$pipelineId/isQas');
+    if (response.statusCode == 200) {
+      final dynamic decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        return IsQasModelResponse.fromJson(decoded);
+      }
+      throw Exception('Format data status QS tidak valid');
+    }
+    throw Exception('Gagal memuat status QS (${response.statusCode})');
+  }
 
   /// [customerId] memfilter di SERVER ke pipeline milik satu customer (pemilik
   /// atau mitra kerja sama). Selalu isi saat menampilkan pipeline per customer —

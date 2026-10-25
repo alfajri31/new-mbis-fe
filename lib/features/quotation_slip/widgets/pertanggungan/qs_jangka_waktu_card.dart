@@ -70,18 +70,20 @@ class QsJangkaWaktuCard extends StatelessWidget {
         ],
         const SizedBox(height: 10),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              jumlahHari > 0
-                  ? 'Masa Pertanggungan: $jumlahHari hari'
-                  : 'Pilih tanggal mulai, akhir otomatis +1 tahun',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
+            Expanded(
+              child: Text(
+                jumlahHari > 0
+                    ? 'Masa Pertanggungan: $jumlahHari hari'
+                    : 'Pilih tanggal mulai, akhir otomatis +1 tahun',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
               ),
             ),
+            const SizedBox(width: 8),
             OutlinedButton(
               onPressed: tglMulai == null
                   ? null

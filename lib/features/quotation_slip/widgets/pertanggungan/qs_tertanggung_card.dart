@@ -1,45 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 import '../common/qs_section_card.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../core/providers/repository_providers.dart';
 import '../../qs_form_state.dart';
 import 'repositories/pekerjaan_repository.dart';
 import 'qs_pertanggungan_fields.dart';
 
-const _kelasInfo = [
-  {
-    'v': 1,
-    'title': 'Kelas 1 — Pekerjaan kantor',
-    'desc':
-        'Orang-orang yang melakukan pekerjaan di kantor atau sering tinggal / berada di kantor seperti: direktur, akuntan, sekretaris, karyawan administrasi, dsb.',
-    'rates': 'Rate standar: A 0.05% · A/B 0.10% · C 0.15%',
-  },
-  {
-    'v': 2,
-    'title': 'Kelas 2 — Sering bepergian / dinas luar',
-    'desc':
-        'Orang-orang dari kelas 1 yang sering bepergian / dinas luar, seperti: bagian penjualan, ibu rumah tangga, pimpinan proyek, manajer atau karyawan lapangan yang tidak terlibat langsung dalam pekerjaan, dan sejenisnya.',
-    'rates': 'Rate standar: A 0.08% · A/B 0.15% · C 0.20%',
-  },
-  {
-    'v': 3,
-    'title': 'Kelas 3 — Memakai alat / sarana kerja',
-    'desc':
-        'Orang-orang yang dalam pekerjaannya memerlukan alat-alat atau sarana lainnya untuk mendukung kegiatannya seperti: dokter gigi, ahli bedah, paramedis, sopir, mekanik, petugas laboratorium atau manajer lapangan yang terlibat langsung dalam proses pekerjaan, dan sejenisnya.',
-    'rates': 'Rate standar: A 0.12% · A/B 0.25% · C 0.30%',
-  },
-  {
-    'v': 4,
-    'title': 'Kelas 4 — Pekerjaan berat & berbahaya (ajukan manual)',
-    'desc':
-        'Orang-orang yang melakukan pekerjaan berat dan berbahaya berkaitan dengan tempat tugasnya, seperti: pekerja tambang, pekerja bangunan ketinggian, penyelam, dsb.',
-    'rates': 'Memerlukan persetujuan Underwriting khusus',
-  },
-];
-
 /// Card Section 5: Orang yang Dipertanggungkan
-class QsTertanggungCard extends StatefulWidget {
+class QsTertanggungCard extends ConsumerStatefulWidget {
   final QsProduct product;
   final QsType type;
   final bool dataSamaPolis;
@@ -85,10 +56,10 @@ class QsTertanggungCard extends StatefulWidget {
   });
 
   @override
-  State<QsTertanggungCard> createState() => _QsTertanggungCardState();
+  ConsumerState<QsTertanggungCard> createState() => _QsTertanggungCardState();
 }
 
-class _QsTertanggungCardState extends State<QsTertanggungCard> {
+class _QsTertanggungCardState extends ConsumerState<QsTertanggungCard> {
   late final PekerjaanController _controller;
   bool _ownsController = false;
 
@@ -99,7 +70,9 @@ class _QsTertanggungCardState extends State<QsTertanggungCard> {
       _controller = widget.pekerjaanController!;
       _ownsController = false;
     } else {
-      _controller = PekerjaanController();
+      _controller = PekerjaanController(
+        repository: ref.read(pekerjaanRepoProvider),
+      );
       _ownsController = true;
     }
     // Langsung get dari API setiap kali card/layar dibuka
@@ -494,190 +467,195 @@ class _QsTertanggungCardState extends State<QsTertanggungCard> {
           const SizedBox(height: 14),
           const QsLabelText('Klasifikasi Peserta', required: true),
           const SizedBox(height: 6),
-          DropdownButtonFormField<int>(
-            initialValue: klasifikasiPeserta,
-            isExpanded: true,
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                    color: AppColors.borderDefault, width: 1.5),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                    color: AppColors.borderDefault, width: 1.5),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: AppColors.orangeMbis, width: 2.0),
-              ),
-            ),
-            hint: const Text(
-              'Pilih klasifikasi peserta',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textMuted,
-              ),
-            ),
-            style: const TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.blueInputText,
-            ),
-            items: _kelasInfo.map((k) {
-              final val = k['v'] as int;
-              final title = k['title'] as String;
-              return DropdownMenuItem<int>(
-                value: val,
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          ref.watch(psakdiClassificationsProvider).when(
+            loading: () => Skeletonizer(
+              enabled: true,
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceWhite,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.borderDefault, width: 1.5),
                 ),
-              );
-            }).toList(),
-            onChanged: (val) {
-              onKlasifikasiChanged(val);
-              onFieldChanged?.call();
-            },
-          ),
-          if (saranKelas != null &&
-              saranKelas != klasifikasiPeserta) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.alertBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.alertBorder),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Saran sistem: Kelas $saranKelas berdasarkan pekerjaan "${pekerjaanCtrl.text}"',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.alertText,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () {
-                      onKlasifikasiChanged(saranKelas);
-                      onFieldChanged?.call();
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.orangeMbis,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 0),
-                      minimumSize: const Size(0, 34),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text('Pakai',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w700)),
-                  ),
-                ],
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                alignment: Alignment.centerLeft,
+                child: const Text('Memuat klasifikasi peserta...'),
               ),
             ),
-          ],
-          if (klasifikasiPeserta == 4) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
+            error: (err, _) => Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.errorBannerBg,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.errorBannerBorder),
               ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
+                  const Icon(Icons.error_outline,
                       size: 18, color: AppColors.redRequired),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Harap ajukan secara manual',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.errorBannerTitle,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Kelas 4 (pekerjaan berat & berbahaya) tidak dapat dibuat melalui QS di aplikasi. Silakan ajukan penawaran secara manual ke underwriting.',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.errorBannerText,
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Gagal memuat klasifikasi peserta',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.errorBannerText),
                     ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        ref.invalidate(psakdiClassificationsProvider),
+                    child: const Text('Coba Lagi',
+                        style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
             ),
-          ] else if (klasifikasiPeserta != null) ...[
-            const SizedBox(height: 8),
-            Builder(builder: (context) {
-              final item = _kelasInfo.firstWhere(
-                  (x) => x['v'] == klasifikasiPeserta);
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.bgInfoBanner,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Golongan / ${item['title']}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.navyMbis,
+            data: (classList) {
+              final selectedClass = classList
+                  .where((c) => c.classValue == klasifikasiPeserta)
+                  .firstOrNull;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedClass != null ? klasifikasiPeserta : null,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: AppColors.borderDefault, width: 1.5),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: AppColors.borderDefault, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: AppColors.orangeMbis, width: 2.0),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item['desc'] as String,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textLabel,
-                        height: 1.4,
+                    hint: const Text(
+                      'Pilih klasifikasi peserta',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textMuted,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item['rates'] as String,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.navyMbis,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blueInputText,
+                    ),
+                    items: classList.map((c) {
+                      final title = c.manualOnly
+                          ? '${c.name} — (ajukan manual)'
+                          : c.name;
+                      return DropdownMenuItem<int>(
+                        value: c.classValue,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      onKlasifikasiChanged(val);
+                      onFieldChanged?.call();
+                    },
+                  ),
+                  if (selectedClass != null && selectedClass.manualOnly) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.errorBannerBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: AppColors.errorBannerBorder),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              size: 18, color: AppColors.redRequired),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Harap ajukan secara manual',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.errorBannerTitle,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  selectedClass.description.isNotEmpty
+                                      ? selectedClass.description
+                                      : 'Pekerjaan ini tidak dapat dibuat melalui QS di aplikasi. Silakan ajukan penawaran secara manual ke underwriting.',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppColors.errorBannerText,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (selectedClass != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgInfoBanner,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Golongan / ${selectedClass.name}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.navyMbis,
+                            ),
+                          ),
+                          if (selectedClass.description.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              selectedClass.description,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.textLabel,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
-                ),
+                ],
               );
-            }),
-          ],
+            },
+          ),
         ],
       ],
     );

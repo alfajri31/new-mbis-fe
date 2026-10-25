@@ -18,6 +18,7 @@ abstract final class Roles {
   static const kup = 'KUP';
   static const rm = 'RM';
   static const agent = 'AGENT';
+  static const uw = 'UW';
 
   // ── Divisi kantor pusat (V50) ────────────────────────────────────────────
   /// Product Research & Development Division — katalog produk & kategorinya.
@@ -79,7 +80,7 @@ abstract final class Roles {
   /// router. Dulu hanya tabnya yang digerbangi, sehingga RM masih bisa membuka
   /// `/kelola/export-data` dengan mengetik URL-nya: halamannya tergambar utuh
   /// padahal setiap tombolnya berujung 403 tanpa pesan apa pun.
-  static const kelolaHubRoles = {admin, bm, ro, kup, ...curatorDivisions};
+  static const kelolaHubRoles = {admin, bm, ro, kup, uw, ...curatorDivisions};
 
   /// True bila [roles] memuat salah satu dari [allowed].
   static bool hasAny(List<String>? roles, Set<String> allowed) =>

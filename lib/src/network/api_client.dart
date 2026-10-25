@@ -86,11 +86,15 @@ class ApiClient {
 
   /// [timeout] opsional untuk request yang memang lama (mis. export xlsx
   /// rentang panjang); default tetap [_timeout] 30 detik.
-  Future<http.Response> get(String path, {Duration? timeout}) async {
+  Future<http.Response> get(String path, {Duration? timeout, Map<String, String>? headers}) async {
     final uri = Uri.parse('$baseUrl$path');
     final token = await _accessToken();
+    final combinedHeaders = _headersWith(token);
+    if (headers != null) {
+      combinedHeaders.addAll(headers);
+    }
     return _check(
-        await _inner.get(uri, headers: _headersWith(token)).timeout(timeout ?? _timeout),
+        await _inner.get(uri, headers: combinedHeaders).timeout(timeout ?? _timeout),
         token);
   }
 

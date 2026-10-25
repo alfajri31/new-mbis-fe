@@ -41,6 +41,7 @@ import '../presentation/screens/ganti_password_screen.dart';
 import '../features/quotation_slip/qs_form_screen.dart';
 import '../features/quotation_slip/qs_form_state.dart';
 import '../features/setting_rates_charges/setting_rates_charges_screen.dart';
+import '../presentation/screens/persetujuan_qs_screen.dart';
 import '../features/visit_rm/visit_rm_screen.dart';
 import '../features/visit_rm/visit_rm_detail_screen.dart';
 
@@ -263,11 +264,18 @@ GoRouter buildRouter({
                 ? QsProduct.paXtra
                 : QsProduct.psakdi,
             customerName: s.uri.queryParameters['customerName'],
+            pipelineId: s.uri.queryParameters['pipelineId'],
+            productCode: s.uri.queryParameters['productCode'],
+            qsId: s.uri.queryParameters['qsId'],
           ),
         ),
         GoRoute(
           path: '/setting-rates-charges',
           builder: (_, _) => const SettingRatesChargesScreen(),
+        ),
+        GoRoute(
+          path: '/persetujuan-qs',
+          builder: (_, _) => const PersetujuanQsScreen(),
         ),
       ],
     );
@@ -350,10 +358,30 @@ List<RouteBase> _toolsSubRoutes() => [
                 ? QsProduct.paXtra
                 : QsProduct.psakdi,
             customerName: s.uri.queryParameters['customerName'],
+            pipelineId: s.uri.queryParameters['pipelineId'],
+            productCode: s.uri.queryParameters['productCode'],
+            qsId: s.uri.queryParameters['qsId'],
           )),
       GoRoute(
           path: 'setting-rates-charges',
           builder: (_, _) => const SettingRatesChargesScreen()),
+      GoRoute(
+          path: 'persetujuan-qs',
+          builder: (_, _) => const PersetujuanQsScreen()),
+      GoRoute(
+        path: 'visit-rm',
+        builder: (_, _) => const VisitRmScreen(),
+        routes: [
+          GoRoute(
+            path: 'detail/:visitId',
+            builder: (_, s) => VisitRmDetailScreen(
+              visitId: s.pathParameters['visitId']!,
+              activeRoleLabel:
+                  s.uri.queryParameters['role'] ?? 'RM',
+            ),
+          ),
+        ],
+      ),
     ];
 
 /// The management consoles, as a reusable sub-route list. Nested both under
@@ -394,18 +422,8 @@ List<RouteBase> _konsolSubRoutes() => [
           path: 'setting-rates-charges',
           builder: (_, _) => const SettingRatesChargesScreen()),
       GoRoute(
-        path: 'visit-rm',
-        builder: (_, _) => const VisitRmScreen(),
-        routes: [
-          GoRoute(
-            path: 'detail/:visitId',
-            builder: (_, s) => VisitRmDetailScreen(
-              visitId: s.pathParameters['visitId']!,
-              activeRoleLabel: s.uri.queryParameters['role'] ?? 'Pinca KC Padang',
-            ),
-          ),
-        ],
-      ),
+          path: 'persetujuan-qs',
+          builder: (_, _) => const PersetujuanQsScreen()),
     ];
 
 /// Customer detail (and the pipeline detail reachable from within it). Reused

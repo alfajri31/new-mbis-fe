@@ -23,6 +23,7 @@ import '../../utils/responsive.dart';
 import '../widgets/timeline_entry_card.dart';
 import '../widgets/pipeline_detail/pipeline_header_stepper.dart';
 import '../widgets/pipeline_detail/pipeline_info_card.dart';
+import '../widgets/pipeline_detail/pipeline_pengelola_card.dart';
 import '../widgets/pipeline_detail/pipeline_referral_banner.dart';
 import '../widgets/pipeline_detail/pipeline_documents_card.dart';
 import '../widgets/pipeline_detail/pipeline_parties_card.dart';
@@ -37,6 +38,7 @@ import 'add_activity_screen.dart';
 import 'add_pipeline_screen.dart';
 import 'tender_status_screen.dart';
 import '../widgets/dispose_callback.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import '../../features/quotation_slip/qs_form_screen.dart';
 import '../../features/quotation_slip/qs_form_state.dart' show QsProduct;
 
@@ -55,6 +57,11 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
   final List<String> _stages = const ['P3', 'P2', 'P1', 'WON'];
   // UI/sesi-ephemeral (tetap di widget): id user aktif dipakai untuk cek peran.
   String? _currentUserId;
+
+  // State ketersediaan Quotation Slip (QS) via API /api/pipeline/{id}/isQas
+  IsQasModelResponse? _qasStatus;
+  bool _isQasLoading = true;
+  String? _qasError;
 
   // State DATA/LOADING dikelola PipelineDetailNotifier. Getter berikut memproksinya
   // agar seluruh kode build/widget di bawah tetap memakai nama lama tanpa diubah.
@@ -78,6 +85,10 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
   ApiClient get _apiClient => ref.read(apiClientProvider);
   PipelineRepository get _pipelineRepo => ref.read(pipelineRepoProvider);
 
+  /// Dummy pipelineId untuk keperluan testing
+  static const String _dummyPipelineId = "ce116c9b-3a0b-4109-84ae-56175ffb27f2";
+  String get _activePipelineId => _dummyPipelineId;
+
   @override
   void initState() {
     super.initState();
@@ -87,12 +98,38 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
       _currentUserId = session?.user.id;
       // Bootstrap notifier (fetch detail + broker/referensi edit-sheet). Repo kini
       // dibaca notifier dari shared provider — tak perlu susun ApiClient di sini.
-      _pdNotifier.start(widget.pipelineId);
+      _pdNotifier.start(_activePipelineId);
+      _fetchQasStatus();
       // Label langkah tender ikut master data (editable admin).
       loadTenderLabels(_apiClient).then((_) {
         if (mounted) setState(() {});
       });
     });
+  }
+
+  /// Memuat status ketersediaan Quotation Slip dari server (/api/pipeline/{id}/isQas).
+  Future<void> _fetchQasStatus() async {
+    if (!mounted) return;
+    setState(() {
+      _isQasLoading = true;
+      _qasError = null;
+    });
+    try {
+      final res = await _pipelineRepo.getPipelineQas(_activePipelineId);
+      if (mounted) {
+        setState(() {
+          _qasStatus = res;
+          _isQasLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _qasError = e.toString().replaceFirst('Exception: ', '');
+          _isQasLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -114,8 +151,10 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
 
   // Fetch data → delegasi ke PipelineDetailNotifier (logika dipindah utuh).
   // Aksi-tulis di layar memanggil ini untuk reload setelah mutasi.
-  Future<void> _fetchData({bool silent = false}) =>
-      _pdNotifier.fetchData(silent: silent);
+  Future<void> _fetchData({bool silent = false}) {
+    _fetchQasStatus();
+    return _pdNotifier.fetchData(silent: silent);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -298,6 +337,8 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     return [
       if (banner != null) ...[banner, const SizedBox(height: 16)],
       PipelineInfoCard(pipeline: pipeline),
+      const SizedBox(height: 16),
+      PipelinePengelolaCard(pipeline: pipeline),
       if (pipeline.parties.isNotEmpty) ...[
         const SizedBox(height: 16),
         PipelinePartiesCard(pipeline: pipeline),
@@ -486,43 +527,43 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
       if (!isAgent && !isReadOnly) ...[
         SizedBox(
           width: double.infinity,
-          height: 48,
+          height: 56,
           child: OutlinedButton.icon(
             onPressed: () => _openStatusEditor(pipeline),
             icon: Icon(pipeline.isTender ? Icons.trending_up : Icons.swap_vert,
-                size: 18, color: AppColors.primaryNavy),
+                size: 20, color: const Color(0xFF0E2B53)),
             label: Text(
               pipeline.isTender ? 'Maju Proses Tender' : 'Ubah Status Pipeline',
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primaryNavy,
+                color: Color(0xFF0E2B53),
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.primaryNavy),
-              shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+              side: const BorderSide(color: Color(0xFF0E2B53), width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          height: 48,
+          height: 56,
           child: OutlinedButton.icon(
             onPressed: _showScheduleSheet,
-            icon: const Icon(Icons.event, size: 18, color: AppColors.primaryNavy),
+            icon: const Icon(Icons.event, size: 20, color: Color(0xFF0E2B53)),
             label: const Text(
               'Jadwalkan Visit',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primaryNavy,
+                color: Color(0xFF0E2B53),
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.primaryNavy),
-              shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+              side: const BorderSide(color: Color(0xFF0E2B53), width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ),
@@ -538,7 +579,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
         else
           SizedBox(
             width: double.infinity,
-            height: 52,
+            height: 56,
             child: ElevatedButton.icon(
               onPressed: () async {
                 final added = await Navigator.of(context).push(
@@ -550,19 +591,19 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                   _fetchData();
                 }
               },
-              icon: const Icon(Icons.add, color: Colors.white, size: 18),
+              icon: const Icon(Icons.add, color: Colors.white, size: 20),
               label: const Text(
                 'Tambah Aktivitas/Visit',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryNavy,
+                backgroundColor: const Color(0xFF0E2B53),
                 shape: RoundedRectangleBorder(
-                  borderRadius: AppRadius.radiusLg,
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 elevation: 0,
               ),
@@ -1055,7 +1096,10 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
       builder: (_) => _StatusSheet(pipeline: pipeline),
     );
     if (result == null || !mounted) return;
@@ -1078,48 +1122,169 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     }
   }
 
-  // ── Quotation Slip (QS) Integration (Prototype 1:1) ──
+  // ── Quotation Slip (QS) Integration (Dynamic from /api/pipeline/{id}/isQas) ──
 
-  QsProduct? _detectQsProduct(PipelineDetailModel pipeline) {
-    final candidates = [
-      pipeline.product,
-      pipeline.lobName,
-      pipeline.projectName,
-      pipeline.tenderName,
-    ];
-    for (final text in candidates) {
-      if (text == null || text.trim().isEmpty) continue;
-      final lower = text.toLowerCase();
+  QsProduct _resolveQsProduct(String? prodName) {
+    if (prodName != null) {
+      final lower = prodName.toLowerCase();
       if (lower.contains('pa xtra') ||
           lower.contains('paxtra') ||
           lower.contains('pa extra') ||
           lower.contains('personal accident')) {
         return QsProduct.paXtra;
       }
-      if (lower.contains('psakdi') || lower.contains('kecelakaan diri')) {
-        return QsProduct.psakdi;
-      }
     }
-    return null;
+    return QsProduct.psakdi;
+  }
+
+  Widget _buildQsLoadingCard() {
+    return Skeletonizer(
+      enabled: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.post_add_rounded, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Buat Quotation Slip (QS)',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.alertTitle,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Memeriksa ketersediaan fitur Quotation Slip...',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQsErrorBanner(String error) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.errorBannerBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.errorBannerBorder, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.error_outline_rounded,
+              size: 20,
+              color: AppColors.errorBannerTitle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Gagal memuat status QS',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.errorBannerTitle,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  error,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.errorBannerText,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: _fetchQasStatus,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: AppColors.errorBannerTitle,
+            ),
+            child: const Text(
+              'Coba Lagi',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildQuotationSlipSection(PipelineDetailModel pipeline) {
-    final qsProd = _detectQsProduct(pipeline);
-    if (qsProd != null) {
-      final prodLabel = qsProd == QsProduct.psakdi ? 'PSAKDI' : 'PA Xtra';
-      final hint = '$prodLabel · data customer & pipeline terisi otomatis';
-      return _buildActiveQsButton(pipeline, qsProd, hint);
+    if (_isQasLoading) {
+      return _buildQsLoadingCard();
     }
-    return _buildDisabledQsBanner(pipeline);
+    if (_qasError != null) {
+      return _buildQsErrorBanner(_qasError!);
+    }
+    if (_qasStatus != null && _qasStatus!.isQas == true) {
+      final qsProd = _resolveQsProduct(_qasStatus?.productName ?? pipeline.product);
+      final prodLabel = qsProd == QsProduct.psakdi ? 'PSAKDI' : 'PA Xtra';
+      final displayName = (_qasStatus?.productName != null && _qasStatus!.productName!.trim().isNotEmpty)
+          ? _qasStatus!.productName!
+          : prodLabel;
+      final hint = '$displayName · data customer & pipeline terisi otomatis';
+      return _buildActiveQsButton(pipeline, qsProd, hint, productCode: _qasStatus?.productCode);
+    }
+    return _buildDisabledQsBanner(pipeline, _qasStatus?.productName);
   }
 
   Widget _buildActiveQsButton(
     PipelineDetailModel pipeline,
     QsProduct product,
-    String hint,
-  ) {
+    String hint, {
+    String? productCode,
+  }) {
     return Material(
-      color: const Color(0xFFFFF6EF),
+      color: AppColors.alertBg,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: () {
@@ -1128,6 +1293,8 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
               builder: (_) => QsFormScreen(
                 product: product,
                 customerName: pipeline.customerName,
+                pipelineId: _activePipelineId,
+                productCode: productCode ?? _qasStatus?.productCode,
               ),
             ),
           );
@@ -1137,7 +1304,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE8732A), width: 1.5),
+            border: Border.all(color: AppColors.orangeMbis, width: 1.5),
           ),
           child: Row(
             children: [
@@ -1145,7 +1312,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8732A),
+                  color: AppColors.orangeMbis,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -1165,7 +1332,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF9A4712),
+                        color: AppColors.alertTitle,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1173,7 +1340,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
                       hint,
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: Color(0xFF5A6475),
+                        color: AppColors.textMuted,
                         height: 1.35,
                       ),
                     ),
@@ -1183,7 +1350,7 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
               const Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: Color(0xFF9A4712),
+                color: AppColors.alertTitle,
               ),
             ],
           ),
@@ -1192,7 +1359,10 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
     );
   }
 
-  Widget _buildDisabledQsBanner(PipelineDetailModel pipeline) {
+  Widget _buildDisabledQsBanner(PipelineDetailModel pipeline, [String? productName]) {
+    final title = (productName != null && productName.trim().isNotEmpty)
+        ? 'QS belum tersedia untuk $productName'
+        : 'QS belum tersedia untuk produk ini';
     return CustomPaint(
       painter: DashedRectPainter(
         color: AppColors.borderDashed,
@@ -1203,40 +1373,40 @@ class _PipelineDetailScreenState extends ConsumerState<PipelineDetailScreen>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F8FA),
+          color: AppColors.bgDisabledCard,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Row(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
+            const Padding(
               padding: EdgeInsets.only(top: 2),
               child: Icon(
                 Icons.lock_outline,
                 size: 20,
-                color: Color(0xFF6B7485),
+                color: AppColors.iconDropdown,
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'QS belum tersedia untuk produk ini',
-                    style: TextStyle(
+                    title,
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF3A4557),
+                      color: AppColors.textLabel,
                     ),
                   ),
-                  SizedBox(height: 3),
-                  Text(
+                  const SizedBox(height: 3),
+                  const Text(
                     'Saat ini QS hanya tersedia untuk PSAKDI – Personal dan PA Xtra – Personal.',
                     style: TextStyle(
                       fontSize: 12.5,
-                      color: Color(0xFF5A6475),
+                      color: AppColors.textMuted,
                       height: 1.4,
                     ),
                   ),
@@ -1521,13 +1691,16 @@ class _StatusSheetState extends State<_StatusSheet> {
     String? policyNumber;
     if (isWon) {
       final p = _policyCtrl.text.trim();
-      if (p.isNotEmpty) policyNumber = p;
-    }
-    // Polis baru sah bila masa berlakunya ikut dicatat: server menerbitkan baris
-    // polis (dasar pencatatan premi & pelepasan komisi agen) hanya bila lengkap.
-    if (policyNumber != null && (_policyStart == null || _policyEnd == null)) {
-      setState(() => _showErrors = true);
-      return;
+      if (p.isEmpty) {
+        setState(() => _showErrors = true);
+        return;
+      }
+      policyNumber = p;
+
+      if (_policyStart == null || _policyEnd == null || _hasPeriodOrderError) {
+        setState(() => _showErrors = true);
+        return;
+      }
     }
     // Tanggal Terbit Polis WAJIB saat WON (CR-04). Inilah bulan pengakuan
     // realisasi; tanpa isian ini pipeline bisa jadi WON tanpa bulan yang
@@ -1563,34 +1736,133 @@ class _StatusSheetState extends State<_StatusSheet> {
   static String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  /// Satu isian tanggal periode polis. Rentangnya dilebarkan sampai 5 tahun ke
-  /// depan/belakang karena polis bisa terbit mundur maupun berlaku multi-tahun.
-  Widget _policyDateField(String label, DateTime? value, ValueChanged<DateTime> onPicked) {
-    return InkWell(
-      borderRadius: AppRadius.radiusMd,
-      onTap: () async {
-        final now = DateTime.now();
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: value ?? now,
-          firstDate: DateTime(now.year - 5),
-          lastDate: DateTime(now.year + 5),
-        );
-        if (picked != null) onPicked(picked);
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(fontSize: 12),
-          isDense: true,
-          border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+  String get _customerOwnerType {
+    final name = (widget.pipeline.customerName ?? '').toUpperCase();
+    final source = (widget.pipeline.sourceType ?? '').toUpperCase();
+    if (name.contains('PERSERO') ||
+        name.contains('BUMN') ||
+        name.contains('PERUM') ||
+        source.contains('BUMN')) {
+      return 'BUMN';
+    }
+    return 'tipe Swasta';
+  }
+
+  bool get _hasRealisasiError {
+    if (_selectedBucket != 'WON') return false;
+    final digits = _realisasiCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    return digits.isEmpty || (double.tryParse(digits) ?? 0) <= 0;
+  }
+
+  bool get _hasPolicyNoError {
+    if (_selectedBucket != 'WON') return false;
+    return _policyCtrl.text.trim().isEmpty;
+  }
+
+  bool get _hasPeriodOrderError {
+    if (_selectedBucket != 'WON') return false;
+    if (_policyStart != null && _policyEnd != null) {
+      return _policyEnd!.isBefore(_policyStart!) || _policyEnd!.isAtSameMomentAs(_policyStart!);
+    }
+    return false;
+  }
+
+  bool get _hasPeriodError {
+    if (_selectedBucket != 'WON') return false;
+    if (_hasPeriodOrderError) return true;
+    return _policyStart == null || _policyEnd == null;
+  }
+
+  bool get _hasTerbitError {
+    if (_selectedBucket != 'WON') return false;
+    return _policyIssuedDate == null;
+  }
+
+  bool get _hasReasonError {
+    if (_selectedBucket != 'DECLINE') return false;
+    return _reasonCtrl.text.trim().isEmpty;
+  }
+
+  bool get _hasAnyError {
+    if (_selected == null) return true;
+    if (_selectedBucket == 'WON') {
+      return _hasRealisasiError || _hasPolicyNoError || _hasPeriodError || _hasTerbitError;
+    }
+    if (_selectedBucket == 'DECLINE') {
+      return _hasReasonError;
+    }
+    return false;
+  }
+
+  /// Satu isian tanggal periode polis dengan title kecil di atas (floating label).
+  Widget _buildDateField({
+    required String label,
+    required DateTime? value,
+    required ValueChanged<DateTime> onPicked,
+    bool hasError = false,
+  }) {
+    final text = value == null ? 'Pilih tanggal' : _isoDate(value);
+    final borderColor = hasError ? const Color(0xFFC8322F) : const Color(0xFFD5DCE7);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final now = DateTime.now();
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: value ?? now,
+              firstDate: DateTime(now.year - 5),
+              lastDate: DateTime(now.year + 5),
+            );
+            if (picked != null) onPicked(picked);
+          },
+          child: Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: borderColor,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: value == null ? const Color(0xFF8A94A6) : const Color(0xFF15223B),
+                    ),
+                  ),
+                ),
+                const Icon(Icons.calendar_today_outlined, size: 18, color: Color(0xFF6B7485)),
+              ],
+            ),
+          ),
         ),
-        child: Text(value == null ? 'Pilih tanggal' : _isoDate(value),
-            style: TextStyle(
-                fontSize: 14,
-                color: value == null ? AppColors.grayStage : AppColors.textPrimary)),
-      ),
+        Positioned(
+          left: 12,
+          top: -8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            color: Colors.white,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF5A6475),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1599,8 +1871,6 @@ class _StatusSheetState extends State<_StatusSheet> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        // Layar landscape sangat pendek: tanpa ini isi dialog yang lebih
-        // tinggi dari layar meluber (overflow) alih-alih bisa digulung.
         scrollable: true,
         title: const Text('Nilai realisasi berubah?'),
         content: Text(
@@ -1617,7 +1887,7 @@ class _StatusSheetState extends State<_StatusSheet> {
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryNavy,
+              backgroundColor: const Color(0xFF0E2B53),
               foregroundColor: Colors.white,
             ),
             child: const Text('Ya, lanjutkan'),
@@ -1631,13 +1901,19 @@ class _StatusSheetState extends State<_StatusSheet> {
   Widget build(BuildContext context) {
     final isWon = _selectedBucket == 'WON';
     final isDecline = _selectedBucket == 'DECLINE';
+
     return Padding(
-      padding: EdgeInsets.only(
-          left: 16, right: 16, top: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 18,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Sheet
           Row(
             children: [
               if (_selectedBucket != null)
@@ -1647,13 +1923,20 @@ class _StatusSheetState extends State<_StatusSheet> {
                     _selected = null;
                     _showErrors = false;
                   }),
+                  borderRadius: BorderRadius.circular(20),
                   child: const Padding(
                     padding: EdgeInsets.only(right: 8),
-                    child: Icon(Icons.arrow_back, size: 20, color: AppColors.textSecondary),
+                    child: Icon(Icons.arrow_back, size: 22, color: Color(0xFF15223B)),
                   ),
                 ),
-              const Text('Ubah Status Pipeline',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              const Text(
+                'Ubah Status Pipeline',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF15223B),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -1661,9 +1944,10 @@ class _StatusSheetState extends State<_StatusSheet> {
             _selectedBucket == null
                 ? 'Langkah 1 — pilih tahap pipeline'
                 : 'Langkah 2 — pilih detail di ${PipelineStages.bucketLabel[_selectedBucket]}',
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: const TextStyle(fontSize: 13.5, color: Color(0xFF5A6475)),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
+
           Flexible(
             child: SingleChildScrollView(
               child: _selectedBucket == null
@@ -1671,176 +1955,564 @@ class _StatusSheetState extends State<_StatusSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         for (final bucket in PipelineStages.byBucket.keys)
-                          InkWell(
-                            onTap: () => setState(() {
-                              _selectedBucket = bucket;
-                              final subs = PipelineStages.byBucket[bucket]!;
-                              _selected = subs.length == 1 ? subs.first.value : null;
-                            }),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      PipelineStages.bucketLabel[bucket] ?? bucket,
-                                      style: const TextStyle(
-                                          fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                                    ),
+                          Builder(builder: (context) {
+                            final isCurrent = widget.pipeline.stage.toUpperCase() == bucket;
+                            final isSelected = _selectedBucket == bucket;
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              child: InkWell(
+                                onTap: () => setState(() {
+                                  _selectedBucket = bucket;
+                                  final subs = PipelineStages.byBucket[bucket]!;
+                                  if (bucket == 'WON') {
+                                    _selected = 'TERBIT_POLIS';
+                                  } else if (subs.length == 1) {
+                                    _selected = subs.first.value;
+                                  } else {
+                                    _selected = subs.first.value;
+                                  }
+                                }),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  width: double.infinity,
+                                  constraints: const BoxConstraints(minHeight: 52),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFFE9EEF6) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  const Icon(Icons.chevron_right, size: 18, color: AppColors.grayStage),
-                                ],
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          PipelineStages.bucketLabel[bucket] ?? bucket,
+                                          style: TextStyle(
+                                            fontSize: 15.5,
+                                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                            color: const Color(0xFF15223B),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isCurrent) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEEF1F6),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'Saat ini',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF5A6475),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      if (isSelected && bucket != 'WON')
+                                        const Icon(Icons.check, size: 18, color: Color(0xFF0E2B53))
+                                      else
+                                        const Icon(Icons.chevron_right, size: 18, color: Color(0xFF6B7485)),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          }),
                       ],
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final sub in PipelineStages.byBucket[_selectedBucket]!)
-                          InkWell(
-                            onTap: () => setState(() => _selected = sub.value),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _selected == sub.value
-                                        ? Icons.radio_button_checked
-                                        : Icons.radio_button_unchecked,
-                                    size: 20,
-                                    color: _selected == sub.value ? AppColors.primaryNavy : AppColors.grayStage,
+                        // Radio Row Terbit Polis
+                        if (isWon) ...[
+                          Row(
+                            children: [
+                              Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: const Color(0xFF0E2B53), width: 2),
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Color(0xFF0E2B53),
+                                    ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(sub.label,
-                                        style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Terbit Polis',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF15223B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Banner info Customer BUMN / Swasta
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF6EF),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFF3C9A8)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.info_outline, size: 18, color: Color(0xFFC25A17)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      text: 'Customer ',
+                                      children: [
+                                        TextSpan(
+                                          text: _customerOwnerType,
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        const TextSpan(
+                                          text: ': Nilai Premi, No. Polis, dan Periode Polis ',
+                                        ),
+                                        const TextSpan(
+                                          text: 'wajib diisi',
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        const TextSpan(text: '.'),
+                                      ],
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF7A3A0E),
+                                      height: 1.45,
+                                    ),
                                   ),
-                                ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Banner Error jika ada isian merah belum lengkap
+                          if (_showErrors && _hasAnyError) ...[
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFDECEC),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                'Lengkapi isian bertanda merah.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF9E2522),
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          // Nilai Premi (wajib)
+                          Text.rich(
+                            const TextSpan(
+                              text: 'Nilai Premi ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF15223B),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '(wajib)',
+                                  style: TextStyle(color: Color(0xFFC8322F)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 52,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _showErrors && _hasRealisasiError
+                                    ? const Color(0xFFC8322F)
+                                    : const Color(0xFFD5DCE7),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Text(
+                                  'Rp',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: Color(0xFF5A6475),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _realisasiCtrl,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [ThousandsInputFormatter()],
+                                    onChanged: (_) {
+                                      if (_showErrors) setState(() {});
+                                    },
+                                    style: const TextStyle(fontSize: 15, color: Color(0xFF15223B)),
+                                    decoration: const InputDecoration(
+                                      hintText: 'mis. 500.000.000',
+                                      hintStyle: TextStyle(fontSize: 14, color: Color(0xFF8A94A6)),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_showErrors && _hasRealisasiError)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Wajib diisi',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFC8322F),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 14),
+
+                          // No. Polis (wajib)
+                          Text.rich(
+                            const TextSpan(
+                              text: 'No. Polis ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF15223B),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '(wajib)',
+                                  style: TextStyle(color: Color(0xFFC8322F)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 52,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _showErrors && _hasPolicyNoError
+                                    ? const Color(0xFFC8322F)
+                                    : const Color(0xFFD5DCE7),
+                                width: 1.5,
+                              ),
+                            ),
+                            alignment: Alignment.centerLeft,
+                            child: TextField(
+                              controller: _policyCtrl,
+                              onChanged: (_) {
+                                if (_showErrors) setState(() {});
+                              },
+                              style: const TextStyle(fontSize: 15, color: Color(0xFF15223B)),
+                              decoration: const InputDecoration(
+                                hintText: 'mis. 101.2026.0001',
+                                hintStyle: TextStyle(fontSize: 14, color: Color(0xFF8A94A6)),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
                               ),
                             ),
                           ),
+                          if (_showErrors && _hasPolicyNoError)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Wajib diisi',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFC8322F),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 14),
+
+                          // Periode Polis (wajib)
+                          Text.rich(
+                            const TextSpan(
+                              text: 'Periode Polis ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF15223B),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '(wajib)',
+                                  style: TextStyle(color: Color(0xFFC8322F)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildDateField(
+                                  label: 'Mulai',
+                                  value: _policyStart,
+                                  hasError: _showErrors && _hasPeriodError && _policyStart == null,
+                                  onPicked: (d) => setState(() {
+                                    _policyStart = d;
+                                    _policyEnd ??= DateTime(d.year + 1, d.month, d.day);
+                                  }),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _buildDateField(
+                                  label: 'Selesai',
+                                  value: _policyEnd,
+                                  hasError: _showErrors && _hasPeriodError && (_policyEnd == null || _hasPeriodOrderError),
+                                  onPicked: (d) => setState(() => _policyEnd = d),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_showErrors && _hasPeriodError)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                _hasPeriodOrderError
+                                    ? 'Tanggal selesai harus setelah tanggal mulai'
+                                    : 'Wajib diisi',
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFC8322F),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 14),
+
+                          // Tanggal Terbit Polis *
+                          Text.rich(
+                            const TextSpan(
+                              text: 'Tanggal Terbit Polis ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF15223B),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '*',
+                                  style: TextStyle(color: Color(0xFFC8322F)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDateField(
+                            label: 'Tanggal terbit',
+                            value: _policyIssuedDate,
+                            hasError: _showErrors && _hasTerbitError,
+                            onPicked: (d) => setState(() => _policyIssuedDate = d),
+                          ),
+                          if (_showErrors && _hasTerbitError)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Wajib diisi',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFC8322F),
+                                ),
+                              ),
+                            ),
+                        ] else if (isDecline) ...[
+                          for (final sub in PipelineStages.byBucket['DECLINE']!)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              child: InkWell(
+                                onTap: () => setState(() => _selected = sub.value),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _selected == sub.value
+                                            ? Icons.radio_button_checked
+                                            : Icons.radio_button_unchecked,
+                                        size: 20,
+                                        color: _selected == sub.value
+                                            ? const Color(0xFF0E2B53)
+                                            : const Color(0xFF6B7485),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          sub.label,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: _selected == sub.value ? FontWeight.w600 : FontWeight.normal,
+                                            color: const Color(0xFF15223B),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          Text.rich(
+                            const TextSpan(
+                              text: 'Alasan ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF15223B),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '(wajib)',
+                                  style: TextStyle(color: Color(0xFFC8322F)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _showErrors && _hasReasonError
+                                    ? const Color(0xFFC8322F)
+                                    : const Color(0xFFD5DCE7),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: TextField(
+                              controller: _reasonCtrl,
+                              maxLines: 2,
+                              onChanged: (_) {
+                                if (_showErrors) setState(() {});
+                              },
+                              style: const TextStyle(fontSize: 14, color: Color(0xFF15223B)),
+                              decoration: const InputDecoration(
+                                hintText: 'mis. Decline dari UW / customer membatalkan',
+                                hintStyle: TextStyle(fontSize: 13, color: Color(0xFF8A94A6)),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          if (_showErrors && _hasReasonError)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Alasan wajib diisi',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFC8322F),
+                                ),
+                              ),
+                            ),
+                        ] else ...[
+                          // Sub stages for P3, P2, P1
+                          for (final sub in PipelineStages.byBucket[_selectedBucket]!)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              child: InkWell(
+                                onTap: () => setState(() => _selected = sub.value),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _selected == sub.value
+                                            ? Icons.radio_button_checked
+                                            : Icons.radio_button_unchecked,
+                                        size: 20,
+                                        color: _selected == sub.value
+                                            ? const Color(0xFF0E2B53)
+                                            : const Color(0xFF6B7485),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          sub.label,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: _selected == sub.value ? FontWeight.w600 : FontWeight.normal,
+                                            color: const Color(0xFF15223B),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ],
                     ),
             ),
           ),
-          if (isWon) ...[
-            const SizedBox(height: 12),
-            const Text('Nilai Premi (wajib)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _realisasiCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [ThousandsInputFormatter()],
-              onChanged: (_) {
-                if (_showErrors) setState(() {});
-              },
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                // prefixIcon, BUKAN prefixText: Flutter hanya merender prefixText
-                // saat field fokus atau sudah berisi, sehingga "Rp" seolah muncul
-                // tiba-tiba begitu orang mulai mengetik. Satuan uang adalah bagian
-                // tetap dari kolomnya, jadi harus terlihat sejak awal.
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12, right: 6),
-                  child: Text(
-                    'Rp',
-                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-                  ),
-                ),
-                prefixIconConstraints:
-                    const BoxConstraints(minWidth: 0, minHeight: 0),
-                hintText: 'mis. 500.000.000',
-                hintStyle: const TextStyle(fontSize: 13, color: AppColors.grayStage),
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                errorText: _showErrors && _realisasiCtrl.text.replaceAll(RegExp(r'[^0-9]'), '').isEmpty
-                    ? 'Nilai realisasi wajib diisi saat Won'
-                    : null,
-                errorStyle: const TextStyle(fontSize: 11, color: AppColors.errorRed),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('No. Polis',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _policyCtrl,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'mis. 101.2026.0001',
-                hintStyle: const TextStyle(fontSize: 13, color: AppColors.grayStage),
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Periode Polis',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            const SizedBox(height: 6),
-            Row(children: [
-              Expanded(child: _policyDateField('Mulai', _policyStart, (d) => setState(() => _policyStart = d))),
-              const SizedBox(width: 8),
-              Expanded(child: _policyDateField('Selesai', _policyEnd, (d) => setState(() => _policyEnd = d))),
-            ]),
-            if (_showErrors && _policyCtrl.text.trim().isNotEmpty && (_policyStart == null || _policyEnd == null))
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text('Periode polis wajib diisi bila No. Polis diisi',
-                    style: TextStyle(fontSize: 12, color: AppColors.errorRed)),
-              ),
-            const SizedBox(height: 12),
-            const Text('Tanggal Terbit Polis *',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            const SizedBox(height: 6),
-            _policyDateField('Tanggal terbit', _policyIssuedDate,
-                (d) => setState(() => _policyIssuedDate = d)),
-            if (_showErrors && _policyIssuedDate == null)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                    'Tanggal Terbit Polis wajib diisi. Inilah bulan realisasi diakui.',
-                    style: TextStyle(fontSize: 12, color: AppColors.errorRed)),
-              ),
-          ],
-          if (isDecline) ...[
-            const SizedBox(height: 12),
-            const Text('Alasan (wajib)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _reasonCtrl,
-              maxLines: 2,
-              onChanged: (_) {
-                if (_showErrors) setState(() {});
-              },
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'mis. Decline dari UW / customer membatalkan',
-                hintStyle: const TextStyle(fontSize: 13, color: AppColors.grayStage),
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                errorText: _showErrors && _reasonCtrl.text.trim().isEmpty ? 'Alasan wajib diisi' : null,
-                errorStyle: const TextStyle(fontSize: 11, color: AppColors.errorRed),
-              ),
-            ),
-          ],
           const SizedBox(height: 16),
+
+          // Tombol Simpan
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 52,
             child: ElevatedButton(
               onPressed: _save,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryNavy,
-                shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+                backgroundColor: const Color(0xFF0E2B53),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
               ),
-              child: const Text('Simpan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Simpan',
+                style: TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
         ],
@@ -1848,3 +2520,4 @@ class _StatusSheetState extends State<_StatusSheet> {
     );
   }
 }
+

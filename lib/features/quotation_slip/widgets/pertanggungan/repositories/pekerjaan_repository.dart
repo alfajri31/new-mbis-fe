@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
-import 'package:mbis/src/config/app_config.dart';
 import 'package:mbis/src/network/api_client.dart';
 
 /// Kontrak repository pekerjaan (lapisan `data`).
@@ -10,17 +9,16 @@ abstract class PekerjaanRepository {
 }
 
 /// Implementasi nyata: ambil daftar pekerjaan via [ApiClient].
-/// Selalu melakukan request ke API /api/pekerjaan di Mockoon port 3567 (tanpa cache).
+/// Selalu melakukan request ke API /api/pekerjaan (tanpa cache).
 class ApiPekerjaanRepository implements PekerjaanRepository {
-  final ApiClient _client;
+  final ApiClient apiClient;
 
-  ApiPekerjaanRepository({ApiClient? client})
-    : _client = client ?? ApiClient(customBaseUrl: AppConfig.mockoonBaseUrl);
+  ApiPekerjaanRepository({required this.apiClient});
 
   @override
   Future<List<String>> list() async {
     try {
-      final res = await _client.get('/api/pekerjaan');
+      final res = await apiClient.get('/api/pekerjaan');
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         if (decoded is List) {
@@ -62,38 +60,55 @@ class MockPekerjaanRepository implements PekerjaanRepository {
 /// Controller pengelola logika & state Pekerjaan (lapisan `logic/controller`).
 /// Berbasis [ChangeNotifier] standar Flutter (tanpa ketergantungan pada flutter_riverpod).
 class PekerjaanController extends ChangeNotifier {
-  final PekerjaanRepository _repository;
+  final PekerjaanRepository repository;
 
   List<String> _items = const [];
   bool _isLoading = false;
   String? _error;
+  bool _disposed = false;
 
-  PekerjaanController({PekerjaanRepository? repository})
-    : _repository = repository ?? ApiPekerjaanRepository();
+  PekerjaanController({required this.repository});
 
   List<String> get items => _items;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasError => _error != null;
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) {
+      super.notifyListeners();
+    }
+  }
+
   /// Memuat daftar pekerjaan dari API tanpa cache.
   Future<void> loadPekerjaan() async {
-    if (_isLoading) return;
+    if (_isLoading || _disposed) return;
 
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final result = await _repository.list();
+      final result = await repository.list();
+      if (_disposed) return;
       _items = result;
       _error = null;
     } catch (e) {
+      if (_disposed) return;
       _error = e.toString().replaceAll('Exception: ', '');
       _items = const [];
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_disposed) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

@@ -1,39 +1,58 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Entry log sederhana untuk riwayat perubahan pengaturan tarif & biaya.
-class SettingRatesChargesLogEntry {
-  final String at;
-  final String by;
-  final String txt;
-
-  const SettingRatesChargesLogEntry({
-    required this.at,
-    required this.by,
-    required this.txt,
-  });
-}
+import '../../core/providers/app_providers.dart';
+import 'models/pengaturan_tarif_riwayat_model.dart';
 
 /// State untuk modul Setting Rates & Charges.
 class SettingRatesChargesState {
   final Map<String, dynamic> values;
-  final List<SettingRatesChargesLogEntry> logs;
+  final List<PengaturanTarifRiwayatModel> riwayatList;
+  final bool isLoadingRiwayat;
+  final String? riwayatErrorMessage;
   final bool isSaving;
+  final bool isResetting;
+  final bool isLoading;
+  final String? errorMessage;
+  final DateTime? lastFetchedAt;
 
   const SettingRatesChargesState({
     required this.values,
-    this.logs = const [],
+    this.riwayatList = const [],
+    this.isLoadingRiwayat = false,
+    this.riwayatErrorMessage,
     this.isSaving = false,
+    this.isResetting = false,
+    this.isLoading = false,
+    this.errorMessage,
+    this.lastFetchedAt,
   });
 
   SettingRatesChargesState copyWith({
     Map<String, dynamic>? values,
-    List<SettingRatesChargesLogEntry>? logs,
+    List<PengaturanTarifRiwayatModel>? riwayatList,
+    bool? isLoadingRiwayat,
+    String? riwayatErrorMessage,
+    bool clearRiwayatError = false,
     bool? isSaving,
+    bool? isResetting,
+    bool? isLoading,
+    String? errorMessage,
+    bool clearError = false,
+    DateTime? lastFetchedAt,
   }) {
     return SettingRatesChargesState(
       values: values ?? this.values,
-      logs: logs ?? this.logs,
+      riwayatList: riwayatList ?? this.riwayatList,
+      isLoadingRiwayat: isLoadingRiwayat ?? this.isLoadingRiwayat,
+      riwayatErrorMessage: clearRiwayatError
+          ? null
+          : (riwayatErrorMessage ?? this.riwayatErrorMessage),
       isSaving: isSaving ?? this.isSaving,
+      isResetting: isResetting ?? this.isResetting,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
     );
   }
 }
@@ -41,49 +60,21 @@ class SettingRatesChargesState {
 /// Notifier pengelola state pengaturan tarif, biaya, dan audit log.
 class SettingRatesChargesNotifier
     extends Notifier<SettingRatesChargesState> {
-  // Nilai default awal (sesuai spesifikasi prototype M-BIS)
-  static const Map<String, dynamic> defaultValues = {
-    // Biaya Admin
-    'admPolis': 20000,
-    'admMaterai': 10000,
-    'admE': 10000,
-    // Batas & Diskon
-    'upMax': 1000000000,
-    'cPct': 10.0,
-    'cMax': 10000000,
-    'discMax': 20.0,
-    'validityDays': 30,
-    // Rate PA Xtra (%/tahun)
-    'p_pokok': 0.10,
-    'p_cacat': 0.15,
-    'p_upC': 2.00,
-    'p_ambulan': 2.00,
-    'p_pemakaman': 0.10,
-    'p_barang': 2.00,
-    'p_dokumen': 2.00,
-    'p_pendidikan': 0.10,
-    'p_repatriasi': 0.10,
-    // Batas Santunan PA Xtra (maksimal)
-    'c_upC': 10000000,
-    'c_ambulan': 2000000,
-    'c_pemakaman': 2000000,
-    'c_barang': 500000,
-    'c_dokumen': 500000,
-    'c_pendidikan': 5000000,
-    'c_repatriasi': 5000000,
-    // Rate PSAKDI [A/AB/C][0..3]
-    'rA0': 0.08,
-    'rA1': 0.10,
-    'rA2': 0.12,
-    'rA3': 0.16,
-    'rAB0': 0.10,
-    'rAB1': 0.13,
-    'rAB2': 0.16,
-    'rAB3': 0.18,
-    'rC0': 2.00,
-    'rC1': 2.00,
-    'rC2': 2.00,
-    'rC3': 2.00,
+  /// Field-field bertipe integer (nominal rupiah atau hari)
+  static const Set<String> intFields = {
+    'admPolis',
+    'admMaterai',
+    'admE',
+    'upMax',
+    'cMax',
+    'c_upC',
+    'c_ambulan',
+    'c_pemakaman',
+    'c_barang',
+    'c_dokumen',
+    'c_pendidikan',
+    'c_repatriasi',
+    'validityDays',
   };
 
   static const Map<String, String> fieldLabels = {
@@ -127,69 +118,394 @@ class SettingRatesChargesNotifier
 
   @override
   SettingRatesChargesState build() {
-    final now = DateTime.now();
-    final initialLogs = [
-      SettingRatesChargesLogEntry(
-        at:
-            '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} 09:30',
-        by: 'UW',
-        txt: 'Inisialisasi tarif & biaya standar M-BIS',
-      ),
-    ];
+    // Trigger pengambilan tarif & biaya terbaru serta riwayat perubahan dari backend API
+    Future.microtask(() {
+      fetchPengaturanTarif();
+      fetchRiwayat();
+    });
 
-    return SettingRatesChargesState(
-      values: Map<String, dynamic>.from(defaultValues),
-      logs: initialLogs,
+    // State awal murni kosong tanpa default value sebelum data diterima dari server
+    return const SettingRatesChargesState(
+      values: {},
+      riwayatList: [],
+      isLoading: true,
+      isLoadingRiwayat: true,
     );
   }
 
+  /// Helper untuk memetakan respon psakdi & paextra ke map state values
+  Map<String, dynamic> _parseProductsMap(
+    Map<String, dynamic> psakdi,
+    Map<String, dynamic> paextra,
+    Map<String, dynamic> baseValues,
+  ) {
+    final Map<String, dynamic> merged = Map<String, dynamic>.from(baseValues);
 
-  /// Kembalikan semua konfigurasi ke nilai default
-  void resetToDefaults() {
-    state = state.copyWith(
-      values: Map<String, dynamic>.from(defaultValues),
-    );
+    void mapValue(String key, dynamic raw) {
+      if (raw == null) return;
+      if (intFields.contains(key)) {
+        if (raw is num) {
+          merged[key] = raw.toInt();
+        } else {
+          merged[key] = int.tryParse(raw.toString()) ?? raw;
+        }
+      } else {
+        if (raw is num) {
+          merged[key] = raw.toDouble();
+        } else {
+          merged[key] = double.tryParse(raw.toString()) ?? raw;
+        }
+      }
+    }
+
+    for (final entry in psakdi.entries) {
+      mapValue(entry.key, entry.value);
+    }
+    for (final entry in paextra.entries) {
+      mapValue(entry.key, entry.value);
+    }
+    return merged;
   }
 
-  /// Simpan pengaturan dan catat diff audit log
-  List<String> save(Map<String, dynamic> submittedValues, {String by = 'UW'}) {
+  /// Mengambil pengaturan tarif & biaya terbaru dari backend API
+  Future<void> fetchPengaturanTarif() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final client = ref.read(apiClientProvider);
+      final res = await client.get('/api/qs/pengaturan-tarif');
+
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map<String, dynamic>) {
+          final psakdi = decoded['psakdi'] as Map<String, dynamic>? ?? {};
+          final paextra = decoded['paextra'] as Map<String, dynamic>? ?? {};
+
+          final merged = _parseProductsMap(psakdi, paextra, state.values);
+
+          state = state.copyWith(
+            values: merged,
+            isLoading: false,
+            clearError: true,
+            lastFetchedAt: DateTime.now(),
+          );
+        } else {
+          state = state.copyWith(
+            isLoading: false,
+            errorMessage: 'Format respon dari server tidak sesuai format yang diharapkan.',
+          );
+        }
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage:
+              'Gagal memuat pengaturan tarif (Status ${res.statusCode}). Silakan coba beberapa saat lagi.',
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Koneksi ke server gagal: $e',
+      );
+    }
+  }
+
+  /// Mengambil data riwayat perubahan pengaturan tarif & biaya dari GET /api/qs/pengaturan-tarif/riwayat
+  Future<void> fetchRiwayat() async {
+    state = state.copyWith(isLoadingRiwayat: true, clearRiwayatError: true);
+    try {
+      final client = ref.read(apiClientProvider);
+      final res = await client.get('/api/qs/pengaturan-tarif/riwayat');
+
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        List<dynamic> listJson = [];
+        if (decoded is List) {
+          listJson = decoded;
+        } else if (decoded is Map<String, dynamic> && decoded['data'] is List) {
+          listJson = decoded['data'] as List;
+        }
+
+        final items = listJson
+            .map((item) => PengaturanTarifRiwayatModel.fromJson(
+                item as Map<String, dynamic>))
+            .toList();
+
+        // Urutkan riwayat dari yang paling baru (changedAt descending)
+        items.sort((a, b) {
+          if (a.changedAt == null && b.changedAt == null) return 0;
+          if (a.changedAt == null) return 1;
+          if (b.changedAt == null) return -1;
+          return b.changedAt!.compareTo(a.changedAt!);
+        });
+
+        state = state.copyWith(
+          riwayatList: items,
+          isLoadingRiwayat: false,
+          clearRiwayatError: true,
+        );
+      } else {
+        state = state.copyWith(
+          isLoadingRiwayat: false,
+          riwayatErrorMessage:
+              'Gagal memuat riwayat perubahan (Status ${res.statusCode})',
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoadingRiwayat: false,
+        riwayatErrorMessage: 'Koneksi gagal saat memuat riwayat perubahan: $e',
+      );
+    }
+  }
+
+  /// Menutup pesan error pengaturan
+  void dismissError() {
+    state = state.copyWith(clearError: true);
+  }
+
+  /// Menutup pesan error riwayat
+  void dismissRiwayatError() {
+    state = state.copyWith(clearRiwayatError: true);
+  }
+
+  /// Muat ulang atau sinkronkan kembali dari server
+  Future<void> reloadFromServer() async {
+    await Future.wait([
+      fetchPengaturanTarif(),
+      fetchRiwayat(),
+    ]);
+  }
+
+  /// Membangun payload request PUT /api/qs/pengaturan-tarif sesuai format API
+  Map<String, dynamic> buildPutPayload(Map<String, dynamic> currentValues) {
+    int intVal(String key) {
+      final v = currentValues[key];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v?.toString() ?? '') ?? 0;
+    }
+
+    num numVal(String key) {
+      final v = currentValues[key];
+      if (v is num) return v;
+      return double.tryParse(v?.toString() ?? '') ?? 0.0;
+    }
+
+    final psakdiMap = <String, dynamic>{
+      'productCode': 'psakdi',
+      'admPolis': intVal('admPolis'),
+      'admMaterai': intVal('admMaterai'),
+      'admE': intVal('admE'),
+      'upMax': intVal('upMax'),
+      'cPct': numVal('cPct'),
+      'cMax': intVal('cMax'),
+      'discMax': numVal('discMax'),
+      'rA0': numVal('rA0'),
+      'rA1': numVal('rA1'),
+      'rA2': numVal('rA2'),
+      'rA3': numVal('rA3'),
+      'rAB0': numVal('rAB0'),
+      'rAB1': numVal('rAB1'),
+      'rAB2': numVal('rAB2'),
+      'rAB3': numVal('rAB3'),
+      'rC0': numVal('rC0'),
+      'rC1': numVal('rC1'),
+      'rC2': numVal('rC2'),
+      'rC3': numVal('rC3'),
+    };
+
+    final paextraMap = <String, dynamic>{
+      'productCode': 'paextra',
+      'admPolis': intVal('admPolis'),
+      'admMaterai': intVal('admMaterai'),
+      'admE': intVal('admE'),
+      'upMax': intVal('upMax'),
+      'cPct': numVal('cPct'),
+      'cMax': intVal('cMax'),
+      'discMax': numVal('discMax'),
+      'p_pokok': numVal('p_pokok'),
+      'p_cacat': numVal('p_cacat'),
+      'p_upC': numVal('p_upC'),
+      'p_ambulan': numVal('p_ambulan'),
+      'p_pemakaman': numVal('p_pemakaman'),
+      'p_barang': numVal('p_barang'),
+      'p_dokumen': numVal('p_dokumen'),
+      'p_pendidikan': numVal('p_pendidikan'),
+      'p_repatriasi': numVal('p_repatriasi'),
+      'c_upC': intVal('c_upC'),
+      'c_ambulan': intVal('c_ambulan'),
+      'c_pemakaman': intVal('c_pemakaman'),
+      'c_barang': intVal('c_barang'),
+      'c_dokumen': intVal('c_dokumen'),
+      'c_pendidikan': intVal('c_pendidikan'),
+      'c_repatriasi': intVal('c_repatriasi'),
+    };
+
+    return {
+      'products': [psakdiMap, paextraMap],
+    };
+  }
+
+  /// Simpan pengaturan ke backend via PUT /api/qs/pengaturan-tarif dan catat diff audit log
+  Future<({bool success, String message, List<String> changedFields})> save(
+    Map<String, dynamic> submittedValues, {
+    String by = 'UW',
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+
     final List<String> changedFields = [];
-    final now = DateTime.now();
-    final nowStr =
-        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
-    for (final entry in defaultValues.entries) {
-      final key = entry.key;
+    for (final key in fieldLabels.keys) {
       final current = state.values[key];
       final submitted = submittedValues[key] ?? current;
 
-      if (submitted != null && submitted.toString() != current.toString()) {
+      if (submitted != null && current != null && submitted.toString() != current.toString()) {
         final label = fieldLabels[key] ?? key;
         changedFields.add(label);
       }
     }
 
-    String txt;
-    if (changedFields.isEmpty) {
-      txt = 'Tidak ada perubahan';
-    } else {
-      final firstFew = changedFields.take(6).join(', ');
-      final suffix = changedFields.length > 6 ? ', …' : '';
-      txt = '${changedFields.length} nilai diubah: $firstFew$suffix';
+    final mergedValues =
+        Map<String, dynamic>.from(state.values)..addAll(submittedValues);
+    final payload = buildPutPayload(mergedValues);
+
+    try {
+      final client = ref.read(apiClientProvider);
+      final res = await client.put(
+        '/api/qs/pengaturan-tarif',
+        body: payload,
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 204) {
+        Map<String, dynamic> finalValues = mergedValues;
+
+        // Parsing respon balikan dari PUT server (psakdi & paextra)
+        if (res.body.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(res.body);
+            if (decoded is Map<String, dynamic>) {
+              final psakdi = decoded['psakdi'] as Map<String, dynamic>? ?? {};
+              final paextra = decoded['paextra'] as Map<String, dynamic>? ?? {};
+              finalValues = _parseProductsMap(psakdi, paextra, mergedValues);
+            }
+          } catch (_) {}
+        }
+
+        state = state.copyWith(
+          values: finalValues,
+          isSaving: false,
+          clearError: true,
+          lastFetchedAt: DateTime.now(),
+        );
+
+        // Sinkronisasi riwayat perubahan terbaru dari server
+        fetchRiwayat();
+
+        return (
+          success: true,
+          message: changedFields.isNotEmpty
+              ? 'Pengaturan berhasil disimpan (${changedFields.length} perubahan)'
+              : 'Pengaturan berhasil disimpan',
+          changedFields: changedFields,
+        );
+      } else {
+        state = state.copyWith(
+          isSaving: false,
+          errorMessage: 'Gagal menyimpan ke server (Status ${res.statusCode})',
+        );
+        return (
+          success: false,
+          message: 'Gagal menyimpan pengaturan: Status ${res.statusCode}',
+          changedFields: changedFields,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        errorMessage: 'Koneksi gagal saat menyimpan pengaturan: $e',
+      );
+      return (
+        success: false,
+        message: 'Koneksi gagal: $e',
+        changedFields: changedFields,
+      );
     }
-
-    final newLog = SettingRatesChargesLogEntry(at: nowStr, by: by, txt: txt);
-    final newLogs = [newLog, ...state.logs];
-
-    state = state.copyWith(
-      values: Map<String, dynamic>.from(state.values)..addAll(submittedValues),
-      logs: newLogs,
-    );
-
-    return changedFields;
   }
 
+  /// Mengembalikan pengaturan tarif & biaya ke default sistem melalui POST /api/qs/pengaturan-tarif/kembalikan-default
+  Future<({bool success, String message, Map<String, dynamic>? data})>
+      kembalikanDefault({
+    String by = 'UW',
+  }) async {
+    state = state.copyWith(isResetting: true, clearError: true);
+    try {
+      final client = ref.read(apiClientProvider);
+      final res =
+          await client.post('/api/qs/pengaturan-tarif/kembalikan-default');
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map<String, dynamic>) {
+          Map<String, dynamic> data = decoded;
+          if (decoded['data'] is Map<String, dynamic>) {
+            data = decoded['data'] as Map<String, dynamic>;
+          }
+          final psakdi = (data['psakdi'] as Map<String, dynamic>?) ?? {};
+          final paextra = (data['paextra'] as Map<String, dynamic>?) ?? {};
+
+          final merged = _parseProductsMap(psakdi, paextra, state.values);
+
+          state = state.copyWith(
+            values: merged,
+            isResetting: false,
+            clearError: true,
+            lastFetchedAt: DateTime.now(),
+          );
+
+          // Sinkronisasi riwayat perubahan terbaru dari server
+          fetchRiwayat();
+
+          return (
+            success: true,
+            message: 'Pengaturan tarif & biaya berhasil dikembalikan ke default',
+            data: merged,
+          );
+        } else {
+          state = state.copyWith(
+            isResetting: false,
+            errorMessage:
+                'Format respon dari server tidak sesuai format yang diharapkan.',
+          );
+          return (
+            success: false,
+            message: 'Format respon dari server tidak sesuai.',
+            data: null,
+          );
+        }
+      } else {
+        state = state.copyWith(
+          isResetting: false,
+          errorMessage:
+              'Gagal mengembalikan ke default (Status ${res.statusCode})',
+        );
+        return (
+          success: false,
+          message: 'Gagal mengembalikan pengaturan: Status ${res.statusCode}',
+          data: null,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isResetting: false,
+        errorMessage: 'Koneksi gagal saat mengembalikan ke default: $e',
+      );
+      return (
+        success: false,
+        message: 'Koneksi gagal: $e',
+        data: null,
+      );
+    }
   }
+}
 
 /// Provider Riverpod untuk modul Setting Rates & Charges.
 final settingRatesChargesProvider =

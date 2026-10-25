@@ -77,10 +77,10 @@ void main() {
     /// CR-08. Urutan sengaja BUKAN field nullable ber-sentinel `_keep` seperti
     /// filter: selalu ada satu urutan yang berlaku, jadi "tanpa urutan" bukan
     /// keadaan yang bisa dipilih dan tidak ada yang perlu dibersihkan.
-    test('urutan bawaan: nama menaik (perilaku sebelum CR-08)', () {
+    test('urutan bawaan: terbaru (createdAt desc)', () {
       const s = CustomerListState();
-      expect(s.sortBy, 'name');
-      expect(s.sortDir, 'asc');
+      expect(s.sortBy, 'createdAt');
+      expect(s.sortDir, 'desc');
     });
 
     test('urutan diubah independen dari filter', () {

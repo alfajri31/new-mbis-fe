@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 import '../common/qs_section_card.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../core/providers/repository_providers.dart';
 import 'repositories/bidang_usaha_repository.dart';
 import 'qs_pertanggungan_fields.dart';
 
 /// Card Section 1: Data Pemegang Polis dan Kontak Pengiriman QS
-class QsPemegangPolisCard extends StatefulWidget {
+class QsPemegangPolisCard extends ConsumerStatefulWidget {
   final TextEditingController namaPolisCtrl;
   final TextEditingController alamatCtrl;
   final TextEditingController bidangUsahaCtrl;
@@ -35,10 +37,10 @@ class QsPemegangPolisCard extends StatefulWidget {
   });
 
   @override
-  State<QsPemegangPolisCard> createState() => _QsPemegangPolisCardState();
+  ConsumerState<QsPemegangPolisCard> createState() => _QsPemegangPolisCardState();
 }
 
-class _QsPemegangPolisCardState extends State<QsPemegangPolisCard> {
+class _QsPemegangPolisCardState extends ConsumerState<QsPemegangPolisCard> {
   late final BidangUsahaController _controller;
   bool _ownsController = false;
 
@@ -49,7 +51,9 @@ class _QsPemegangPolisCardState extends State<QsPemegangPolisCard> {
       _controller = widget.bidangUsahaController!;
       _ownsController = false;
     } else {
-      _controller = BidangUsahaController();
+      _controller = BidangUsahaController(
+        repository: ref.read(bidangUsahaRepoProvider),
+      );
       _ownsController = true;
     }
     // Selalu get langsung ke API setiap kali card/layar dibuka

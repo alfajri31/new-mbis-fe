@@ -24,6 +24,12 @@ import 'package:mbis/src/rm_handover/rm_handover_repository.dart';
 import 'package:mbis/src/rm_handover/rm_transfer_repository.dart';
 import 'package:mbis/src/tender/tender_repository.dart';
 import 'package:mbis/src/visit/visit_repository.dart';
+import 'package:mbis/src/visit/visit_monitor_repository.dart';
+import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/bidang_usaha_repository.dart';
+import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/pekerjaan_repository.dart';
+import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/qs_pertanggungan_repository.dart';
+import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/product_classification_model.dart';
+import 'package:mbis/features/quotation_slip/widgets/pertanggungan/repositories/product_classification_repository.dart';
 
 import 'app_providers.dart';
 
@@ -57,6 +63,10 @@ final pipelineRepoProvider = Provider<PipelineRepository>(
 
 final visitRepoProvider = Provider<VisitRepository>(
   (ref) => VisitRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final visitMonitorRepoProvider = Provider<VisitMonitorRepository>(
+  (ref) => VisitMonitorRepository(apiClient: ref.watch(apiClientProvider)),
 );
 
 final brokerRepoProvider = Provider<BrokerRepository>(
@@ -140,3 +150,26 @@ final aiActivityAdminRepoProvider = Provider<AiActivityAdminRepository>(
 final aiModelAdminRepoProvider = Provider<AiModelAdminRepository>(
   (ref) => AiModelAdminRepository(apiClient: ref.watch(apiClientProvider)),
 );
+
+// --- Quotation Slip (QS) ---
+final bidangUsahaRepoProvider = Provider<BidangUsahaRepository>(
+  (ref) => ApiBidangUsahaRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final pekerjaanRepoProvider = Provider<PekerjaanRepository>(
+  (ref) => ApiPekerjaanRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final qsPertanggunganRepoProvider = Provider<QsPertanggunganRepository>(
+  (ref) => ApiQsPertanggunganRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final qsProductClassificationRepoProvider = Provider<QsProductClassificationRepository>(
+  (ref) => ApiQsProductClassificationRepository(apiClient: ref.watch(apiClientProvider)),
+);
+
+final psakdiClassificationsProvider = FutureProvider<List<QsProductClassification>>((ref) async {
+  final repo = ref.watch(qsProductClassificationRepoProvider);
+  return repo.getProductClassifications(kPsakdiTocCode);
+});
+

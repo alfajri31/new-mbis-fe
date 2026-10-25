@@ -28,6 +28,11 @@ class QsStepTermsConditions extends StatelessWidget {
   final TextEditingController warantiTambahanCtrl;
   final TextEditingController pengecualianTambahanCtrl;
   final TextEditingController deductibleCtrl;
+  // Optional dynamic standard lists
+  final List<String>? standardKlausula;
+  final List<String>? standardKondisi;
+  final List<String>? standardWaranti;
+  final List<String>? standardPengecualian;
 
   // Dokumen
   final String? namaFile;
@@ -51,6 +56,10 @@ class QsStepTermsConditions extends StatelessWidget {
     required this.warantiTambahanCtrl,
     required this.pengecualianTambahanCtrl,
     required this.deductibleCtrl,
+    this.standardKlausula,
+    this.standardKondisi,
+    this.standardWaranti,
+    this.standardPengecualian,
     required this.namaFile,
     required this.onPilihFile,
     required this.onHapusFile,
@@ -89,6 +98,10 @@ class QsStepTermsConditions extends StatelessWidget {
         warantiTambahanCtrl: warantiTambahanCtrl,
         pengecualianTambahanCtrl: pengecualianTambahanCtrl,
         deductibleCtrl: deductibleCtrl,
+        standardKlausula: standardKlausula,
+        standardKondisi: standardKondisi,
+        standardWaranti: standardWaranti,
+        standardPengecualian: standardPengecualian,
         namaFile: namaFile,
         onPilihFile: onPilihFile,
         onHapusFile: onHapusFile,

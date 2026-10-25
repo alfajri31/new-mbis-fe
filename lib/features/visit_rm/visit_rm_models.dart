@@ -197,6 +197,16 @@ class VisitRmHelpers {
     }
   }
 
+  static String formatDateTime(DateTime dt) {
+    try {
+      final mName = dt.month >= 1 && dt.month <= 12 ? indonesianMonths[dt.month] : '';
+      return '${dt.day} $mName ${dt.year}';
+    } catch (_) {
+      return dt.toIso8601String();
+    }
+  }
+
+
   static String getDayName(String yyyyMmDd) {
     try {
       final dt = DateTime.parse(yyyyMmDd);
@@ -224,7 +234,107 @@ class VisitRmHelpers {
     if (words.isEmpty) return 'RM';
     return words.map((w) => w[0].toUpperCase()).join();
   }
+
+  static String getKanwilName(String cab) {
+    for (final k in kDefaultKanwils) {
+      if (k.cab.contains(cab)) return k.name;
+    }
+    return '-';
+  }
+
+  static double getTsi(VisitModel v) {
+    if (v.pipelineId != null && v.pipelineId == 'p1') {
+      return 100000000;
+    }
+    return (v.nilai / 0.005 / 1e6).round() * 1e6;
+  }
+
+  static const Map<String, List<double>> cabCoordinates = {
+    'Padang': [-0.9471, 100.4172],
+    'Pekanbaru': [0.5071, 101.4478],
+    'Medan': [3.5952, 98.6722],
+    'Jakarta Selatan': [-6.2615, 106.8106],
+    'Bandung': [-6.9175, 107.6191],
+    'Pontianak': [-0.0263, 109.3425],
+  };
+
+  static (String, String) getCoordinates(String visitId, String cab) {
+    final base = cabCoordinates[cab] ?? const [-0.9471, 100.4172];
+    final numStr = visitId.replaceAll(RegExp(r'[^0-9]'), '');
+    final k = int.tryParse(numStr) ?? 1;
+    final lat = (base[0] + ((k * 37) % 60 - 30) / 1000).toStringAsFixed(4);
+    final lng = (base[1] + ((k * 53) % 60 - 30) / 1000).toStringAsFixed(4);
+    return (lat, lng);
+  }
+
+  static String getStatusKerjaSama(VisitModel v) {
+    if (RegExp(r'^(PT|CV)\s', caseSensitive: false).hasMatch(v.perusahaan)) {
+      return 'KORPORASI';
+    }
+    return 'INDIVIDU';
+  }
+
+  static VisitAttributes getAttributes(VisitModel v) {
+    if (kVisitAttributes.containsKey(v.id)) {
+      return kVisitAttributes[v.id]!;
+    }
+    final isBank = RegExp(r'bank', caseSensitive: false).hasMatch(v.perusahaan);
+    return VisitAttributes(
+      kat: isBank ? 'Perbankan' : 'Non Perbankan',
+      ent: 'Non BUMN',
+      hvc: false,
+      sumber: 'DIRECT',
+      cob: 'Asuransi Umum',
+      lob: 'Asuransi Kecelakaan Diri',
+      toc: 'PSAKDI – Personal',
+    );
+  }
 }
+
+class VisitAttributes {
+  final String kat;
+  final String ent;
+  final bool hvc;
+  final String sumber;
+  final String cob;
+  final String lob;
+  final String toc;
+
+  const VisitAttributes({
+    required this.kat,
+    required this.ent,
+    required this.hvc,
+    required this.sumber,
+    required this.cob,
+    required this.lob,
+    required this.toc,
+  });
+}
+
+const Map<String, VisitAttributes> kVisitAttributes = {
+  'v1': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v2': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: true, sumber: 'BROKER', cob: 'Asuransi Umum', lob: 'Asuransi Harta Benda', toc: 'IAR / Industrial All Risk'),
+  'v3': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PSAKDI – Personal'),
+  'v4': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'AGEN', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PSAKDI – Personal'),
+  'v5': VisitAttributes(kat: 'Non Perbankan', ent: 'BUMN', hvc: true, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v6': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: true, sumber: 'BROKER', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v7': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'AGEN', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PSAKDI – Personal'),
+  'v8': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v9': VisitAttributes(kat: 'Non Perbankan', ent: 'BUMN', hvc: true, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v11': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Rekayasa', toc: 'CAR / Contractor All Risk'),
+  'v12': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: true, sumber: 'BROKER', cob: 'Asuransi Umum', lob: 'Asuransi Harta Benda', toc: 'IAR / Industrial All Risk'),
+  'v13': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PSAKDI – Personal'),
+  'v15': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'AGEN', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PSAKDI – Personal'),
+  'v16': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v17': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'AGEN', cob: 'Asuransi Umum', lob: 'Asuransi Kendaraan Bermotor', toc: 'Kendaraan Pengangkut Barang'),
+  'v18': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v19': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: true, sumber: 'BROKER', cob: 'Suretyship', lob: 'Suretyship', toc: 'Surety Bond'),
+  'v20': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Harta Benda', toc: 'IAR / Industrial All Risk'),
+  'v21': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'AGEN', cob: 'Asuransi Umum', lob: 'Asuransi Kendaraan Bermotor', toc: 'Kendaraan Pengangkut Barang'),
+  'v22': VisitAttributes(kat: 'Perbankan', ent: 'Non BUMN', hvc: true, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PA Xtra – Personal'),
+  'v23': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'DIRECT', cob: 'Asuransi Umum', lob: 'Asuransi Kecelakaan Diri', toc: 'PSAKDI – Personal'),
+  'v24': VisitAttributes(kat: 'Non Perbankan', ent: 'Non BUMN', hvc: false, sumber: 'BROKER', cob: 'Asuransi Umum', lob: 'Asuransi Harta Benda', toc: 'IAR / Industrial All Risk'),
+};
 
 // Default static mock data matching prototype
 const List<KanwilModel> kDefaultKanwils = [
@@ -255,347 +365,9 @@ const List<RmModel> kDefaultRms = [
   RmModel(id: 'r12', nama: 'Bagas Wicaksono', jab: 'Associate RM', cab: 'Pontianak'),
 ];
 
-const List<VisitModel> kDefaultVisits = [
-  VisitModel(
-    id: 'v1',
-    rmId: 'r8',
-    perusahaan: 'PT Futura Nusantara Sejahtera',
-    tanggal: '2026-09-23',
-    jam: '10:15',
-    stage: 'P2',
-    nilai: 9153500,
-    foto: true,
-    lokasi: 'Jl. TB Simatupang Kav. 18, Jakarta Selatan',
-    tujuan: 'Presentasi penawaran PA Xtra untuk karyawan lapangan',
-    hasil: 'PIC tertarik, minta simulasi premi untuk 120 karyawan',
-    tindakLanjut: 'Kirim QS PA Xtra Group paling lambat 25 Sep',
-  ),
-  VisitModel(
-    id: 'v2',
-    rmId: 'r8',
-    perusahaan: 'PT Enerco RPO International',
-    tanggal: '2026-09-23',
-    jam: '14:40',
-    stage: 'P1',
-    nilai: 394183636,
-    foto: false,
-    lokasi: 'Menara Kuningan Lt. 12, Jakarta Selatan',
-    tujuan: 'Finalisasi dokumen penutupan',
-    hasil: 'Dokumen underwriting lengkap, menunggu tanda tangan direksi',
-    tindakLanjut: 'Follow-up tanda tangan SPPA',
-  ),
-  VisitModel(
-    id: 'v3',
-    rmId: 'r1',
-    perusahaan: 'Darmo',
-    tanggal: '2026-09-23',
-    jam: '09:05',
-    stage: 'P3',
-    nilai: 50000000,
-    foto: true,
-    lokasi: 'Jl Pelangi Raya No.56, Padang',
-    tujuan: 'Kunjungan perkenalan produk PSAKDI',
-    hasil: 'Nasabah setuju dibuatkan QS PSAKDI Single',
-    tindakLanjut: 'Terbitkan QS dan kirim via WhatsApp',
-    pipelineId: 'p1',
-  ),
-  VisitModel(
-    id: 'v4',
-    rmId: 'r9',
-    perusahaan: 'PT Kasmar Matano Persada',
-    tanggal: '2026-09-22',
-    jam: '11:20',
-    stage: 'P2',
-    nilai: 20412000,
-    foto: false,
-    lokasi: 'Jl. Fatmawati No. 22, Jakarta Selatan',
-    tujuan: 'Negosiasi rate dan diskon',
-    hasil: 'Nasabah minta diskon 15%',
-    tindakLanjut: 'Ajukan persetujuan diskon ke Pinca',
-  ),
-  VisitModel(
-    id: 'v5',
-    rmId: 'r2',
-    perusahaan: 'PT Semen Padang (Persero)',
-    tanggal: '2026-09-22',
-    jam: '13:30',
-    stage: 'P3',
-    nilai: 275000000,
-    foto: true,
-    lokasi: 'Indarung, Padang',
-    tujuan: 'Penjajakan asuransi kecelakaan diri karyawan pabrik',
-    hasil: 'Diminta proposal untuk 1.200 karyawan',
-    tindakLanjut: 'Siapkan QS Group Normal',
-  ),
-  VisitModel(
-    id: 'v6',
-    rmId: 'r4',
-    perusahaan: 'PT Riau Andalan Kertas',
-    tanggal: '2026-09-22',
-    jam: '09:45',
-    stage: 'P2',
-    nilai: 118500000,
-    foto: true,
-    lokasi: 'Pangkalan Kerinci, Pelalawan',
-    tujuan: 'Review kebutuhan perluasan santunan',
-    hasil: 'Butuh santunan pemulangan jenazah dan biaya pendidikan',
-    tindakLanjut: 'Revisi QS PA Xtra dengan perluasan',
-  ),
-  VisitModel(
-    id: 'v7',
-    rmId: 'r10',
-    perusahaan: 'PT Era Salvindo',
-    tanggal: '2026-09-21',
-    jam: '15:10',
-    stage: 'P3',
-    nilai: 15298239,
-    foto: false,
-    lokasi: 'Jl. Asia Afrika No. 8, Bandung',
-    tujuan: 'Perkenalan produk',
-    hasil: 'Menunggu data jumlah karyawan',
-    tindakLanjut: 'Hubungi HRD minggu depan',
-  ),
-  VisitModel(
-    id: 'v8',
-    rmId: 'r8',
-    perusahaan: 'PT Prima Jaya Sentosa',
-    tanggal: '2026-09-21',
-    jam: '10:00',
-    stage: 'WON',
-    nilai: 62081250,
-    foto: true,
-    lokasi: 'Jl. Gatot Subroto Kav. 52, Jakarta Selatan',
-    tujuan: 'Serah terima polis',
-    hasil: 'Polis diterima, premi sudah dibayar',
-    tindakLanjut: 'Tawarkan perpanjangan tahun depan',
-  ),
-  VisitModel(
-    id: 'v9',
-    rmId: 'r6',
-    perusahaan: 'PT Perkebunan Nusantara III',
-    tanggal: '2026-09-20',
-    jam: '10:30',
-    stage: 'P2',
-    nilai: 210000000,
-    foto: true,
-    lokasi: 'Jl. Sei Batang Hari No. 2, Medan',
-    tujuan: 'Presentasi PA Xtra Group untuk pekerja kebun',
-    hasil: 'Perlu konfirmasi klasifikasi pekerjaan',
-    tindakLanjut: 'Diskusi dengan underwriting',
-  ),
-  VisitModel(
-    id: 'v10',
-    rmId: 'r1',
-    perusahaan: 'Budi Santoso',
-    tanggal: '2026-09-19',
-    jam: '16:00',
-    stage: 'P3',
-    nilai: 100000000,
-    foto: false,
-    lokasi: 'Jl. Sudirman No. 12, Padang',
-    tujuan: 'Penawaran PA Xtra perorangan',
-    hasil: 'Nasabah membandingkan dengan produk lain',
-    tindakLanjut: 'Kirim QS PA Xtra Single',
-    pipelineId: 'p2',
-  ),
-  VisitModel(
-    id: 'v11',
-    rmId: 'r11',
-    perusahaan: 'PT Kalbar Sumber Energi',
-    tanggal: '2026-09-19',
-    jam: '11:15',
-    stage: 'P3',
-    nilai: 48000000,
-    foto: true,
-    lokasi: 'Jl. Ahmad Yani No. 5, Pontianak',
-    tujuan: 'Perkenalan dan survei kebutuhan',
-    hasil: 'Tertarik untuk karyawan proyek',
-    tindakLanjut: 'Jadwalkan presentasi lanjutan',
-  ),
-  VisitModel(
-    id: 'v12',
-    rmId: 'r5',
-    perusahaan: 'PT Chevron Pacific Indonesia',
-    tanggal: '2026-09-18',
-    jam: '09:20',
-    stage: 'P1',
-    nilai: 530000000,
-    foto: true,
-    lokasi: 'Rumbai, Pekanbaru',
-    tujuan: 'Klarifikasi syarat & ketentuan',
-    hasil: 'Klausul tambahan disetujui',
-    tindakLanjut: 'Finalisasi QS dan penerbitan',
-  ),
-  VisitModel(
-    id: 'v13',
-    rmId: 'r9',
-    perusahaan: 'PT Prose Technologies Indonesia',
-    tanggal: '2026-09-17',
-    jam: '13:45',
-    stage: 'P2',
-    nilai: 33750000,
-    foto: true,
-    lokasi: 'SCBD Lot 9, Jakarta Selatan',
-    tujuan: 'Presentasi PSAKDI Group',
-    hasil: 'Butuh persetujuan manajemen',
-    tindakLanjut: 'Follow-up 1 minggu',
-  ),
-  VisitModel(
-    id: 'v14',
-    rmId: 'r2',
-    perusahaan: 'ACA',
-    tanggal: '2026-09-16',
-    jam: '10:10',
-    stage: 'P3',
-    nilai: 120000000,
-    foto: false,
-    lokasi: 'Jl. Veteran No. 3, Padang',
-    tujuan: 'Diskusi kebutuhan IAR',
-    hasil: 'Menunggu data aset',
-    tindakLanjut: 'Survei lokasi',
-    pipelineId: 'p3',
-  ),
-  VisitModel(
-    id: 'v15',
-    rmId: 'r10',
-    perusahaan: 'PT Bandung Textile Mills',
-    tanggal: '2026-09-15',
-    jam: '14:00',
-    stage: 'P2',
-    nilai: 76500000,
-    foto: true,
-    lokasi: 'Jl. Raya Dayeuhkolot, Bandung',
-    tujuan: 'Negosiasi premi Flat untuk acara gathering',
-    hasil: 'Setuju skema Flat 3 hari',
-    tindakLanjut: 'Kirim QS Flat',
-  ),
-  VisitModel(
-    id: 'v16',
-    rmId: 'r6',
-    perusahaan: 'PT Medan Sugar Industry',
-    tanggal: '2026-09-14',
-    jam: '11:40',
-    stage: 'WON',
-    nilai: 88000000,
-    foto: true,
-    lokasi: 'Kawasan Industri Medan II',
-    tujuan: 'Penyerahan polis',
-    hasil: 'Polis diserahkan ke HRD',
-    tindakLanjut: 'Monitoring klaim',
-  ),
-  VisitModel(
-    id: 'v17',
-    rmId: 'r4',
-    perusahaan: 'CV Sumber Rezeki Pekanbaru',
-    tanggal: '2026-09-12',
-    jam: '15:30',
-    stage: 'P3',
-    nilai: 12500000,
-    foto: false,
-    lokasi: 'Jl. Riau No. 21, Pekanbaru',
-    tujuan: 'Perkenalan produk',
-    hasil: 'Belum ada kebutuhan saat ini',
-    tindakLanjut: 'Kunjungi kembali bulan depan',
-  ),
-  VisitModel(
-    id: 'v18',
-    rmId: 'r1',
-    perusahaan: 'PT Andalas Agro Industri',
-    tanggal: '2026-09-10',
-    jam: '10:00',
-    stage: 'P2',
-    nilai: 65000000,
-    foto: true,
-    lokasi: 'Jl. Bypass KM 9, Padang',
-    tujuan: 'Presentasi PA Xtra Group',
-    hasil: 'Minta tambahan santunan ambulans',
-    tindakLanjut: 'Revisi QS',
-  ),
-  VisitModel(
-    id: 'v19',
-    rmId: 'r8',
-    perusahaan: 'PT Jaya Konstruksi Manggala',
-    tanggal: '2026-09-08',
-    jam: '09:30',
-    stage: 'P1',
-    nilai: 410000000,
-    foto: true,
-    lokasi: 'Jl. Ampera Raya, Jakarta Selatan',
-    tujuan: 'Klarifikasi Kelas 3 pekerja proyek',
-    hasil: 'Rate disetujui',
-    tindakLanjut: 'Penerbitan polis',
-  ),
-  VisitModel(
-    id: 'v20',
-    rmId: 'r11',
-    perusahaan: 'PT Borneo Sawit Lestari',
-    tanggal: '2026-09-05',
-    jam: '13:00',
-    stage: 'P3',
-    nilai: 95000000,
-    foto: false,
-    lokasi: 'Jl. Gajah Mada, Pontianak',
-    tujuan: 'Penjajakan kebutuhan',
-    hasil: 'Diminta proposal',
-    tindakLanjut: 'Siapkan QS',
-  ),
-  VisitModel(
-    id: 'v21',
-    rmId: 'r5',
-    perusahaan: 'PT Pekanbaru Mitra Logistik',
-    tanggal: '2026-09-03',
-    jam: '10:45',
-    stage: 'P2',
-    nilai: 27000000,
-    foto: true,
-    lokasi: 'Jl. Soekarno-Hatta, Pekanbaru',
-    tujuan: 'Negosiasi diskon',
-    hasil: 'Setuju diskon 10%',
-    tindakLanjut: 'Kirim QS final',
-  ),
-  VisitModel(
-    id: 'v22',
-    rmId: 'r2',
-    perusahaan: 'PT Bank Nagari',
-    tanggal: '2026-08-28',
-    jam: '09:00',
-    stage: 'P2',
-    nilai: 180000000,
-    foto: true,
-    lokasi: 'Jl. Pemuda No. 21, Padang',
-    tujuan: 'Presentasi PA untuk nasabah KUR',
-    hasil: 'Diminta skema Group',
-    tindakLanjut: 'Siapkan QS Group',
-  ),
-  VisitModel(
-    id: 'v23',
-    rmId: 'r9',
-    perusahaan: 'PT Mitra Digital Nusantara',
-    tanggal: '2026-08-25',
-    jam: '14:15',
-    stage: 'P3',
-    nilai: 18000000,
-    foto: false,
-    lokasi: 'Jl. Kemang Raya, Jakarta Selatan',
-    tujuan: 'Perkenalan produk',
-    hasil: 'Tertarik untuk karyawan kantor',
-    tindakLanjut: 'Kirim brosur',
-  ),
-  VisitModel(
-    id: 'v24',
-    rmId: 'r6',
-    perusahaan: 'PT Sumatera Rubber Plantation',
-    tanggal: '2026-08-20',
-    jam: '10:30',
-    stage: 'P3',
-    nilai: 52000000,
-    foto: false,
-    lokasi: 'Tebing Tinggi, Sumatera Utara',
-    tujuan: 'Survei kebutuhan',
-    hasil: 'Menunggu rapat direksi',
-    tindakLanjut: 'Follow-up bulan depan',
-  ),
-];
+/// Data kunjungan kini diambil langsung dari API backend (/api/visit-monitor/**).
+/// [kDefaultVisits] dikosongkan agar tidak ada fallback data dummy/mock.
+const List<VisitModel> kDefaultVisits = [];
 
 class VisitReviewStore extends ChangeNotifier {
   static final VisitReviewStore instance = VisitReviewStore._();

@@ -118,6 +118,7 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
                 _buildAjukanAgenButton(context),
                 _buildReferralButton(context),
                 _buildKelolaPengumumanButton(context),
+                _buildSettingRatesChargesButton(context),
                 // "Ekspor Kunjungan Saya" dihapus (CR-13): "Ekspor Data" di bawah
                 // sudah mencakupnya. `/api/export/visits` ter-scope di server, dan
                 // RM tanpa filter mendapat persis kunjungannya sendiri.
@@ -451,6 +452,31 @@ class _ProfilScreenState extends ConsumerState<ProfilScreen> {
           onPressed: () => context.go('/profil/pengumuman'),
           icon: const Icon(Icons.campaign_outlined, size: 18, color: AppColors.primaryNavy),
           label: const Text('Kelola Pengumuman',
+              style: TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryNavy)),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: AppColors.navyBg,
+            side: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.radiusLg),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// "Pengaturan Tarif & Biaya" — only for UW role.
+  Widget _buildSettingRatesChargesButton(BuildContext context) {
+    final roles = MbisApp.of(context)?.session?.user.roles ?? const [];
+    if (!roles.contains('UW')) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: OutlinedButton.icon(
+          onPressed: () => context.go('/profil/setting-rates-charges'),
+          icon: const Icon(Icons.settings_outlined, size: 18, color: AppColors.primaryNavy),
+          label: const Text('Pengaturan Tarif & Biaya',
               style: TextStyle(
                   fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primaryNavy)),
           style: OutlinedButton.styleFrom(

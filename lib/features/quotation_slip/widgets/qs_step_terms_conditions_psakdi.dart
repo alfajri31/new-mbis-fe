@@ -117,31 +117,8 @@ class _QsStepTermsConditionsPsakdiState
   void initState() {
     super.initState();
     // Default prototype: 15 September 2026
-    _tglPenerbitan = widget.tglPenerbitan != null &&
-            (widget.tglPenerbitan!.year != DateTime.now().year ||
-                widget.tglPenerbitan!.month != DateTime.now().month ||
-                widget.tglPenerbitan!.day != DateTime.now().day)
-        ? widget.tglPenerbitan!
-        : DateTime(2026, 9, 15);
-    _masaBerlaku = widget.masaBerlaku != null &&
-            (widget.masaBerlaku!.year != DateTime.now().year ||
-                widget.masaBerlaku!.month != DateTime.now().month ||
-                widget.masaBerlaku!.day != DateTime.now().day)
-        ? widget.masaBerlaku!
-        : DateTime(2026, 9, 29);
-
-    if (widget.kotaCtrl.text.isEmpty) {
-      widget.kotaCtrl.text = 'Padang';
-    }
-    if (widget.cabangCtrl.text.isEmpty) {
-      widget.cabangCtrl.text = 'PADANG';
-    }
-    if (widget.penandatanganCtrl.text.isEmpty) {
-      widget.penandatanganCtrl.text = 'Sarno';
-    }
-    if (widget.jabatanCtrl.text.isEmpty) {
-      widget.jabatanCtrl.text = 'Pemimpin Cabang';
-    }
+    _tglPenerbitan = widget.tglPenerbitan ?? DateTime.now();
+    _masaBerlaku = widget.masaBerlaku ?? DateTime.now().add(const Duration(days: 14));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onTglPenerbitanChanged(_tglPenerbitan);

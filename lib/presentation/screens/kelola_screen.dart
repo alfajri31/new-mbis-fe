@@ -37,16 +37,6 @@ class KelolaScreen extends StatelessWidget {
         roles: {'ADMIN', 'BM', 'RO', 'KUP'},
       ),
       _KelolaItem(
-        icon: Icons.location_on_outlined,
-        label: 'Visit RM',
-        desc:
-            'Pantau kunjungan RM: foto, tanggal & stage pipeline, termasuk RM yang belum visit',
-        bg: AppColors.navyBg,
-        badge: 'Pinca · Pinwil · Admin',
-        route: '/kelola/visit-rm',
-        roles: {'ADMIN', 'BM', 'RO', 'KUP'},
-      ),
-      _KelolaItem(
         icon: Icons.manage_accounts_outlined,
         label: 'Kelola Akun',
         desc: 'Buat & kelola akun, peran, kantor, reset password, dan nonaktifkan',
@@ -71,8 +61,16 @@ class KelolaScreen extends StatelessWidget {
             'Atur biaya admin, rate PSAKDI & PA Xtra, batas UP /santunan dan diskon maksimal',
         bg: AppColors.navyBg,
         route: '/kelola/setting-rates-charges',
-        badge: 'UW · Admin',
-        roles: {'ADMIN', 'BM', 'RO', 'KUP', ...Roles.curatorDivisions},
+        // badge: 'UW',
+        roles: {'UW'},
+      ),
+      _KelolaItem(
+        icon: Icons.verified_user_outlined,
+        label: 'Persetujuan QS',
+        desc: 'UW memutuskan QS yang isiannya di bawah ketentuan UW',
+        bg: AppColors.orangeBg,
+        route: '/kelola/persetujuan-qs',
+        roles: {'ADMIN', 'UW', 'BM', 'RO', 'KUP', 'RM'},
       ),
       _KelolaItem(
         icon: Icons.smart_toy_outlined,
@@ -222,41 +220,12 @@ class KelolaScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text.rich(
-                        TextSpan(
-                          text: item.label,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                          children: [
-                            if (item.badge != null) ...[
-                              const TextSpan(text: ' '),
-                              WidgetSpan(
-                                alignment: PlaceholderAlignment.middle,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.badgeP2Bg,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    item.badge!,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.alertTitle,
-                                      height: 1.1,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                      Text(
+                        item.label,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -290,7 +259,6 @@ class _KelolaItem {
   /// is admin-gated on the backend unless stated otherwise, so a new entry stays
   /// invisible to BM until someone widens it deliberately.
   final Set<String> roles;
-  final String? badge;
 
   const _KelolaItem({
     required this.icon,
@@ -299,6 +267,5 @@ class _KelolaItem {
     required this.bg,
     required this.route,
     this.roles = const {'ADMIN'},
-    this.badge,
   });
 }

@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/visit_rm/visit_rm_models.dart'
+    show KanwilModel, kDefaultKanwils;
 import '../../theme/app_theme.dart';
 import '../providers/export_data_provider.dart';
 import '../widgets/glass_app_bar.dart';
 import '../widgets/max_width_body.dart';
 
 /// Admin "Ekspor Data" console — unduh Excel report kinerja (customer / pipeline /
-/// visit) untuk rentang tanggal pilihan. Entry point-nya di hub Kelola; endpoint
-/// backend (/api/admin/export/*) tetap yang menggerbang aksesnya (ADMIN only).
+/// visit) untuk rentang tanggal dan kantor pilihan. Entry point-nya di hub Kelola; endpoint
+/// backend (/api/admin/export/* atau /api/export/*) tetap yang menggerbang aksesnya (ADMIN only).
 class ExportDataScreen extends ConsumerStatefulWidget {
   const ExportDataScreen({super.key});
 
@@ -20,10 +22,54 @@ class _ExportDataScreenState extends ConsumerState<ExportDataScreen> {
   late DateTime _from;
   late DateTime _to;
 
+  // Filter Kantor Wilayah dan Kantor Cabang sesuai prototype baru
+  String? _selectedWil;
+  String? _selectedCab;
+
   // Flag async "sedang mengunduh" dikelola ExportDataNotifier. Getter berikut
   // memproksinya agar kode build/widget di bawah tetap memakai nama lama.
   ExportDataNotifier get _notifier => ref.read(exportDataProvider.notifier);
   String? get _busyDataset => ref.read(exportDataProvider).busyDataset;
+
+  bool get _isDateBad => _to.isBefore(_from);
+
+  bool get _hasOffice =>
+      (_selectedWil != null && _selectedWil!.isNotEmpty) ||
+      (_selectedCab != null && _selectedCab!.isNotEmpty);
+
+  KanwilModel? get _currentKanwil =>
+      _selectedWil == null || _selectedWil!.isEmpty
+          ? null
+          : kDefaultKanwils.where((k) => k.id == _selectedWil).firstOrNull;
+
+  List<String> get _currentCabangList {
+    final w = _currentKanwil;
+    if (w != null) return w.cab;
+    return kDefaultKanwils.expand((k) => k.cab).toList();
+  }
+
+  String get _cabHint {
+    final w = _currentKanwil;
+    if (w != null) {
+      return 'Menampilkan ${w.cab.length} kantor cabang di ${w.name}.';
+    }
+    return 'Pilih kantor wilayah untuk mempersempit daftar cabang.';
+  }
+
+  String get _summaryText {
+    final dStr = '${_fmt(_from)} – ${_fmt(_to)}';
+    final w = _currentKanwil;
+    final wn = w != null ? w.name : 'Semua kantor wilayah';
+    String cn;
+    if (_selectedCab != null && _selectedCab!.isNotEmpty) {
+      cn = 'KC $_selectedCab';
+    } else if (w != null) {
+      cn = 'semua cabang di ${w.name}';
+    } else {
+      cn = 'semua kantor cabang';
+    }
+    return '$dStr · $wn · $cn';
+  }
 
   static const _datasets = <_Dataset>[
     _Dataset(
@@ -81,16 +127,49 @@ class _ExportDataScreenState extends ConsumerState<ExportDataScreen> {
     setState(() {
       if (isStart) {
         _from = picked;
-        if (_to.isBefore(_from)) _to = _from;
       } else {
         _to = picked;
-        if (_to.isBefore(_from)) _from = _to;
       }
     });
   }
 
+  void _onWilChanged(String? val) {
+    setState(() {
+      _selectedWil = val;
+      if (val != null && val.isNotEmpty) {
+        final w = kDefaultKanwils.where((k) => k.id == val).firstOrNull;
+        if (w != null && _selectedCab != null && !w.cab.contains(_selectedCab)) {
+          _selectedCab = null;
+        }
+      }
+    });
+  }
+
+  void _onCabChanged(String? val) {
+    setState(() {
+      _selectedCab = val;
+    });
+  }
+
+  void _resetOffice() {
+    setState(() {
+      _selectedWil = null;
+      _selectedCab = null;
+    });
+  }
+
   Future<void> _download(_Dataset d) async {
-    final outcome = await _notifier.download(d.key, _from, _to);
+    if (_isDateBad) {
+      _snack('Periksa rentang tanggal terlebih dahulu', error: true);
+      return;
+    }
+    final outcome = await _notifier.download(
+      d.key,
+      _from,
+      _to,
+      regionId: _selectedWil,
+      branchId: _selectedCab,
+    );
     if (!mounted) return;
     if (outcome.ok) {
       _snack('${d.label} berhasil diekspor (${outcome.fileName})');
@@ -131,8 +210,8 @@ class _ExportDataScreenState extends ConsumerState<ExportDataScreen> {
               AppSpacing.lg, topInset + AppSpacing.sm, AppSpacing.lg, AppSpacing.lg),
           children: [
             const Text(
-              'Unduh report kinerja sebagai file Excel untuk rentang tanggal terpilih',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              'Unduh report kinerja sebagai file Excel untuk rentang tanggal dan kantor terpilih.',
+              style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary, height: 1.45),
             ),
             const SizedBox(height: AppSpacing.lg),
             _buildRangeCard(),
@@ -149,49 +228,262 @@ class _ExportDataScreenState extends ConsumerState<ExportDataScreen> {
 
   Widget _buildRangeCard() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
         color: AppColors.surfaceWhite,
-        borderRadius: AppRadius.radius2Xl,
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE3E7EF)),
         boxShadow: const [AppShadows.level2],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Rentang Tanggal',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary)),
-          const SizedBox(height: AppSpacing.md),
+          // ── 1. Rentang Tanggal ──
+          const Text(
+            'Rentang Tanggal',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _dateField('Dari', _from, () => _pickDate(true))),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(child: _dateField('Sampai', _to, () => _pickDate(false))),
+              Expanded(
+                child: _dateField('Dari', _from, () => _pickDate(true), isBad: _isDateBad),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _dateField('Sampai', _to, () => _pickDate(false), isBad: _isDateBad),
+              ),
             ],
+          ),
+          if (_isDateBad) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Tanggal "Sampai" harus sama atau setelah tanggal "Dari".',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFC8322F),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 20),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFEEF1F6)),
+          const SizedBox(height: 18),
+
+          // ── 2. Kantor (Wilayah & Cabang) ──
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Kantor',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              if (_hasOffice)
+                InkWell(
+                  onTap: _busyDataset != null ? null : _resetOffice,
+                  borderRadius: BorderRadius.circular(6),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Text(
+                      'Reset',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFC25A17),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Dropdown 1: Kantor Wilayah
+          _buildOfficeDropdown<String?>(
+            label: 'Kantor Wilayah',
+            value: _selectedWil,
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Semua kantor wilayah'),
+              ),
+              ...kDefaultKanwils.map(
+                (k) => DropdownMenuItem<String?>(
+                  value: k.id,
+                  child: Text(k.name),
+                ),
+              ),
+            ],
+            onChanged: _onWilChanged,
+          ),
+          const SizedBox(height: 14),
+
+          // Dropdown 2: Kantor Cabang
+          _buildOfficeDropdown<String?>(
+            label: 'Kantor Cabang',
+            value: _selectedCab,
+            items: [
+              DropdownMenuItem<String?>(
+                value: null,
+                child: Text(
+                  _currentKanwil != null
+                      ? 'Semua cabang di ${_currentKanwil!.name}'
+                      : 'Semua kantor cabang',
+                ),
+              ),
+              ..._currentCabangList.map(
+                (c) => DropdownMenuItem<String?>(
+                  value: c,
+                  child: Text('KC $c'),
+                ),
+              ),
+            ],
+            onChanged: _onCabChanged,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _cabHint,
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: Color(0xFF5A6475),
+              height: 1.4,
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // ── 3. Info Box / Summary ──
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF4FB),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Color(0xFF0E2B53),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Data yang diunduh: ',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFF15223B),
+                        height: 1.45,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: _summaryText,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _dateField(String label, DateTime value, VoidCallback onTap) {
+  Widget _buildOfficeDropdown<T>({
+    required String label,
+    required T value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return DropdownButtonFormField<T>(
+      key: ValueKey('${label}_$value'),
+      initialValue: value,
+      items: items,
+      onChanged: _busyDataset != null ? null : onChanged,
+      isExpanded: true,
+      icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryNavy),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Color(0xFF5A6475), fontSize: 13),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF15223B), width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF15223B), width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      ),
+      style: const TextStyle(
+        fontFamily: 'Plus Jakarta Sans',
+        fontSize: 14.5,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF15223B),
+      ),
+    );
+  }
+
+  Widget _dateField(String label, DateTime value, VoidCallback onTap,
+      {bool isBad = false}) {
+    final borderColor = isBad ? const Color(0xFFC8322F) : const Color(0xFF15223B);
     return InkWell(
       onTap: _busyDataset != null ? null : onTap,
-      borderRadius: AppRadius.radiusLg,
+      borderRadius: BorderRadius.circular(12),
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
-          border: OutlineInputBorder(borderRadius: AppRadius.radiusLg),
+          labelStyle: TextStyle(
+            color: isBad ? const Color(0xFFC8322F) : const Color(0xFF5A6475),
+            fontSize: 13,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: borderColor, width: 1.5),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: borderColor, width: 1.5),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isBad ? const Color(0xFFC8322F) : AppColors.primaryNavy,
+              width: 1.5,
+            ),
+          ),
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          suffixIcon: const Icon(Icons.calendar_today_outlined,
-              size: 18, color: AppColors.primaryNavy),
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          suffixIcon: Icon(Icons.calendar_today_outlined,
+              size: 18, color: isBad ? const Color(0xFFC8322F) : AppColors.primaryNavy),
         ),
         child: Text(_fmt(value),
-            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: isBad ? const Color(0xFFC8322F) : const Color(0xFF15223B),
+            )),
       ),
     );
   }

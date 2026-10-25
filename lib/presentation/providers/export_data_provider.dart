@@ -65,10 +65,21 @@ class ExportDataNotifier extends Notifier<ExportDataState> {
   /// Unduh satu dataset untuk rentang [from]..[to] (inklusif). Mengunci UI via
   /// [ExportDataState.busyDataset] selama proses; hasilnya dikembalikan ke layar
   /// (snackbar butuh context). Dulu `_download` di layar.
-  Future<ExportOutcome> download(String key, DateTime from, DateTime to) async {
+  Future<ExportOutcome> download(
+    String key,
+    DateTime from,
+    DateTime to, {
+    String? regionId,
+    String? branchId,
+  }) async {
     state = state.copyWith(busyDataset: key);
     try {
-      final f = await _repo.download(key, from, to);
+      final hasOfficeFilter = (regionId != null && regionId.isNotEmpty) ||
+          (branchId != null && branchId.isNotEmpty);
+      final f = hasOfficeFilter
+          ? await _repo.downloadScoped(key, from, to,
+              regionId: regionId, branchId: branchId)
+          : await _repo.download(key, from, to);
       final ok = await downloadBytes(
           f.bytes,
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

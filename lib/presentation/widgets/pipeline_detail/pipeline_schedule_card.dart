@@ -48,8 +48,11 @@ class PipelineScheduleCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Card Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -73,67 +76,62 @@ class PipelineScheduleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Flexible(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.calendar_today, size: 13, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(AppFormat.dateOnly(s.date),
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.access_time, size: 13, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(AppFormat.timeOnly(s.date),
-                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    if (canEdit) ...[
-                      const SizedBox(width: 2),
-                      SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert, size: 18, color: AppColors.primaryNavy),
-                          tooltip: 'Aksi jadwal',
-                          padding: EdgeInsets.zero,
-                          onSelected: (v) {
-                            if (v == 'edit') onEdit(s);
-                            if (v == 'cancel') onCancel(s);
-                            if (v == 'done') onComplete(s);
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'done',
-                              child: Row(children: [
-                                Icon(Icons.check_circle_outline, size: 18, color: AppColors.successGreen),
-                                SizedBox(width: 10),
-                                Text('Tandai selesai'),
-                              ]),
-                            ),
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Row(children: [
-                                Icon(Icons.edit_calendar_outlined, size: 18, color: AppColors.primaryNavy),
-                                SizedBox(width: 10),
-                                Text('Ubah jadwal'),
-                              ]),
-                            ),
-                            PopupMenuItem(
-                              value: 'cancel',
-                              child: Row(children: [
-                                Icon(Icons.event_busy_outlined, size: 18, color: AppColors.errorRed),
-                                SizedBox(width: 10),
-                                Text('Batalkan jadwal', style: TextStyle(color: AppColors.errorRed)),
-                              ]),
-                            ),
-                          ],
-                        ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today, size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(AppFormat.dateOnly(s.date),
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.access_time, size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(AppFormat.timeOnly(s.date),
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  if (canEdit) ...[
+                    const SizedBox(width: 2),
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 18, color: AppColors.primaryNavy),
+                        tooltip: 'Aksi jadwal',
+                        padding: EdgeInsets.zero,
+                        onSelected: (v) {
+                          if (v == 'edit') onEdit(s);
+                          if (v == 'cancel') onCancel(s);
+                          if (v == 'done') onComplete(s);
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'done',
+                            child: Row(children: [
+                              Icon(Icons.check_circle_outline, size: 18, color: AppColors.successGreen),
+                              SizedBox(width: 10),
+                              Text('Tandai selesai'),
+                            ]),
+                          ),
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Row(children: [
+                              Icon(Icons.edit_calendar_outlined, size: 18, color: AppColors.primaryNavy),
+                              SizedBox(width: 10),
+                              Text('Ubah jadwal'),
+                            ]),
+                          ),
+                          PopupMenuItem(
+                            value: 'cancel',
+                            child: Row(children: [
+                              Icon(Icons.event_busy_outlined, size: 18, color: AppColors.errorRed),
+                              SizedBox(width: 10),
+                              Text('Batalkan jadwal', style: TextStyle(color: AppColors.errorRed)),
+                            ]),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
             ],
           ),

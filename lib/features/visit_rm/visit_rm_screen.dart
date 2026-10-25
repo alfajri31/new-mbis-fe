@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import 'visit_rm_models.dart';
 import 'visit_rm_detail_screen.dart';
+import 'models/visit_monitor_models.dart';
+import 'providers/visit_monitor_provider.dart';
 import 'widget/visit_rm_metrics_row.dart';
 import 'widget/visit_rm_idle_card.dart';
 import 'widget/visit_rm_filter_card.dart';
 import 'widget/visit_item_card.dart';
 
-class VisitRmScreen extends StatefulWidget {
+class VisitRmScreen extends ConsumerStatefulWidget {
   const VisitRmScreen({super.key});
 
   @override
-  State<VisitRmScreen> createState() => _VisitRmScreenState();
+  ConsumerState<VisitRmScreen> createState() => _VisitRmScreenState();
 }
 
-class _VisitRmScreenState extends State<VisitRmScreen> {
+class _VisitRmScreenState extends ConsumerState<VisitRmScreen> {
   // Prototype reference date: 2026-09-23
   static const String _todayStr = '2026-09-23';
   static const String _yesterdayStr = '2026-09-22';
 
-  // Role simulator: 'pinca', 'pinwil', 'admin'
-  String _activeRole = 'pinca';
+  // Current user role: RM
+  static const String _activeRole = 'rm';
 
   // Filter state
   String _quickPeriod = '30'; // 'today', '7', '30', 'month', 'custom'
@@ -30,6 +33,14 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
   String _selectedWil = '';
   String _selectedCab = '';
   String _selectedRm = '';
+  String _selectedStage = '';
+  String _selectedKat = '';
+  String _selectedEnt = '';
+  String _selectedHvc = '';
+  String _selectedSumber = '';
+  String _selectedCob = '';
+  String _selectedLob = '';
+  String _selectedToc = '';
   String _searchQuery = '';
   bool _showFilter = false;
   bool _showIdle = false;
@@ -43,6 +54,9 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
   void initState() {
     super.initState();
     VisitReviewStore.instance.addListener(_onReviewStoreChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchApiData();
+    });
   }
 
   @override
@@ -56,13 +70,6 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     if (mounted) setState(() {});
   }
 
-  // --- Role simulation options ---
-  static const List<Map<String, String>> _roleOptions = [
-    {'id': 'pinca', 'label': 'Pinca KC Padang'},
-    {'id': 'pinwil', 'label': 'Pinwil Kanwil 1'},
-    {'id': 'admin', 'label': 'Admin'},
-  ];
-
   static const List<Map<String, String>> _quickPeriodOptions = [
     {'id': 'today', 'label': 'Hari ini'},
     {'id': '7', 'label': '7 hari'},
@@ -71,18 +78,15 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     {'id': 'custom', 'label': 'Pilih rentang'},
   ];
 
-  String get _activeRoleLabel {
-    return _roleOptions.firstWhere((r) => r['id'] == _activeRole)['label']!;
-  }
-
   String get _scopeText {
-    if (_activeRole == 'pinca') return 'KC Padang';
+    if (_activeRole == 'rm') return 'Visit saya · Mohammad Ridwan Majid';
+    if (_activeRole == 'pinca') return 'Kabag / Pinca · KC Padang';
     if (_activeRole == 'pinwil') return 'Kanwil 1 · Padang, Pekanbaru, Medan';
-    return 'Semua Kanwil / KC';
+    return 'Kantor Pusat · semua Kanwil / KC';
   }
 
   List<String> get _scopedBranches {
-    if (_activeRole == 'pinca') return ['Padang'];
+    if (_activeRole == 'rm' || _activeRole == 'pinca') return ['Padang'];
     if (_activeRole == 'pinwil') return kDefaultKanwils[0].cab;
     if (_selectedWil.isNotEmpty) {
       final k = kDefaultKanwils.firstWhere(
@@ -116,9 +120,39 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     int count = 0;
     if (_quickPeriod != '30') count++;
     if (_activeRole == 'admin' && _selectedWil.isNotEmpty) count++;
-    if (_activeRole != 'pinca' && _selectedCab.isNotEmpty) count++;
-    if (_selectedRm.isNotEmpty) count++;
+    if (_activeRole != 'pinca' && _activeRole != 'rm' && _selectedCab.isNotEmpty) count++;
+    if (_activeRole != 'rm' && _selectedRm.isNotEmpty) count++;
+    if (_selectedStage.isNotEmpty) count++;
+    if (_selectedKat.isNotEmpty) count++;
+    if (_selectedEnt.isNotEmpty) count++;
+    if (_selectedHvc.isNotEmpty) count++;
+    if (_selectedSumber.isNotEmpty) count++;
+    if (_selectedCob.isNotEmpty) count++;
+    if (_selectedLob.isNotEmpty) count++;
+    if (_selectedToc.isNotEmpty) count++;
     return count;
+  }
+
+  void _fetchApiData() {
+    final (startDate, endDate) = _getDateRange();
+    final isRmOrPinca = _activeRole == 'rm' || _activeRole == 'pinca';
+    final filter = VisitMonitorFilter(
+      from: startDate,
+      to: endDate,
+      regionId: _selectedWil.isNotEmpty ? _selectedWil : null,
+      branchId: isRmOrPinca ? 'Padang' : (_selectedCab.isNotEmpty ? _selectedCab : null),
+      rmId: _activeRole == 'rm' ? 'r1' : (_selectedRm.isNotEmpty ? _selectedRm : null),
+      stage: _selectedStage.isNotEmpty ? _selectedStage : null,
+      category: _selectedKat.isNotEmpty ? _selectedKat : null,
+      bumn: _selectedEnt == 'BUMN' ? true : (_selectedEnt == 'Non BUMN' ? false : null),
+      hvc: _selectedHvc == 'hvc' ? true : (_selectedHvc == 'non' ? false : null),
+      sourceType: _selectedSumber.isNotEmpty ? _selectedSumber : null,
+      cob: _selectedCob.isNotEmpty ? _selectedCob : null,
+      lob: _selectedLob.isNotEmpty ? _selectedLob : null,
+      toc: _selectedToc.isNotEmpty ? _selectedToc : null,
+      q: _searchQuery.trim().isNotEmpty ? _searchQuery.trim() : null,
+    );
+    ref.read(visitMonitorProvider.notifier).loadAll(initialFilter: filter);
   }
 
   void _resetFilters() {
@@ -129,89 +163,76 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
       _selectedWil = '';
       _selectedCab = '';
       _selectedRm = '';
+      _selectedStage = '';
+      _selectedKat = '';
+      _selectedEnt = '';
+      _selectedHvc = '';
+      _selectedSumber = '';
+      _selectedCob = '';
+      _selectedLob = '';
+      _selectedToc = '';
       _searchQuery = '';
       _searchController.clear();
       _showIdle = false;
     });
+    _fetchApiData();
   }
 
-  void _onRoleChanged(String roleId) {
-    setState(() {
-      _activeRole = roleId;
-      _selectedWil = '';
-      _selectedCab = roleId == 'pinca' ? 'Padang' : '';
-      _selectedRm = '';
-      _showIdle = false;
-    });
-  }
+
 
   @override
   Widget build(BuildContext context) {
     final branchesInScope = _scopedBranches;
+    final isRmOrPinca = _activeRole == 'rm' || _activeRole == 'pinca';
 
     // Branches filtered by dropdown (if selected)
-    final effectiveBranches = _activeRole == 'pinca'
+    final effectiveBranches = isRmOrPinca
         ? ['Padang']
         : (_selectedCab.isNotEmpty && branchesInScope.contains(_selectedCab)
             ? [_selectedCab]
             : branchesInScope);
 
     // RMs in current branch scope
-    final rmsInBranchScope = kDefaultRms
-        .where((r) => effectiveBranches.contains(r.cab))
-        .toList();
-
-    // RMs filtered by specific RM dropdown
-    final effectiveRms = _selectedRm.isNotEmpty
-        ? rmsInBranchScope.where((r) => r.id == _selectedRm).toList()
-        : rmsInBranchScope;
-
-    final effectiveRmIds = effectiveRms.map((r) => r.id).toSet();
+    final rmsInBranchScope = kDefaultRms.where((r) {
+      if (!effectiveBranches.contains(r.cab)) return false;
+      if (_activeRole == 'rm') return r.nama == 'Mohammad Ridwan Majid';
+      return true;
+    }).toList();
 
     // Date range
     final (startDate, endDate) = _getDateRange();
 
-    // Filtered visits
-    final inPeriodVisits = kDefaultVisits.where((v) {
-      if (!effectiveRmIds.contains(v.rmId)) return false;
-      return v.tanggal.compareTo(startDate) >= 0 && v.tanggal.compareTo(endDate) <= 0;
-    }).toList();
+    final vmState = ref.watch(visitMonitorProvider);
 
-    // Search query filter
-    final q = _searchQuery.trim().toLowerCase();
-    final filteredVisits = inPeriodVisits.where((v) {
-      if (q.isEmpty) return true;
-      final rm = kDefaultRms.firstWhere((r) => r.id == v.rmId, orElse: () => const RmModel(id: '', nama: '', jab: '', cab: ''));
-      return v.perusahaan.toLowerCase().contains(q) || rm.nama.toLowerCase().contains(q);
-    }).toList();
-
-    // Sort newest date & time first
-    filteredVisits.sort((a, b) => (b.tanggal + b.jam).compareTo(a.tanggal + a.jam));
-
-    // Calculate metrics
-    final totalVisit = inPeriodVisits.length;
-    final activeRmIds = inPeriodVisits.map((v) => v.rmId).toSet();
-    final idleRms = effectiveRms.where((r) => !activeRmIds.contains(r.id)).toList();
-    final activeRmCount = effectiveRms.length - idleRms.length;
-    final avgPerRm = effectiveRms.isNotEmpty
-        ? (totalVisit / effectiveRms.length).toStringAsFixed(1).replaceAll('.', ',')
-        : '0';
+    // List visits directly from API
+    final List<VisitModel> displayedVisits =
+        vmState.visitsPage.content.map((row) => row.toVisitModel()).toList();
 
     // Group visits by date
     final dateGroups = <String, List<VisitModel>>{};
-    for (final v in filteredVisits) {
+    for (final v in displayedVisits) {
       dateGroups.putIfAbsent(v.tanggal, () => []).add(v);
     }
 
-    // Total reviewed count
-    final reviewedCount = inPeriodVisits.where((v) => VisitReviewStore.instance.isReviewed(v.id)).length;
+    // Idle RMs directly from API
+    final List<RmModel> idleRms = vmState.rmsPage.content
+        .where((r) => r.visitCount == 0)
+        .map((r) => r.toRmModel())
+        .toList();
+
+    // Metrics directly from API summary
+    final totalVisit = vmState.summary.totalVisit;
+    final activeRmCount = vmState.summary.rmActive;
+    final idleRmCount = vmState.summary.rmIdle;
+    final avgPerRm = vmState.summary.avgPerRm.toStringAsFixed(1).replaceAll('.', ',');
+    final reviewedCount = vmState.summary.reviewedCount;
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
         backgroundColor: AppColors.bgScreen,
-        appBar: _buildAppBar(context, filteredVisits.length),
+        appBar: _buildAppBar(context, vmState, displayedVisits.length),
         body: SafeArea(
           child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -219,10 +240,6 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Prototype role simulator banner
-                _buildRoleSimulatorBanner(),
-                const SizedBox(height: 12),
-
                 // Search bar and Filter toggle button
                 _buildSearchAndFilterBar(),
                 const SizedBox(height: 12),
@@ -231,26 +248,91 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
                 if (_showFilter) ...[
                   VisitRmFilterCard(
                     quickPeriod: _quickPeriod,
-                    onQuickPeriodChanged: (val) => setState(() => _quickPeriod = val),
+                    onQuickPeriodChanged: (val) {
+                      setState(() => _quickPeriod = val);
+                      _fetchApiData();
+                    },
                     quickPeriodOptions: _quickPeriodOptions,
                     customDari: _customDari,
-                    onCustomDariChanged: (val) => setState(() => _customDari = val),
+                    onCustomDariChanged: (val) {
+                      setState(() => _customDari = val);
+                      _fetchApiData();
+                    },
                     customSampai: _customSampai,
-                    onCustomSampaiChanged: (val) => setState(() => _customSampai = val),
+                    onCustomSampaiChanged: (val) {
+                      setState(() => _customSampai = val);
+                      _fetchApiData();
+                    },
                     activeRole: _activeRole,
                     selectedWil: _selectedWil,
-                    onSelectedWilChanged: (val) => setState(() {
-                      _selectedWil = val ?? '';
-                      _selectedCab = '';
-                      _selectedRm = '';
-                    }),
+                    onSelectedWilChanged: (val) {
+                      setState(() {
+                        _selectedWil = val ?? '';
+                        _selectedCab = '';
+                        _selectedRm = '';
+                      });
+                      _fetchApiData();
+                    },
                     selectedCab: _selectedCab,
-                    onSelectedCabChanged: (val) => setState(() {
-                      _selectedCab = val ?? '';
-                      _selectedRm = '';
-                    }),
+                    onSelectedCabChanged: (val) {
+                      setState(() {
+                        _selectedCab = val ?? '';
+                        _selectedRm = '';
+                      });
+                      _fetchApiData();
+                    },
                     selectedRm: _selectedRm,
-                    onSelectedRmChanged: (val) => setState(() => _selectedRm = val ?? ''),
+                    onSelectedRmChanged: (val) {
+                      setState(() => _selectedRm = val ?? '');
+                      _fetchApiData();
+                    },
+                    selectedStage: _selectedStage,
+                    onSelectedStageChanged: (val) {
+                      setState(() => _selectedStage = val ?? '');
+                      _fetchApiData();
+                    },
+                    selectedKat: _selectedKat,
+                    onSelectedKatChanged: (val) {
+                      setState(() => _selectedKat = val ?? '');
+                      _fetchApiData();
+                    },
+                    selectedEnt: _selectedEnt,
+                    onSelectedEntChanged: (val) {
+                      setState(() => _selectedEnt = val ?? '');
+                      _fetchApiData();
+                    },
+                    selectedHvc: _selectedHvc,
+                    onSelectedHvcChanged: (val) {
+                      setState(() => _selectedHvc = val ?? '');
+                      _fetchApiData();
+                    },
+                    selectedSumber: _selectedSumber,
+                    onSelectedSumberChanged: (val) {
+                      setState(() => _selectedSumber = val ?? '');
+                      _fetchApiData();
+                    },
+                    selectedCob: _selectedCob,
+                    onSelectedCobChanged: (val) {
+                      setState(() {
+                        _selectedCob = val ?? '';
+                        _selectedLob = '';
+                        _selectedToc = '';
+                      });
+                      _fetchApiData();
+                    },
+                    selectedLob: _selectedLob,
+                    onSelectedLobChanged: (val) {
+                      setState(() {
+                        _selectedLob = val ?? '';
+                        _selectedToc = '';
+                      });
+                      _fetchApiData();
+                    },
+                    selectedToc: _selectedToc,
+                    onSelectedTocChanged: (val) {
+                      setState(() => _selectedToc = val ?? '');
+                      _fetchApiData();
+                    },
                     branchesInScope: branchesInScope,
                     rmsInBranchScope: rmsInBranchScope,
                     onReset: _resetFilters,
@@ -267,8 +349,11 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
                 VisitRmMetricsRow(
                   total: totalVisit,
                   activeRm: activeRmCount,
-                  idleRm: idleRms.length,
+                  idleRm: idleRmCount,
                   avg: avgPerRm,
+                  isLoading: vmState.isLoadingSummary,
+                  error: vmState.summaryError,
+                  onRetry: () => ref.read(visitMonitorProvider.notifier).loadSummary(),
                   onToggleIdle: () => setState(() => _showIdle = !_showIdle),
                 ),
                 const SizedBox(height: 12),
@@ -285,8 +370,9 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
 
                 // Main content list
                 _viewMode == 'list'
-                    ? _buildVisitList(dateGroups)
-                    : _buildRmList(effectiveRms, inPeriodVisits),
+                    ? _buildVisitList(vmState, dateGroups)
+                    : _buildRmList(vmState),
+
               ],
             ),
           ),
@@ -296,7 +382,11 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
   }
 
   // --- AppBar ---
-  PreferredSizeWidget _buildAppBar(BuildContext context, int exportCount) {
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context,
+    VisitMonitorState vmState,
+    int exportCount,
+  ) {
     return AppBar(
       backgroundColor: AppColors.surfaceWhite,
       surfaceTintColor: AppColors.transparent,
@@ -311,7 +401,12 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/kelola');
+            final path = GoRouterState.of(context).uri.path;
+            if (path.startsWith('/kelola/tools')) {
+              context.go('/kelola/tools');
+            } else {
+              context.go('/tools');
+            }
           }
         },
       ),
@@ -341,19 +436,63 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
         Padding(
           padding: const EdgeInsets.only(right: 14),
           child: OutlinedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Mengunduh Visit_RM.xlsx ($exportCount kunjungan, sesuai filter)'),
-                  backgroundColor: AppColors.navyMbis,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            icon: const Icon(Icons.file_download_outlined, size: 18, color: AppColors.greenTotal),
-            label: const Text(
-              'Excel',
-              style: TextStyle(
+            onPressed: vmState.isExporting
+                ? null
+                : () async {
+                    final (startDate, endDate) = _getDateRange();
+                    final outcome = await ref
+                        .read(visitMonitorProvider.notifier)
+                        .exportVisits(from: startDate, to: endDate);
+
+                    if (!context.mounted) return;
+
+                    if (outcome.ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text('Berhasil mengunduh ${outcome.fileName}'),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: AppColors.navyMbis,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } else if (outcome.unsupported) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Perangkat tidak mendukung penyimpanan langsung berkas.'),
+                          backgroundColor: AppColors.alertTitle,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Gagal mengekspor: ${outcome.error ?? "Terjadi kesalahan"}'),
+                          backgroundColor: AppColors.alertTitle,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+            icon: vmState.isExporting
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.greenTotal,
+                    ),
+                  )
+                : const Icon(Icons.file_download_outlined, size: 18, color: AppColors.greenTotal),
+            label: Text(
+              vmState.isExporting ? 'Mengunduh...' : 'Excel',
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: AppColors.greenTotal,
@@ -372,64 +511,8 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     );
   }
 
-  // --- Role simulator banner ---
-  Widget _buildRoleSimulatorBanner() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.alertBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.orangeMbis,
-          style: BorderStyle.solid,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Simulasi login (khusus prototype)',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.alertTitle,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: _roleOptions.map((opt) {
-              final isSelected = opt['id'] == _activeRole;
-              return ChoiceChip(
-                label: Text(opt['label']!),
-                selected: isSelected,
-                onSelected: (val) {
-                  if (val) _onRoleChanged(opt['id']!);
-                },
-                selectedColor: AppColors.navyMbis,
-                backgroundColor: AppColors.surfaceWhite,
-                labelStyle: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? AppColors.surfaceWhite : AppColors.textDark,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  side: BorderSide(
-                    color: isSelected ? AppColors.navyMbis : AppColors.borderDefault,
-                    width: 1.5,
-                  ),
-                ),
-                showCheckmark: false,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
+
+
 
   // --- Search & Filter button bar ---
   Widget _buildSearchAndFilterBar() {
@@ -454,6 +537,8 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
                   child: TextField(
                     controller: _searchController,
                     onChanged: (val) => setState(() => _searchQuery = val),
+                    onSubmitted: (_) => _fetchApiData(),
+                    textInputAction: TextInputAction.search,
                     style: const TextStyle(fontSize: 14, color: AppColors.textDark),
                     decoration: const InputDecoration(
                       hintText: 'Cari perusahaan atau nama RM',
@@ -469,6 +554,7 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
                     onTap: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
+                      _fetchApiData();
                     },
                     child: const Icon(Icons.close, size: 16, color: AppColors.iconDropdown),
                   ),
@@ -546,15 +632,29 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
     }
 
     // Cabang chip
-    if (_selectedCab.isNotEmpty && _activeRole != 'pinca') {
+    if (_selectedCab.isNotEmpty && _activeRole != 'pinca' && _activeRole != 'rm') {
       chips.add('KC $_selectedCab');
     }
 
     // RM chip
-    if (_selectedRm.isNotEmpty) {
+    if (_selectedRm.isNotEmpty && _activeRole != 'rm') {
       final r = kDefaultRms.firstWhere((rm) => rm.id == _selectedRm, orElse: () => const RmModel(id: '', nama: '', jab: '', cab: ''));
       chips.add(r.nama);
     }
+
+    // Stage chip
+    if (_selectedStage.isNotEmpty) {
+      final info = VisitRmHelpers.getStageInfo(_selectedStage);
+      chips.add('Stage ${info.label}');
+    }
+
+    if (_selectedKat.isNotEmpty) chips.add(_selectedKat);
+    if (_selectedEnt.isNotEmpty) chips.add(_selectedEnt);
+    if (_selectedHvc.isNotEmpty) chips.add(_selectedHvc == 'hvc' ? 'HVC' : 'Non HVC');
+    if (_selectedSumber.isNotEmpty) chips.add(_selectedSumber);
+    if (_selectedCob.isNotEmpty) chips.add(_selectedCob);
+    if (_selectedLob.isNotEmpty) chips.add(_selectedLob);
+    if (_selectedToc.isNotEmpty) chips.add(_selectedToc);
 
     return Wrap(
       spacing: 6,
@@ -578,7 +678,6 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
       }).toList(),
     );
   }
-
 
   // --- View tabs (Per Kunjungan vs Per RM) ---
   Widget _buildViewTabs(int reviewedCount) {
@@ -630,7 +729,82 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
   }
 
   // --- Visit List (Per Kunjungan) ---
-  Widget _buildVisitList(Map<String, List<VisitModel>> dateGroups) {
+  Widget _buildVisitList(
+    VisitMonitorState vmState,
+    Map<String, List<VisitModel>> dateGroups,
+  ) {
+    // 1. Loading state (initial loading)
+    if (vmState.isLoadingVisits && !vmState.isPaging && dateGroups.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceWhite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.borderDivider),
+        ),
+        child: Column(
+          children: const [
+            CircularProgressIndicator(color: AppColors.navyMbis, strokeWidth: 2.5),
+            SizedBox(height: 14),
+            Text(
+              'Memuat daftar kunjungan...',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 2. Negative case: Error state with Retry button
+    if (vmState.visitsError != null && dateGroups.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceWhite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.alertBorder),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.error_outline, size: 36, color: AppColors.orangeDark),
+            const SizedBox(height: 10),
+            const Text(
+              'Gagal Memuat Kunjungan',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              vmState.visitsError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 14),
+            ElevatedButton.icon(
+              onPressed: () => _fetchApiData(),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.navyMbis,
+                foregroundColor: AppColors.surfaceWhite,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Empty state
     if (dateGroups.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
@@ -647,224 +821,419 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
       );
     }
 
+    // 4. Data state: List grouped by date + Pagination bar
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: dateGroups.entries.map((entry) {
-        final date = entry.key;
-        final visits = entry.value;
-        final dateHeader = VisitRmHelpers.getDateLabel(date, _todayStr, _yesterdayStr);
+      children: [
+        ...dateGroups.entries.map((entry) {
+          final date = entry.key;
+          final visits = entry.value;
+          final dateHeader = VisitRmHelpers.getDateLabel(date, _todayStr, _yesterdayStr);
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header row
-              Padding(
-                padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      dateHeader,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navyMbis,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header row
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        dateHeader,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.navyMbis,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${visits.length} kunjungan',
-                      style: const TextStyle(fontSize: 12, color: AppColors.iconDropdown),
-                    ),
-                  ],
-                ),
-              ),
-              // Group card
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceWhite,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borderDivider),
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: visits.length,
-                  separatorBuilder: (_, _) => const Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: AppColors.bgDisabled,
+                      Text(
+                        '${visits.length} kunjungan',
+                        style: const TextStyle(fontSize: 12, color: AppColors.iconDropdown),
+                      ),
+                    ],
                   ),
-                  itemBuilder: (context, idx) {
-                    final v = visits[idx];
-                    final rm = kDefaultRms.firstWhere(
-                      (r) => r.id == v.rmId,
-                      orElse: () => const RmModel(id: '', nama: '-', jab: '', cab: '-'),
-                    );
-                    final isReviewed = VisitReviewStore.instance.isReviewed(v.id);
-
-                    return VisitItemCard(
-                      visit: v,
-                      rm: rm,
-                      isReviewed: isReviewed,
-                      onTap: () => _openDetail(v),
-                    );
-                  },
                 ),
+                // Group card
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceWhite,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderDivider),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: visits.length,
+                    separatorBuilder: (_, _) => const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppColors.bgDisabled,
+                    ),
+                    itemBuilder: (context, idx) {
+                      final v = visits[idx];
+                      final rm = kDefaultRms.firstWhere(
+                        (r) => r.id == v.rmId,
+                        orElse: () => const RmModel(id: '', nama: '-', jab: '', cab: '-'),
+                      );
+                      final isReviewed = VisitReviewStore.instance.isReviewed(v.id);
+
+                      return VisitItemCard(
+                        visit: v,
+                        rm: rm,
+                        isReviewed: isReviewed,
+                        onTap: () => _openDetail(v),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        _buildPaginationBar(vmState),
+      ],
+    );
+  }
+
+  // --- Pagination Bar ---
+  Widget _buildPaginationBar(VisitMonitorState vmState) {
+    final page = vmState.visitsPage;
+    if (page.totalPages <= 1) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4, bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderDivider),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Halaman ${page.page + 1} dari ${page.totalPages} (${page.totalElements} data)',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                onPressed: page.hasPrevious && !vmState.isPaging
+                    ? () => ref.read(visitMonitorProvider.notifier).goToPage(page.page - 1)
+                    : null,
+              ),
+              if (vmState.isPaging)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navyMbis),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                onPressed: page.hasNext && !vmState.isPaging
+                    ? () => ref.read(visitMonitorProvider.notifier).goToPage(page.page + 1)
+                    : null,
               ),
             ],
           ),
-        );
-      }).toList(),
+        ],
+      ),
     );
   }
 
 
   // --- RM List (Per RM) ---
-  Widget _buildRmList(List<RmModel> rms, List<VisitModel> inPeriodVisits) {
-    // Build rows with visit count
-    final rows = rms.map((rm) {
-      final visits = inPeriodVisits.where((v) => v.rmId == rm.id).toList();
-      visits.sort((a, b) => (b.tanggal + b.jam).compareTo(a.tanggal + a.jam));
-      final revCount = visits.where((v) => VisitReviewStore.instance.isReviewed(v.id)).length;
-      return (rm: rm, visits: visits, revCount: revCount);
-    }).toList();
-
-    rows.sort((a, b) => b.visits.length.compareTo(a.visits.length));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceWhite,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderDivider),
-          ),
-          child: ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: rows.length,
-            separatorBuilder: (_, _) => const Divider(
-              height: 1,
-              thickness: 1,
-              color: AppColors.bgDisabled,
+  Widget _buildRmList(VisitMonitorState vmState) {
+    // 1. Loading state (negative/async handling)
+    if (vmState.isInitialLoadingRms) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.navyMbis),
+            SizedBox(height: 12),
+            Text(
+              'Memuat data RM...',
+              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
             ),
-            itemBuilder: (context, idx) {
-              final row = rows[idx];
-              final rm = row.rm;
-              final count = row.visits.length;
-              final hasVisits = count > 0;
-              final lastText = hasVisits
-                  ? 'Terakhir: ${VisitRmHelpers.formatIndoDate(row.visits.first.tanggal)} · ${row.visits.first.perusahaan}'
-                  : 'Belum ada visit pada periode ini';
+          ],
+        ),
+      );
+    }
 
-              return InkWell(
-                onTap: () {
-                  // Filter by this RM and switch to Per Kunjungan
-                  setState(() {
-                    _selectedRm = rm.id;
-                    _viewMode = 'list';
-                  });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  child: Row(
-                    children: [
-                      // Badge with count
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: hasVisits ? AppColors.blueLightBg : AppColors.badgeP2Bg,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '$count',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                height: 1,
-                                color: hasVisits ? AppColors.navyMbis : AppColors.alertTitle,
-                              ),
-                            ),
-                            Text(
-                              'visit',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: hasVisits ? AppColors.navyMbis : AppColors.alertTitle,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
+    // 2. Negative case: Error state with retry
+    if (vmState.hasRmsError) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceWhite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.alertBorder),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.alertTitle, size: 40),
+            const SizedBox(height: 10),
+            const Text(
+              'Gagal Memuat Data RM',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: AppColors.textDark),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              vmState.rmsError ?? 'Terjadi kesalahan sistem saat memuat data RM',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 14),
+            ElevatedButton.icon(
+              onPressed: () => ref.read(visitMonitorProvider.notifier).loadRms(page: 0),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.navyMbis,
+                foregroundColor: AppColors.surfaceWhite,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-                      // RM info
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              rm.nama,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                            Text(
-                              '${rm.jab} · KC ${rm.cab}',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              lastText,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textLabel,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
+    // 3. API Data available
+    if (vmState.rmsPage.content.isNotEmpty) {
+      final rows = vmState.rmsPage.content;
 
-                      // Reviewed count
-                      if (hasVisits)
-                        Text(
-                          '${row.revCount}/$count ditinjau',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.greenTotal,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceWhite,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderDivider),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rows.length,
+              separatorBuilder: (_, _) => const Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.bgDisabled,
+              ),
+              itemBuilder: (context, idx) {
+                final rmRow = rows[idx];
+                final count = rmRow.visitCount;
+                final hasVisits = count > 0;
+                final lastText = hasVisits && rmRow.lastVisitAt != null
+                    ? 'Terakhir: ${VisitRmHelpers.formatDateTime(rmRow.lastVisitAt!)} · ${rmRow.lastCustomerName ?? '-'}'
+                    : (hasVisits && rmRow.lastCustomerName != null
+                        ? 'Terakhir: ${rmRow.lastCustomerName}'
+                        : 'Belum ada visit pada periode ini');
+
+                return InkWell(
+                  onTap: () {
+                    // Filter by this RM and switch to Per Kunjungan
+                    setState(() {
+                      _selectedRm = rmRow.rmId;
+                      _viewMode = 'list';
+                    });
+                    _fetchApiData();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(
+                      children: [
+                        // Badge with count
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: hasVisits ? AppColors.blueLightBg : AppColors.badgeP2Bg,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '$count',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1,
+                                  color: hasVisits ? AppColors.navyMbis : AppColors.alertTitle,
+                                ),
+                              ),
+                              Text(
+                                'visit',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: hasVisits ? AppColors.navyMbis : AppColors.alertTitle,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                    ],
+                        const SizedBox(width: 12),
+
+                        // RM info
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                rmRow.rmName,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                              Text(
+                                '${rmRow.jabatan ?? "RM Bisnis"} · ${rmRow.officeName ?? ""}',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                lastText,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textLabel,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Reviewed count
+                        if (hasVisits)
+                          Text(
+                            '${rmRow.reviewedCount}/$count ditinjau',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.greenTotal,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            'Ketuk nama RM untuk melihat daftar kunjungannya.',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          // Pagination for RM list
+          _buildRmPaginationBar(vmState),
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'Ketuk nama RM untuk melihat daftar kunjungannya.',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    // 4. Empty state (sesuai prototype)
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderDivider),
+      ),
+      child: const Text(
+        'Tidak ada kunjungan sesuai filter.',
+        style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+      ),
     );
   }
+
+  // --- RM Pagination Bar ---
+  Widget _buildRmPaginationBar(VisitMonitorState vmState) {
+    final page = vmState.rmsPage;
+    if (page.totalPages <= 1) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderDivider),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Halaman ${page.page + 1} dari ${page.totalPages} (${page.totalElements} RM)',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                onPressed: page.hasPrevious && !vmState.isPagingRms
+                    ? () => ref.read(visitMonitorProvider.notifier).goToRmsPage(page.page - 1)
+                    : null,
+              ),
+              if (vmState.isPagingRms)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navyMbis),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                onPressed: page.hasNext && !vmState.isPagingRms
+                    ? () => ref.read(visitMonitorProvider.notifier).goToRmsPage(page.page + 1)
+                    : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
 
   // --- Detail Screen Navigation ---
   void _openDetail(VisitModel v) {
@@ -872,7 +1241,7 @@ class _VisitRmScreenState extends State<VisitRmScreen> {
       MaterialPageRoute(
         builder: (_) => VisitRmDetailScreen(
           visitId: v.id,
-          activeRoleLabel: _activeRoleLabel,
+          activeRoleLabel: 'RM',
         ),
       ),
     );

@@ -1,12 +1,18 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
+
+import '../../core/providers/repository_providers.dart';
 import '../../theme/app_theme.dart';
 import 'qs_form_state.dart';
+import 'widgets/pertanggungan/repositories/qs_pertanggungan_model.dart';
 import 'widgets/qs_step_pertanggungan.dart';
-import 'widgets/qs_step_uang_pertanggungan.dart';
 import 'widgets/qs_step_terms_conditions.dart';
-import 'widgets/qs_preview_panel.dart';
+import 'widgets/qs_step_uang_pertanggungan.dart';
+import 'widgets/terms_conditions/qs_tc_constants.dart';
 
 /// Screen utama pembuatan Quotation Slip.
 ///
@@ -14,14 +20,16 @@ import 'widgets/qs_preview_panel.dart';
 /// Header Navy terpadu dengan 3 progress bars (Pertanggungan, UP & Premi, T&C),
 /// banner auto-fill, legend warna teks biru, bottom bar dengan total premi kalkulasi,
 /// dan transisi penuh ke Preview QS dengan status deviasi UW.
-class QsFormScreen extends StatefulWidget {
+class QsFormScreen extends ConsumerStatefulWidget {
   final QsProduct product;
 
-  /// Mock data — di implementasi nyata akan diterima dari pipeline.
   final String? customerName;
   final String? customerAddress;
   final String? customerBidangUsaha;
   final String? customerEmail;
+  final String? pipelineId;
+  final String? productCode;
+  final String? qsId;
 
   const QsFormScreen({
     super.key,
@@ -30,13 +38,16 @@ class QsFormScreen extends StatefulWidget {
     this.customerAddress,
     this.customerBidangUsaha,
     this.customerEmail,
+    this.pipelineId,
+    this.productCode,
+    this.qsId,
   });
 
   @override
-  State<QsFormScreen> createState() => _QsFormScreenState();
+  ConsumerState<QsFormScreen> createState() => _QsFormScreenState();
 }
 
-class _QsFormScreenState extends State<QsFormScreen>
+class _QsFormScreenState extends ConsumerState<QsFormScreen>
     with TickerProviderStateMixin {
   // Product state
   late QsProduct _product;
@@ -46,6 +57,46 @@ class _QsFormScreenState extends State<QsFormScreen>
   int _currentStep = 0;
   bool _isPreviewing = false;
   final _currFormat = NumberFormat('#,##0', 'id');
+
+  // Loading & Saving states
+  bool _isLoadingInitial = false;
+  bool _isSavingQs = false;
+  String? _qsId;
+  String? _serverNomorQs;
+  String? _initialError;
+  QsPertanggunganResponse? _apiResponse;
+  QsPertanggunganResponse? get apiResponse => _apiResponse;
+  QsPerhitunganBiayaData? _apiPerhitunganBiaya;
+  List<String>? _termsKlausula;
+  List<String>? _termsKondisi;
+  List<String>? _termsWaranti;
+  List<String>? _termsPengecualian;
+
+  // PDF Preview State
+  Uint8List? _previewPdfBytes;
+  bool _isLoadingPdf = false;
+  String? _pdfError;
+
+  String? get _pipelineId =>
+      (widget.pipelineId != null && widget.pipelineId!.isNotEmpty)
+          ? widget.pipelineId
+          : 'ce116c9b-3a0b-4109-84ae-56175ffb27f2';
+
+  String get _productCode {
+    if (widget.productCode != null && widget.productCode!.isNotEmpty) {
+      final upper = widget.productCode!.trim().toUpperCase();
+      if (upper == 'PAXTRA' ||
+          upper.contains('XTRA') ||
+          upper.contains('PERSONAL ACCIDENT')) {
+        return 'PAXTRA';
+      }
+      if (upper.contains('PSAKDI')) {
+        return 'PSAKDI';
+      }
+      return widget.productCode!.trim();
+    }
+    return _product == QsProduct.psakdi ? 'PSAKDI' : 'PAXTRA';
+  }
 
   // Form keys per step
   final _formKey1 = GlobalKey<FormState>();
@@ -60,7 +111,7 @@ class _QsFormScreenState extends State<QsFormScreen>
   final _namaPicCtrl = TextEditingController();
   final _noHpPicCtrl = TextEditingController();
   QsType _type = QsType.single;
-  final _jumlahOrangCtrl = TextEditingController(text: '1');
+  final _jumlahOrangCtrl = TextEditingController();
   final _aktivitasCtrl = TextEditingController();
   QsPremiMode _premiMode = QsPremiMode.normal;
   DateTime? _tglMulai;
@@ -68,9 +119,9 @@ class _QsFormScreenState extends State<QsFormScreen>
   bool _dataSamaPolis = false;
   final _namaTertanggungCtrl = TextEditingController(text: '');
   final _noKtpCtrl = TextEditingController(text: '');
-  DateTime? _tglLahir = DateTime(2000, 2, 14);
+  DateTime? _tglLahir;
   final _pekerjaanCtrl = TextEditingController(text: '');
-  int? _klasifikasiPeserta = 1;
+  int? _klasifikasiPeserta;
 
   // ── Tab 2: Uang Pertanggungan ──
   final _upACtrl = TextEditingController();
@@ -103,35 +154,318 @@ class _QsFormScreenState extends State<QsFormScreen>
   final _kondisiTambahanCtrl = TextEditingController();
   final _warantiTambahanCtrl = TextEditingController();
   final _pengecualianTambahanCtrl = TextEditingController();
-  final _deductibleCtrl = TextEditingController(text: 'Nil');
+  final _deductibleCtrl = TextEditingController();
   String? _namaFile;
 
   @override
   void initState() {
     super.initState();
     _product = widget.product;
-    _namaPolisCtrl =
-        TextEditingController(text: widget.customerName ?? '');
-    _alamatCtrl = TextEditingController(
-        text: widget.customerAddress ?? '');
-    _bidangUsahaCtrl = TextEditingController(
-        text: widget.customerBidangUsaha ?? '');
-    _emailCtrl =
-        TextEditingController(text: widget.customerEmail ?? '');
+    _qsId = widget.qsId;
 
-    // Default tanggal
-    _tglMulai = DateTime.now();
-    _tglAkhir = DateTime(
-      DateTime.now().year + 1,
-      DateTime.now().month,
-      DateTime.now().day,
-    );
-    _tglPenerbitan = DateTime.now();
-    _masaBerlaku = DateTime.now().add(const Duration(days: 14));
+    // Bersihkan form tanpa nilai default statis
+    _namaPolisCtrl = TextEditingController(text: widget.customerName ?? '');
+    _alamatCtrl = TextEditingController(text: widget.customerAddress ?? '');
+    _bidangUsahaCtrl =
+        TextEditingController(text: widget.customerBidangUsaha ?? '');
+    _emailCtrl = TextEditingController(text: widget.customerEmail ?? '');
+    _jumlahOrangCtrl.text = '';
+    _tglMulai = null;
+    _tglAkhir = null;
+    _tglPenerbitan = null;
+    _masaBerlaku = null;
+    _klasifikasiPeserta = null;
+    _diskonCtrl.text = '0';
+    _deductibleCtrl.text = '';
+    _rateABCtrl.text = '';
+    _rateCCtrl.text = '';
 
-    // Default rate PSAKDI
-    _rateABCtrl.text = '0.10';
-    _rateCCtrl.text = '2.00';
+    final isFromPipeline =
+        widget.pipelineId != null && widget.pipelineId!.isNotEmpty;
+    if (isFromPipeline) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchInitialData();
+      });
+    }
+  }
+
+  Future<void> _fetchInitialData() async {
+    final pId = widget.pipelineId;
+    if (pId == null || pId.isEmpty) return;
+
+    final pCode = _productCode;
+
+    setState(() {
+      _isLoadingInitial = true;
+      _initialError = null;
+    });
+
+    try {
+      final repo = ref.read(qsPertanggunganRepoProvider);
+      final res = await repo.getPertanggungan(
+        pipelineId: pId,
+        productCode: pCode,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _apiResponse = res;
+        if (res.id != null && res.id!.isNotEmpty) {
+          _qsId = res.id;
+        }
+
+        // 1. Resolve Product
+        final prodStr = (res.productCode ?? pCode).toLowerCase();
+        if (prodStr.contains('personal accident') ||
+            prodStr.contains('paxtra') ||
+            prodStr.contains('pa xtra')) {
+          _product = QsProduct.paXtra;
+        } else if (prodStr.contains('psakdi')) {
+          _product = QsProduct.psakdi;
+        }
+
+        // 2. Pemegang Polis
+        final pp = res.pemegangPolis;
+        if (pp != null) {
+          if (pp.tertanggung != null) _namaPolisCtrl.text = pp.tertanggung!;
+          if (pp.alamat != null) _alamatCtrl.text = pp.alamat!;
+          if (pp.bidang != null) _bidangUsahaCtrl.text = pp.bidang!;
+          if (pp.email != null) _emailCtrl.text = pp.email!;
+          if (pp.pic != null) _namaPicCtrl.text = pp.pic!;
+          if (pp.hpPic != null) _noHpPicCtrl.text = pp.hpPic!;
+        }
+
+        // 3. Tipe Pertanggungan
+        final tp = res.tipePertanggungan;
+        if (tp != null) {
+          final qTypeStr = (tp.qType ?? '').trim().toLowerCase();
+          _type = (qTypeStr == 'group') ? QsType.group : QsType.single;
+          if (tp.jmlOrang != null) {
+            _jumlahOrangCtrl.text = tp.jmlOrang.toString();
+          } else {
+            _jumlahOrangCtrl.text = _type == QsType.single ? '1' : '';
+          }
+          if (tp.aktivitas != null) _aktivitasCtrl.text = tp.aktivitas!;
+        }
+
+        // 4. Perhitungan Premi Mode
+        final ppPrem = res.perhitunganPremi;
+        if (ppPrem != null) {
+          final calcStr = (ppPrem.calcType ?? '').trim().toLowerCase();
+          if (calcStr.contains('mutlak')) {
+            _premiMode = QsPremiMode.mutlak;
+          } else if (calcStr.contains('flat')) {
+            _premiMode = QsPremiMode.flat;
+          } else {
+            _premiMode = QsPremiMode.normal;
+          }
+        }
+
+        // 5. Klasifikasi Peserta
+        _klasifikasiPeserta = res.klasifikasiPeserta;
+
+        // 6. Jangka Waktu
+        final jw = res.jangkaWaktu;
+        if (jw != null) {
+          if (jw.start != null && jw.start!.isNotEmpty) {
+            _tglMulai = DateTime.tryParse(jw.start!);
+          }
+          if (jw.end != null && jw.end!.isNotEmpty) {
+            _tglAkhir = DateTime.tryParse(jw.end!);
+          }
+        }
+
+        // 7. Orang Dipertanggungkan
+        final od = res.orangDipertanggungkan;
+        if (od != null) {
+          _dataSamaPolis = od.samaDenganPP ?? true;
+          if (od.nama != null && od.nama!.isNotEmpty) {
+            _namaTertanggungCtrl.text = od.nama!;
+          } else if (_dataSamaPolis && _namaPolisCtrl.text.isNotEmpty) {
+            _namaTertanggungCtrl.text = _namaPolisCtrl.text;
+          }
+
+          if (od.ktp != null) _noKtpCtrl.text = od.ktp!;
+          if (od.lahir != null && od.lahir!.isNotEmpty) {
+            _tglLahir = DateTime.tryParse(od.lahir!);
+          }
+          if (od.pekerjaan != null) _pekerjaanCtrl.text = od.pekerjaan!;
+        }
+
+        // 8. Step 2 (Uang Pertanggungan & Biaya Asuransi)
+        final s2 = res.step2;
+        if (s2 != null) {
+          final upVal = s2.jaminanPokok?.uangPertanggunganMeninggalDunia;
+          if (upVal != null && upVal > 0) {
+            final formattedUp = _currFormat.format(upVal);
+            _upPaXtraCtrl.text = formattedUp;
+            _upACtrl.text = formattedUp;
+          }
+
+          // Jaminan Tambahan
+          final jt = s2.jaminanTambahan;
+          if (jt != null) {
+            _cacatTetap = jt.cacatTetap ?? true;
+            final rawPengobatan = jt.biayaPerawatanPengobatan ?? 0;
+            _perawatanPengobatan = rawPengobatan > 0;
+            if (rawPengobatan > 0) {
+              _santunanCtrls['pengobatan']?.text = _currFormat.format(rawPengobatan);
+            }
+          }
+
+          // Perluasan Santunan
+          final per = s2.perluasan;
+          if (per != null) {
+            if (per.santunanAmbulansEvakuasi != null && per.santunanAmbulansEvakuasi! > 0) {
+              _santunanCtrls['ambulan']?.text = _currFormat.format(per.santunanAmbulansEvakuasi!);
+            }
+            if (per.santunanPemakamanKremasi != null && per.santunanPemakamanKremasi! > 0) {
+              _santunanCtrls['pemakaman']?.text = _currFormat.format(per.santunanPemakamanKremasi!);
+            }
+            if (per.santunanKehilanganBarangPribadi != null && per.santunanKehilanganBarangPribadi! > 0) {
+              _santunanCtrls['barang']?.text = _currFormat.format(per.santunanKehilanganBarangPribadi!);
+            }
+            if (per.santunanPengurusanDokumen != null && per.santunanPengurusanDokumen! > 0) {
+              _santunanCtrls['dokumen']?.text = _currFormat.format(per.santunanPengurusanDokumen!);
+            }
+            if (per.santunanBiayaPendidikan != null && per.santunanBiayaPendidikan! > 0) {
+              _santunanCtrls['pendidikan']?.text = _currFormat.format(per.santunanBiayaPendidikan!);
+            }
+            if (per.santunanPemulanganJenazah != null && per.santunanPemulanganJenazah! > 0) {
+              _santunanCtrls['pemulangan']?.text = _currFormat.format(per.santunanPemulanganJenazah!);
+            }
+          }
+
+          // Diskon
+          if (s2.discountPersen != null) {
+            final d = s2.discountPersen!;
+            _diskonCtrl.text = (d == d.roundToDouble()) ? d.toInt().toString() : d.toString();
+          }
+
+          // Jenis Polis
+          if (s2.jenisPolis != null) {
+            _polisType = (s2.jenisPolis!.toUpperCase() == 'EPOLIS')
+                ? QsPolisType.ePolis
+                : QsPolisType.cetak;
+          }
+
+          // Premi Mutlak
+          if (s2.premiJaminanPokok != null) {
+            _premiMutlakPokokCtrl.text = _currFormat.format(s2.premiJaminanPokok!);
+          }
+          if (s2.premiJaminanTambahan != null) {
+            _premiMutlakTambahanCtrl.text = _currFormat.format(s2.premiJaminanTambahan!);
+          }
+          if (s2.tarifFlatPerHari != null) {
+            _tarifFlatCtrl.text = _currFormat.format(s2.tarifFlatPerHari!);
+          }
+        }
+
+        // 9. Step 3 (T/C & Penerbitan)
+        final s3 = res.step3;
+        if (s3 != null) {
+          final pen = s3.penerbitan;
+          if (pen != null) {
+            if (pen.kota != null) _kotaCtrl.text = pen.kota!;
+            if (pen.cabang != null) _cabangCtrl.text = pen.cabang!;
+            if (pen.penandatangan != null) _penandatanganCtrl.text = pen.penandatangan!;
+            if (pen.jabatanPenandatangan != null) _jabatanCtrl.text = pen.jabatanPenandatangan!;
+            if (pen.tanggalTerbit != null && pen.tanggalTerbit!.isNotEmpty) {
+              _tglPenerbitan = DateTime.tryParse(pen.tanggalTerbit!);
+            }
+          }
+          if (s3.berlakuSampai != null && s3.berlakuSampai!.isNotEmpty) {
+            _masaBerlaku = DateTime.tryParse(s3.berlakuSampai!);
+          }
+
+          // Process Terms
+          if (s3.terms != null) {
+            for (final term in s3.terms!) {
+              final tipe = (term.tipeTerms ?? '').toUpperCase().trim();
+              final descs = term.descriptions ?? [];
+              if (tipe == 'DEDUCTIBLE') {
+                if (descs.isNotEmpty) {
+                  _deductibleCtrl.text = descs.join(', ');
+                }
+              } else if (tipe == 'KLAUSULA') {
+                final stdList = _product == QsProduct.paXtra ? kPaxtraKlausulaStandar : kPsakdiKlausulaStandar;
+                final additional = descs.where((d) => !stdList.contains(d)).toList();
+                if (additional.isNotEmpty) {
+                  _klausulTambahanCtrl.text = additional.join('\n');
+                }
+                _termsKlausula = descs;
+              } else if (tipe == 'KONDISI') {
+                final stdList = _product == QsProduct.paXtra ? kPaxtraKondisiStandar : kPsakdiKondisiStandar;
+                final additional = descs.where((d) => !stdList.contains(d)).toList();
+                if (additional.isNotEmpty) {
+                  _kondisiTambahanCtrl.text = additional.join('\n');
+                }
+                _termsKondisi = descs;
+              } else if (tipe == 'WARANTI') {
+                final stdList = _product == QsProduct.paXtra ? kPaxtraWarantiStandar : kPsakdiWarantiStandar;
+                final additional = descs.where((d) => !stdList.contains(d)).toList();
+                if (additional.isNotEmpty) {
+                  _warantiTambahanCtrl.text = additional.join('\n');
+                }
+                _termsWaranti = descs;
+              } else if (tipe == 'PENGECUALIAN') {
+                final stdList = _product == QsProduct.paXtra ? kPaxtraPengecualianStandar : kPsakdiPengecualianStandar;
+                final additional = descs.where((d) => !stdList.contains(d)).toList();
+                if (additional.isNotEmpty) {
+                  _pengecualianTambahanCtrl.text = additional.join('\n');
+                }
+                _termsPengecualian = descs;
+              }
+            }
+          }
+        }
+
+        // 10. Perhitungan Biaya
+        _apiPerhitunganBiaya = res.perhitunganBiaya;
+
+        _isLoadingInitial = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _initialError = e.toString().replaceFirst('Exception: ', '');
+          _isLoadingInitial = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchPreviewPdf([String? pipelineId, String? productCode]) async {
+    final pId = pipelineId ?? _pipelineId;
+    final pCode = productCode ?? _productCode;
+    if (pId == null || pId.isEmpty) return;
+
+    setState(() {
+      _isLoadingPdf = true;
+      _pdfError = null;
+    });
+
+    try {
+      final repo = ref.read(qsPertanggunganRepoProvider);
+      final bytes = await repo.getPreviewQsPdf(
+        pipelineId: pId,
+        productCode: pCode,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _previewPdfBytes = bytes;
+        _isLoadingPdf = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _pdfError = e.toString().replaceFirst('Exception: ', '');
+        _isLoadingPdf = false;
+      });
+    }
   }
 
   @override
@@ -185,6 +519,9 @@ class _QsFormScreenState extends State<QsFormScreen>
       _type == QsType.single ? 1 : (int.tryParse(_jumlahOrangCtrl.text) ?? 1);
 
   String get _nomorQs {
+    if (_serverNomorQs != null && _serverNomorQs!.isNotEmpty) {
+      return _serverNomorQs!;
+    }
     final prod = _product == QsProduct.psakdi ? 'PSAKDI' : 'PAXTRA';
     final prefix = _status == QsStatus.draft ? 'XXX' : '001';
     final now = DateTime.now();
@@ -222,6 +559,18 @@ class _QsFormScreenState extends State<QsFormScreen>
       };
 
   PremiResult? get _premiResult {
+    if (_apiPerhitunganBiaya != null) {
+      return PremiResult(
+        premiPokok: _apiPerhitunganBiaya!.premiJaminanPokok ?? 0,
+        premiTambahan: _apiPerhitunganBiaya!.premiJaminanTambahan ?? 0,
+        gross: _apiPerhitunganBiaya!.grossPremi ?? 0,
+        diskon: _apiPerhitunganBiaya!.nilaiDiscount ?? 0,
+        netto: _apiPerhitunganBiaya!.nettPremi ?? 0,
+        biayaAdmin: _apiPerhitunganBiaya!.adminCost ?? 0,
+        total: _apiPerhitunganBiaya!.biayaAsuransi ?? 0,
+      );
+    }
+
     final hari = _jumlahHari;
     if (hari <= 0) return null;
     final n = _jumlahOrang;
@@ -325,7 +674,191 @@ class _QsFormScreenState extends State<QsFormScreen>
   @override
   Widget build(BuildContext context) {
     if (_isPreviewing) {
+      if (_previewPdfBytes == null && !_isLoadingPdf && _pdfError == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              _previewPdfBytes == null &&
+              !_isLoadingPdf &&
+              _pdfError == null) {
+            _fetchPreviewPdf();
+          }
+        });
+      }
       return _buildPreviewScreen();
+    }
+
+    if (_isLoadingInitial) {
+      return Scaffold(
+        backgroundColor: AppColors.bgScaffold,
+        body: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceWhite,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderDivider),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3.5,
+                          color: AppColors.navyMbis,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Memuat Data Quotation Slip…',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Mengambil data pipeline & rincian pertanggungan dari server',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textMuted,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_initialError != null) {
+      return Scaffold(
+        backgroundColor: AppColors.bgScaffold,
+        body: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  padding: const EdgeInsets.all(24),
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceWhite,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFEE2E2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.error_outline_rounded,
+                          size: 32,
+                          color: Color(0xFFDC2626),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Gagal Memuat Quotation Slip',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _initialError!,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF6B7280),
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () {
+                              if (Navigator.canPop(context)) {
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textDark,
+                              side: const BorderSide(color: AppColors.borderDefault),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            ),
+                            child: const Text(
+                              'Kembali',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: _fetchInitialData,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text(
+                              'Coba Lagi',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.navyMbis,
+                              foregroundColor: AppColors.surfaceWhite,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     return GestureDetector(
@@ -871,10 +1404,12 @@ class _QsFormScreenState extends State<QsFormScreen>
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                    setState(() => _currentStep--);
-                  },
+                  onTap: _isSavingQs
+                      ? null
+                      : () {
+                          FocusScope.of(context).unfocus();
+                          setState(() => _currentStep--);
+                        },
                   child: Container(
                     width: 50,
                     height: 50,
@@ -897,27 +1432,37 @@ class _QsFormScreenState extends State<QsFormScreen>
               borderRadius: BorderRadius.circular(14),
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: _onNextOrPreview,
+                onTap: _isSavingQs ? null : _onNextOrPreview,
                 child: Container(
                   height: 50,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   alignment: Alignment.center,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        nextBtnText,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.surfaceWhite,
+                  child: _isSavingQs
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              nextBtnText,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.surfaceWhite,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.chevron_right,
+                                size: 18, color: AppColors.surfaceWhite),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.chevron_right,
-                          size: 18, color: AppColors.surfaceWhite),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -927,358 +1472,263 @@ class _QsFormScreenState extends State<QsFormScreen>
     );
   }
 
-  void _onNextOrPreview() {
-    FocusScope.of(context).unfocus();
-    if (_currentStep == 0) {
-      if (_formKey1.currentState?.validate() ?? true) {
-        _showProductSelectionPopup();
+  num _parseAmount(String text) {
+    final clean = text.replaceAll('.', '').replaceAll(',', '').trim();
+    return num.tryParse(clean) ?? 0;
+  }
+
+  num _parsePercentOrDecimal(String text) {
+    final clean = text.replaceAll(',', '.').replaceAll(RegExp(r'[^0-9.]'), '').trim();
+    return num.tryParse(clean) ?? 0;
+  }
+
+  Map<String, dynamic> _buildQuotationSlipPayload([int? step]) {
+    final activeStep = step ?? _currentStep;
+    final dateFormat = DateFormat('yyyy-MM-dd');
+
+    // 1. Pemegang Polis & Data Step 1 (Pertanggungan)
+    final pemegangPolis = {
+      'tertanggung': _namaPolisCtrl.text.trim(),
+      'alamat': _alamatCtrl.text.trim(),
+      'bidang': _bidangUsahaCtrl.text.trim(),
+      'email': _emailCtrl.text.trim(),
+      'pic': _namaPicCtrl.text.trim(),
+      'hpPic': _noHpPicCtrl.text.trim(),
+    };
+
+    // 2. Tipe Pertanggungan
+    final tipePertanggungan = {
+      'qType': _type == QsType.group ? 'Group' : 'Single',
+      'jmlOrang': int.tryParse(_jumlahOrangCtrl.text.trim()) ?? 1,
+      'aktivitas': _aktivitasCtrl.text.trim(),
+    };
+
+    // 3. Perhitungan Premi
+    final perhitunganPremi = {
+      'calcType': _premiMode == QsPremiMode.mutlak
+          ? 'Mutlak'
+          : (_premiMode == QsPremiMode.flat ? 'Flat' : 'Normal'),
+    };
+
+    // 4. Klasifikasi Peserta
+    final klasifikasiPeserta = {
+      'kelas': _klasifikasiPeserta?.toString() ?? '1',
+    };
+
+    // 5. Jangka Waktu
+    final jangkaWaktu = {
+      'start': _tglMulai != null ? dateFormat.format(_tglMulai!) : '',
+      'end': _tglAkhir != null ? dateFormat.format(_tglAkhir!) : '',
+    };
+
+    // 6. Orang Dipertanggungkan
+    final orangDipertanggungkan = {
+      'samaDenganPP': _dataSamaPolis,
+      'nama': _dataSamaPolis && _namaTertanggungCtrl.text.trim().isEmpty
+          ? _namaPolisCtrl.text.trim()
+          : _namaTertanggungCtrl.text.trim(),
+      'ktp': _noKtpCtrl.text.trim(),
+      'lahir': _tglLahir != null ? dateFormat.format(_tglLahir!) : '',
+      'pekerjaan': _pekerjaanCtrl.text.trim(),
+    };
+
+    final payload = <String, dynamic>{
+      'pemegangPolis': pemegangPolis,
+      'tipePertanggungan': tipePertanggungan,
+      'perhitunganPremi': perhitunganPremi,
+      'klasifikasiPeserta': klasifikasiPeserta,
+      'jangkaWaktu': jangkaWaktu,
+      'orangDipertanggungkan': orangDipertanggungkan,
+    };
+
+    // 7. Step 2 (Uang Pertanggungan & Biaya Asuransi) - dikirim jika >= step 2 (index 1)
+    if (activeStep >= 1) {
+      final diskonPersenVal = _parsePercentOrDecimal(_diskonCtrl.text);
+      final jenisPolisStr =
+          _polisType == QsPolisType.ePolis ? 'EPOLIS' : 'CETAK';
+
+      Map<String, dynamic> step2Map = {
+        'discountPersen': diskonPersenVal,
+        'jenisPolis': jenisPolisStr,
+      };
+
+      if (_product == QsProduct.psakdi) {
+        final upMeninggalVal = _parseAmount(_upACtrl.text);
+        final upPengobatanVal = _risikoC ? _parseAmount(_upCCtrl.text) : 0;
+
+        String risikoDijaminText = _risikoDijaminCtrl.text.trim();
+        if (risikoDijaminText.isEmpty) {
+          risikoDijaminText = _riskType == PsakdiRiskType.ab
+              ? 'Meninggal Dunia / Cacat Tetap${_risikoC ? " dan Biaya Pengobatan" : ""} yang disebabkan karena kecelakaan.'
+              : 'Meninggal Dunia${_risikoC ? " dan Biaya Pengobatan" : ""} yang disebabkan karena kecelakaan.';
+        }
+
+        step2Map['psakdi'] = {
+          'jenisRisiko': _riskType == PsakdiRiskType.ab ? 'AB' : 'A',
+          'uangPertanggunganMeninggalDunia': upMeninggalVal,
+          'uangPertanggunganBiayaPengobatan': upPengobatanVal,
+          'risikoDijamin': risikoDijaminText,
+        };
+      } else {
+        // PA Xtra
+        final upPaXtraVal = _parseAmount(_upPaXtraCtrl.text);
+        final pengobatanVal = _perawatanPengobatan
+            ? _parseAmount(_santunanCtrls['pengobatan']?.text ?? '')
+            : 0;
+
+        step2Map['jaminanPokok'] = {
+          'uangPertanggunganMeninggalDunia': upPaXtraVal,
+        };
+        step2Map['jaminanTambahan'] = {
+          'cacatTetap': _cacatTetap,
+          'biayaPerawatanPengobatan': pengobatanVal,
+        };
+        step2Map['perluasan'] = {
+          'santunanAmbulansEvakuasi':
+              _parseAmount(_santunanCtrls['ambulan']?.text ?? ''),
+          'santunanPemakamanKremasi':
+              _parseAmount(_santunanCtrls['pemakaman']?.text ?? ''),
+          'santunanKehilanganBarangPribadi':
+              _parseAmount(_santunanCtrls['barang']?.text ?? ''),
+          'santunanPengurusanDokumen':
+              _parseAmount(_santunanCtrls['dokumen']?.text ?? ''),
+          'santunanBiayaPendidikan':
+              _parseAmount(_santunanCtrls['pendidikan']?.text ?? ''),
+          'santunanPemulanganJenazah':
+              _parseAmount(_santunanCtrls['pemulangan']?.text ?? ''),
+        };
       }
+
+      payload['step2'] = step2Map;
+    }
+
+    // 8. Step 3 (T/C & Penerbitan) - dikirim jika >= step 3 (index 2)
+    if (activeStep >= 2) {
+      final step3Map = {
+        'penerbitan': {
+          'kota': _kotaCtrl.text.trim(),
+          'tanggalTerbit': _tglPenerbitan != null
+              ? dateFormat.format(_tglPenerbitan!)
+              : '',
+          'cabang': _cabangCtrl.text.trim(),
+          'penandatangan': _penandatanganCtrl.text.trim(),
+          'jabatanPenandatangan': _jabatanCtrl.text.trim(),
+        },
+      };
+
+      payload['step3'] = step3Map;
+    }
+
+    if (_qsId != null && _qsId!.isNotEmpty) {
+      payload['qsId'] = _qsId;
+    }
+
+    return payload;
+  }
+
+  Future<void> _onNextOrPreview() async {
+    if (_isSavingQs) return;
+    FocusScope.of(context).unfocus();
+
+    // 1. Validasi form langkah aktif
+    if (_currentStep == 0) {
+      if (!(_formKey1.currentState?.validate() ?? true)) return;
     } else if (_currentStep == 1) {
-      if (_formKey2.currentState?.validate() ?? true) {
-        _showStep3ProductSelectionPopup();
+      if (!(_formKey2.currentState?.validate() ?? true)) return;
+    } else {
+      if (!(_formKey3.currentState?.validate() ?? true)) return;
+    }
+
+    // 2. Simpan draft Quotation Slip via API POST jika ada pipelineId
+    final pId = _pipelineId;
+    if (pId != null && pId.isNotEmpty) {
+      setState(() => _isSavingQs = true);
+      try {
+        final pCode = _productCode;
+
+        final payload = _buildQuotationSlipPayload();
+        final repo = ref.read(qsPertanggunganRepoProvider);
+        final res = await repo.saveQuotationSlip(
+          pipelineId: pId,
+          productCode: pCode,
+          payload: payload,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          if (res.id != null && res.id!.isNotEmpty) {
+            _qsId = res.id;
+          }
+          if (res.nomorQs != null && res.nomorQs!.isNotEmpty) {
+            _serverNomorQs = res.nomorQs;
+          }
+          if (res.payload != null) {
+            _apiResponse = res.payload;
+            if (res.payload!.perhitunganBiaya != null) {
+              _apiPerhitunganBiaya = res.payload!.perhitunganBiaya;
+            }
+          }
+          _isSavingQs = false;
+
+          // Berpindah step / preview setelah simpan berhasil
+          if (_currentStep == 0) {
+            _currentStep = 1;
+          } else if (_currentStep == 1) {
+            _currentStep = 2;
+          } else {
+            _isPreviewing = true;
+            _fetchPreviewPdf(pId, pCode);
+          }
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isSavingQs = false);
+
+        final cleanMsg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Gagal menyimpan draft QS: $cleanMsg',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.errorRed,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     } else {
-      if (_formKey3.currentState?.validate() ?? true) {
-        setState(() => _isPreviewing = true);
-      }
+      // Jika tanpa pipelineId, transisi langkah secara lokal
+      setState(() {
+        if (_currentStep == 0) {
+          _currentStep = 1;
+        } else if (_currentStep == 1) {
+          _currentStep = 2;
+        } else {
+          _isPreviewing = true;
+        }
+      });
     }
   }
 
-  void _showStep3ProductSelectionPopup() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.transparent,
-      builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceWhite,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.borderDefault,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.blueLightBg,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.gavel_outlined,
-                          size: 20, color: AppColors.navyMbis),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Pilih Produk Syarat & Ketentuan',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Langkah 3: Terms & Conditions, Penerbitan & Dokumen',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: AppColors.textMuted),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildProductChoiceCard(
-                  title: 'PSAKDI',
-                  subtitle: 'Polis Standar Asuransi Kecelakaan Diri Indonesia',
-                  description:
-                      '13 Klausula Standar Terkunci, Kondisi Standar, Waranti Standar, Pengecualian Standar, Form Penerbitan, Masa Berlaku, dan Dokumen Pendukung.',
-                  badge: 'Standar OJK',
-                  isSelected: _product == QsProduct.psakdi,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _product = QsProduct.psakdi;
-                      _currentStep = 2;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildProductChoiceCard(
-                  title: 'PA Xtra',
-                  subtitle: 'Personal Accident Xtra',
-                  description:
-                      'Deductible Personal Accident, Pilihan Klausul/Kondisi/Waranti/Pengecualian Tambahan yang dapat disesuaikan, Form Penerbitan, Masa Berlaku, dan Dokumen.',
-                  badge: 'Multi-Santunan',
-                  isSelected: _product == QsProduct.paXtra,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _product = QsProduct.paXtra;
-                      _currentStep = 2;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showProductSelectionPopup() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.transparent,
-      builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceWhite,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.borderDefault,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.blueLightBg,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.shield_outlined,
-                          size: 20, color: AppColors.navyMbis),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Pilih Produk Pertanggungan',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Langkah 2: Uang Pertanggungan & Biaya Asuransi',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: AppColors.textMuted),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildProductChoiceCard(
-                  title: 'PSAKDI',
-                  subtitle: 'Polis Standar Asuransi Kecelakaan Diri Indonesia',
-                  description:
-                      'Uang Pertanggungan Meninggal Dunia, Pilihan Risiko A (Meninggal Dunia) atau A/B (+ Cacat Tetap), Tambahan C (Biaya Perawatan), dan Suku Premi per Kelas.',
-                  badge: 'Standar OJK',
-                  isSelected: _product == QsProduct.psakdi,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _product = QsProduct.psakdi;
-                      _currentStep = 1;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildProductChoiceCard(
-                  title: 'PA Xtra',
-                  subtitle: 'Personal Accident Xtra',
-                  description:
-                      'Jaminan Pokok, Risiko Cacat Tetap, Biaya Perawatan & Pengobatan, serta 6 Perluasan Santunan (Ambulan, Pemakaman, Barang Pribadi, Dokumen, Pendidikan, Repatriasi).',
-                  badge: 'Multi-Santunan',
-                  isSelected: _product == QsProduct.paXtra,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _product = QsProduct.paXtra;
-                      _currentStep = 1;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildProductChoiceCard({
-    required String title,
-    required String subtitle,
-    required String description,
-    required String badge,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.bgSelectPipe : AppColors.surfaceWhite,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.navyMbis : AppColors.borderDefault,
-            width: isSelected ? 2 : 1.5,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 22,
-              height: 22,
-              margin: const EdgeInsets.only(top: 2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.navyMbis,
-                  width: 2,
-                ),
-              ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.navyMbis,
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.navyMbis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.blueLightBg,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          badge,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.navyMbis,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios,
-                size: 16, color: AppColors.navyMbis),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _onBack() {
+    if (_isSavingQs) return;
     FocusScope.of(context).unfocus();
     if (_isPreviewing) {
       setState(() => _isPreviewing = false);
@@ -1406,100 +1856,92 @@ class _QsFormScreenState extends State<QsFormScreen>
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (hasDeviations) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.alertBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.alertBorder),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '⚠ Perlu Persetujuan Underwriting (UW)',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.alertTitle,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        ..._deviations.map((d) => Padding(
-                              padding: const EdgeInsets.only(bottom: 3),
-                              child: Text(
-                                '• ${d.message}',
-                                style: const TextStyle(
-                                    fontSize: 12.5, color: AppColors.alertText),
-                              ),
-                            )),
-                      ],
+      body: Column(
+        children: [
+          if (hasDeviations) ...[
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.alertBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.alertBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '⚠ Perlu Persetujuan Underwriting (UW)',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.alertTitle,
                     ),
                   ),
-                ] else ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.badgeP1Bg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.check_circle,
-                            size: 18, color: AppColors.greenTotal),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Ketentuan tarif & batas sesuai standar UW. Siap diterbitkan.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.greenTotal,
-                            ),
-                          ),
+                  const SizedBox(height: 6),
+                  ..._deviations.map((d) => Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Text(
+                          '• ${d.message}',
+                          style: const TextStyle(
+                              fontSize: 12.5, color: AppColors.alertText),
                         ),
-                      ],
+                      )),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.badgeP1Bg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.check_circle,
+                      size: 18, color: AppColors.greenTotal),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Ketentuan tarif & batas sesuai standar UW. Siap diterbitkan.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.greenTotal,
+                      ),
                     ),
                   ),
                 ],
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      const Text(
-                        'Ubah: ',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textLabel),
-                      ),
-                      const SizedBox(width: 4),
-                      _jumpChip('Pertanggungan', 0),
-                      const SizedBox(width: 6),
-                      _jumpChip('UP & Premi', 1),
-                      const SizedBox(width: 6),
-                      _jumpChip('T&C', 2),
-                    ],
-                  ),
+              ),
+            ),
+          ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+            child: Row(
+              children: [
+                const Text(
+                  'Ubah: ',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textLabel),
                 ),
-                _buildPreview(),
-                const SizedBox(height: 20),
+                const SizedBox(width: 4),
+                _jumpChip('Pertanggungan', 0),
+                const SizedBox(width: 6),
+                _jumpChip('Uang Pertanggungan & Biaya Asuransi', 1),
+                const SizedBox(width: 6),
+                _jumpChip('T/C', 2),
               ],
             ),
           ),
-        ),
+          Expanded(
+            child: _buildPdfViewerContent(),
+          ),
+        ],
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -1566,6 +2008,142 @@ class _QsFormScreenState extends State<QsFormScreen>
   );
 }
 
+  Widget _buildPdfViewerContent() {
+    if (_isLoadingPdf) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+              color: AppColors.navyMbis,
+              strokeWidth: 3,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Memuat preview dokumen QS (PDF)...',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Mengambil data dari server MBIS',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_pdfError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFEE2E2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.error_outline_rounded,
+                  size: 28,
+                  color: Color(0xFFDC2626),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Gagal Memuat Dokumen PDF',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _pdfError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (_pipelineId != null && _pipelineId!.isNotEmpty)
+                ElevatedButton.icon(
+                  onPressed: () => _fetchPreviewPdf(_pipelineId!, _productCode),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Coba Lagi'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.navyMbis,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_previewPdfBytes != null && _previewPdfBytes!.isNotEmpty) {
+      return Container(
+        color: AppColors.bgPreviewDoc,
+        child: PdfPreview(
+          build: (format) => _previewPdfBytes!,
+          useActions: false,
+          canChangeOrientation: false,
+          canChangePageFormat: false,
+          canDebug: false,
+          loadingWidget: const Center(
+            child: CircularProgressIndicator(
+              color: AppColors.navyMbis,
+              strokeWidth: 3,
+            ),
+          ),
+          scrollViewDecoration: const BoxDecoration(
+            color: AppColors.bgPreviewDoc,
+          ),
+        ),
+      );
+    }
+
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(
+            color: AppColors.navyMbis,
+            strokeWidth: 3,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Menyiapkan pratinjau dokumen PDF...',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _jumpChip(String label, int step) {
     return InkWell(
       onTap: () {
@@ -1615,6 +2193,8 @@ class _QsFormScreenState extends State<QsFormScreen>
 
   Widget _buildStep1() {
     return QsStepPertanggungan(
+      pipelineId: widget.pipelineId,
+      productCode: widget.productCode,
       product: _product,
       type: _type,
       onTypeChanged: (t) => setState(() {
@@ -1716,6 +2296,10 @@ class _QsFormScreenState extends State<QsFormScreen>
       warantiTambahanCtrl: _warantiTambahanCtrl,
       pengecualianTambahanCtrl: _pengecualianTambahanCtrl,
       deductibleCtrl: _deductibleCtrl,
+      standardKlausula: _termsKlausula,
+      standardKondisi: _termsKondisi,
+      standardWaranti: _termsWaranti,
+      standardPengecualian: _termsPengecualian,
       namaFile: _namaFile,
       onPilihFile: () {
         // Mock file pick
@@ -1728,47 +2312,7 @@ class _QsFormScreenState extends State<QsFormScreen>
   }
 
 
-  Widget _buildPreview() {
-    return QsPreviewPanel(
-      product: _product,
-      status: _status,
-      type: _type,
-      premiMode: _premiMode,
-      nomorQs: _nomorQs,
-      namaPolis: _namaPolisCtrl.text,
-      alamat: _alamatCtrl.text,
-      bidangUsaha: _bidangUsahaCtrl.text,
-      namaTertanggung: _namaTertanggungCtrl.text,
-      noKtp: _noKtpCtrl.text,
-      tglLahir: _tglLahir,
-      pekerjaan: _pekerjaanCtrl.text,
-      tglMulai: _tglMulai,
-      tglAkhir: _tglAkhir,
-      jumlahHari: _jumlahHari,
-      jumlahOrang: _jumlahOrang,
-      aktivitas: _aktivitasCtrl.text,
-      riskType: _riskType,
-      upA: _parseNum(_upACtrl.text),
-      upC: _parseNum(_upCCtrl.text),
-      risikoC: _risikoC,
-      klasifikasiPeserta: _klasifikasiPeserta,
-      upPaXtra: _parseNum(_upPaXtraCtrl.text),
-      cacatTetap: _cacatTetap,
-      perawatanPengobatan: _perawatanPengobatan,
-      santunanValues: _santunanValues,
-      premiResult: _premiResult,
-      risikoDijamin: _risikoDijaminCtrl.text,
-      diskonPersen: _diskonPersen,
-      polisType: _polisType,
-      kota: _kotaCtrl.text,
-      tglPenerbitan: _tglPenerbitan,
-      cabang: _cabangCtrl.text,
-      penandatangan: _penandatanganCtrl.text,
-      jabatan: _jabatanCtrl.text,
-      masaBerlaku: _masaBerlaku,
-      deviations: _deviations,
-    );
-  }
+
 
   // ────────────────────────────────────────────────────────────────────────
   // Actions

@@ -6,6 +6,71 @@ import 'package:mbis/src/common/partner_kpi.dart';
 
 const Object _keep = Object();
 
+class BumnFilter {
+  final String wil;
+  final String cab;
+  final String rm;
+  final String stage;
+  final String kat;
+
+  const BumnFilter({
+    this.wil = '',
+    this.cab = '',
+    this.rm = '',
+    this.stage = '',
+    this.kat = '',
+  });
+
+  bool get isActive =>
+      wil.isNotEmpty ||
+      cab.isNotEmpty ||
+      rm.isNotEmpty ||
+      stage.isNotEmpty ||
+      kat.isNotEmpty;
+
+  int get count =>
+      (wil.isNotEmpty ? 1 : 0) +
+      (cab.isNotEmpty ? 1 : 0) +
+      (rm.isNotEmpty ? 1 : 0) +
+      (stage.isNotEmpty ? 1 : 0) +
+      (kat.isNotEmpty ? 1 : 0);
+
+  BumnFilter copyWith({
+    String? wil,
+    String? cab,
+    String? rm,
+    String? stage,
+    String? kat,
+  }) {
+    return BumnFilter(
+      wil: wil ?? this.wil,
+      cab: cab ?? this.cab,
+      rm: rm ?? this.rm,
+      stage: stage ?? this.stage,
+      kat: kat ?? this.kat,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BumnFilter &&
+          runtimeType == other.runtimeType &&
+          wil == other.wil &&
+          cab == other.cab &&
+          rm == other.rm &&
+          stage == other.stage &&
+          kat == other.kat;
+
+  @override
+  int get hashCode =>
+      wil.hashCode ^
+      cab.hashCode ^
+      rm.hashCode ^
+      stage.hashCode ^
+      kat.hashCode;
+}
+
 /// State layar BUMN — cerminan 1:1 dari field `setState` di layar lama.
 ///
 /// [future] menampung daftar pohon BUMN (dulu `_future`, dikonsumsi FutureBuilder).
@@ -29,6 +94,7 @@ class BumnState {
   final String? selectedId;
   final BumnTreeCustomer? selectedNode;
   final bool includeDescendants;
+  final BumnFilter filter;
 
   const BumnState({
     this.future,
@@ -39,6 +105,7 @@ class BumnState {
     this.selectedId,
     this.selectedNode,
     this.includeDescendants = true,
+    this.filter = const BumnFilter(),
   });
 
   BumnState copyWith({
@@ -50,6 +117,7 @@ class BumnState {
     Object? selectedId = _keep,
     Object? selectedNode = _keep,
     bool? includeDescendants,
+    BumnFilter? filter,
   }) {
     return BumnState(
       future: future == _keep
@@ -64,6 +132,7 @@ class BumnState {
           ? this.selectedNode
           : selectedNode as BumnTreeCustomer?,
       includeDescendants: includeDescendants ?? this.includeDescendants,
+      filter: filter ?? this.filter,
     );
   }
 }
@@ -158,6 +227,24 @@ class BumnNotifier extends Notifier<BumnState> {
     } else {
       state = state.copyWith(query: q, searchCollapsed: <String>{});
     }
+  }
+
+  void setFilter(BumnFilter filter) {
+    state = state.copyWith(
+      filter: filter,
+      selectedId: null,
+      selectedNode: null,
+      searchCollapsed: <String>{},
+    );
+  }
+
+  void resetFilter() {
+    state = state.copyWith(
+      filter: const BumnFilter(),
+      selectedId: null,
+      selectedNode: null,
+      searchCollapsed: <String>{},
+    );
   }
 
   void setIncludeDescendants(bool value) =>

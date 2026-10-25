@@ -42,15 +42,17 @@ class VisitDetailSectionCard extends StatelessWidget {
   }
 }
 
-/// Baris detail 2-kolom (Label 120px di kiri, Content dinamis di kanan)
+/// Baris detail 2-kolom (Label di kiri, Content dinamis di kanan)
 class VisitDetailRow extends StatelessWidget {
   final String label;
   final Widget content;
+  final double labelWidth;
 
   const VisitDetailRow(
     this.label,
     this.content, {
     super.key,
+    this.labelWidth = 135,
   });
 
   @override
@@ -58,18 +60,18 @@ class VisitDetailRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.bgDisabled)),
+        border: Border(top: BorderSide(color: Color(0xFFEEF1F6))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: labelWidth,
             child: Text(
               label,
               style: const TextStyle(
                 fontSize: 13,
-                color: AppColors.textMuted,
+                color: Color(0xFF5A6475),
               ),
             ),
           ),
